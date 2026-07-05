@@ -15,6 +15,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -51,7 +52,8 @@ public class ExternalCalendars extends BaseEntity {
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
-    @Column(name = "is_selected", nullable = false, columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "is_selected", nullable = false)
+    @ColumnDefault("true")
     private Boolean isSelected = true;
 
 }

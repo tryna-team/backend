@@ -20,6 +20,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(
@@ -56,7 +57,8 @@ public class UserEvents extends BaseCreatedEntity {
     private Events event;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "event_role", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'OWNER'")
+    @Column(name = "event_role", nullable = false, length = 50)
+    @ColumnDefault("'OWNER'")
     private EventRole eventRole = EventRole.OWNER;
 
 }

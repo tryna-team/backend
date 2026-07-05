@@ -19,6 +19,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(
@@ -48,7 +49,8 @@ public class ExternalCalendarConnections extends BaseEntity {
     private String refreshToken;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "connection_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'ACTIVE'")
+    @Column(name = "connection_status", nullable = false, length = 50)
+    @ColumnDefault("'ACTIVE'")
     private ConnectionStatus connectionStatus = ConnectionStatus.ACTIVE;
 
 }

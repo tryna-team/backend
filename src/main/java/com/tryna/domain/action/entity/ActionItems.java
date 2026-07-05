@@ -21,6 +21,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -64,7 +65,8 @@ public class ActionItems extends BaseEntity {
     private Integer offsetDays;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "action_item_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PENDING'")
+    @Column(name = "action_item_status", nullable = false, length = 50)
+    @ColumnDefault("'PENDING'")
     private ActionItemStatus actionItemStatus = ActionItemStatus.PENDING;
 
     @Enumerated(EnumType.STRING)

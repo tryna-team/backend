@@ -22,6 +22,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -67,11 +68,13 @@ public class Reminders extends BaseEntity {
     @Column(name = "scheduled_at", nullable = false)
     private LocalDateTime scheduledAt;
 
-    @Column(name = "delivery_channel", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PUSH'")
+    @Column(name = "delivery_channel", nullable = false, length = 50)
+    @ColumnDefault("'PUSH'")
     private String deliveryChannel = "PUSH";
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "reminder_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'SCHEDULED'")
+    @Column(name = "reminder_status", nullable = false, length = 50)
+    @ColumnDefault("'SCHEDULED'")
     private ReminderStatus reminderStatus = ReminderStatus.SCHEDULED;
 
     @Column(name = "alarm_title", nullable = false, length = 100)
