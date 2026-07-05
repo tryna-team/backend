@@ -22,7 +22,8 @@ public class ReminderLifecycleService {
         return remindersRepository.updateStatusForEvent(
                 eventId,
                 ReminderStatus.SCHEDULED,
-                ReminderStatus.CANCELED
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
         );
     }
 
@@ -31,7 +32,8 @@ public class ReminderLifecycleService {
         return remindersRepository.updateStatusForActionItem(
                 actionItemId,
                 ReminderStatus.SCHEDULED,
-                ReminderStatus.CANCELED
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
         );
     }
 
