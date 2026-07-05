@@ -79,21 +79,21 @@ public class Events extends BaseEntity {
     @Column(name = "end_datetime")
     private LocalDateTime endDatetime;
 
-    @Column(name = "is_all_day", nullable = false)
+    @Column(name = "is_all_day", nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
     private Boolean isAllDay = false;
 
-    @Column(name = "is_recurring", nullable = false)
+    @Column(name = "is_recurring", nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
     private Boolean isRecurring = false;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "recurrence_type", nullable = false, length = 50)
+    @Column(name = "recurrence_type", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'NONE'")
     private RecurrenceType recurrenceType = RecurrenceType.NONE;
 
     @Column(name = "recurrence_interval")
     private Integer recurrenceInterval;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "recurrence_day_of_week", nullable = false, length = 50)
+    @Column(name = "recurrence_day_of_week", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'NONE'")
     private RecurrenceDayOfWeek recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
 
     @Column(name = "recurrence_day_of_month")
@@ -116,7 +116,7 @@ public class Events extends BaseEntity {
     private SourceType sourceType;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "event_status", nullable = false, length = 50)
+    @Column(name = "event_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'CONFIRMED'")
     private EventStatus eventStatus = EventStatus.CONFIRMED;
 
     @Column(name = "external_event_id", length = 255)

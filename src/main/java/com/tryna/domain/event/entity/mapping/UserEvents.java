@@ -56,7 +56,7 @@ public class UserEvents extends BaseCreatedEntity {
     private Events event;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "event_role", nullable = false, length = 50)
+    @Column(name = "event_role", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'OWNER'")
     private EventRole eventRole = EventRole.OWNER;
 
 }

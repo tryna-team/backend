@@ -51,7 +51,7 @@ public class ExternalCalendars extends BaseEntity {
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
-    @Column(name = "is_selected", nullable = false)
+    @Column(name = "is_selected", nullable = false, columnDefinition = "BOOLEAN DEFAULT true")
     private Boolean isSelected = true;
 
 }

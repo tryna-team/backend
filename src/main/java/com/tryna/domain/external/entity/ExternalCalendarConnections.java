@@ -48,7 +48,7 @@ public class ExternalCalendarConnections extends BaseEntity {
     private String refreshToken;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "connection_status", nullable = false, length = 50)
+    @Column(name = "connection_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'ACTIVE'")
     private ConnectionStatus connectionStatus = ConnectionStatus.ACTIVE;
 
 }

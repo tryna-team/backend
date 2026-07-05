@@ -67,11 +67,11 @@ public class Reminders extends BaseEntity {
     @Column(name = "scheduled_at", nullable = false)
     private LocalDateTime scheduledAt;
 
-    @Column(name = "delivery_channel", nullable = false, length = 50)
+    @Column(name = "delivery_channel", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PUSH'")
     private String deliveryChannel = "PUSH";
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "reminder_status", nullable = false, length = 50)
+    @Column(name = "reminder_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'SCHEDULED'")
     private ReminderStatus reminderStatus = ReminderStatus.SCHEDULED;
 
     @Column(name = "alarm_title", nullable = false, length = 100)

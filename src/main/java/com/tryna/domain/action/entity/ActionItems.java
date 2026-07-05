@@ -64,7 +64,7 @@ public class ActionItems extends BaseEntity {
     private Integer offsetDays;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "action_item_status", nullable = false, length = 50)
+    @Column(name = "action_item_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PENDING'")
     private ActionItemStatus actionItemStatus = ActionItemStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
