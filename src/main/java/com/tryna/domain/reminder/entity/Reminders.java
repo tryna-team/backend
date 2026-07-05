@@ -34,7 +34,19 @@ import java.time.LocalDateTime;
         indexes = {
                 @Index(name = "idx_reminders_target_event_id", columnList = "target_event_id"),
                 @Index(name = "idx_reminders_target_action_item_id", columnList = "target_action_item_id"),
-                @Index(name = "idx_reminders_status_scheduled", columnList = "reminder_status, scheduled_at")
+                @Index(name = "idx_reminders_status_scheduled", columnList = "reminder_status, scheduled_at"),
+                @Index(
+                        name = "uq_reminders_event_schedule",
+                        columnList = "target_event_id, scheduled_at, delivery_channel",
+                        unique = true,
+                        options = "WHERE target_type = 'EVENT' AND target_event_id IS NOT NULL AND reminder_status = 'SCHEDULED'"
+                ),
+                @Index(
+                        name = "uq_reminders_action_item_schedule",
+                        columnList = "target_action_item_id, scheduled_at, delivery_channel",
+                        unique = true,
+                        options = "WHERE target_type = 'TIMED_ACTION' AND target_action_item_id IS NOT NULL AND reminder_status = 'SCHEDULED'"
+                )
         }
 )
 @Check(constraints = "(target_type = 'EVENT' AND target_event_id IS NOT NULL AND target_action_item_id IS NULL) OR (target_type = 'TIMED_ACTION' AND target_event_id IS NULL AND target_action_item_id IS NOT NULL)")
