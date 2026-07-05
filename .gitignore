@@ -42,7 +42,7 @@ agent.md
 
 ### Environment ###
 .env
-.env.
+.env.*
 !.env.example
 
 ### MAC ###
