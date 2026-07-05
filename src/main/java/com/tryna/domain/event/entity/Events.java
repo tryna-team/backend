@@ -87,14 +87,14 @@ public class Events extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "recurrence_type", nullable = false, length = 50)
-    private RecurrenceType recurrenceType;
+    private RecurrenceType recurrenceType = RecurrenceType.NONE;
 
     @Column(name = "recurrence_interval")
     private Integer recurrenceInterval;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "recurrence_day_of_week", nullable = false, length = 50)
-    private RecurrenceDayOfWeek recurrenceDayOfWeek;
+    private RecurrenceDayOfWeek recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
 
     @Column(name = "recurrence_day_of_month")
     private Integer recurrenceDayOfMonth;
