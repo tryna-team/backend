@@ -12,3 +12,9 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+jwt:
+  secret: test-jwt-secret-key-for-local-tests-only
+  access-expiration: 1800
+  refresh-expiration: 1209600
+  issuer: tryna-test
