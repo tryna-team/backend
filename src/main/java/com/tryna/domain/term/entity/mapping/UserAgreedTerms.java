@@ -1,12 +1,17 @@
 package com.tryna.domain.term.entity.mapping;
 
+import com.tryna.domain.term.entity.Terms;
+import com.tryna.domain.user.entity.Users;
 import com.tryna.global.entity.BaseCreatedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -29,10 +34,12 @@ public class UserAgreedTerms extends BaseCreatedEntity {
     @Column(name = "user_agreed_term_id")
     private Long userAgreedTermId;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private Users user;
 
-    @Column(name = "term_id", nullable = false)
-    private Long termId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "term_id", nullable = false)
+    private Terms term;
 
 }

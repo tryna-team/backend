@@ -1,15 +1,20 @@
 package com.tryna.domain.event.entity.mapping;
 
+import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventRole;
+import com.tryna.domain.user.entity.Users;
 import com.tryna.global.entity.BaseCreatedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -42,11 +47,13 @@ public class UserEvents extends BaseCreatedEntity {
     @Column(name = "user_event_id")
     private Long userEventId;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private Users user;
 
-    @Column(name = "event_id", nullable = false)
-    private Long eventId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Events event;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "event_role", nullable = false, length = 50)

@@ -1,15 +1,20 @@
 package com.tryna.domain.recommendation.entity.mapping;
 
+import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.recommendation.enums.ActionType;
+import com.tryna.domain.user.entity.Users;
 import com.tryna.global.entity.BaseCreatedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -32,11 +37,13 @@ public class RecommendationFeedbacks extends BaseCreatedEntity {
     @Column(name = "recommendation_feedback_id")
     private Long recommendationFeedbackId;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private Users user;
 
-    @Column(name = "event_id")
-    private Long eventId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id")
+    private Events event;
 
     @Column(name = "source_template_id", length = 100)
     private String sourceTemplateId;

@@ -5,20 +5,26 @@ import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.enums.SourceType;
+import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,8 +53,10 @@ public class Events extends BaseEntity {
     @Column(name = "event_id")
     private Long eventId;
 
-    @Column(name = "external_calendar_id")
-    private Long externalCalendarId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "external_calendar_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private ExternalCalendars externalCalendar;
 
     @Column(name = "source_text", columnDefinition = "TEXT")
     private String sourceText;
