@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,12 +18,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Entity
-@Table(
-        name = "user_settings",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uq_user_settings_user_id", columnNames = "user_id")
-        }
-)
+@Table(name = "user_settings")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserSettings extends BaseEntity {

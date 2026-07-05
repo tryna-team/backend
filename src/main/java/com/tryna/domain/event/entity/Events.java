@@ -25,6 +25,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Check;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,6 +45,7 @@ import java.time.LocalDateTime;
         }
 )
 @Check(constraints = "source_type <> 'EXTERNAL_CALENDAR' OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)")
+@SQLRestriction("deleted_at IS NULL")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Events extends BaseEntity {
