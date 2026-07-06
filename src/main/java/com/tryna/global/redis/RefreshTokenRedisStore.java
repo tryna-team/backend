@@ -51,17 +51,21 @@ public class RefreshTokenRedisStore {
                 .count(100)
                 .build();
 
-        List<String> keysToDelete = stringRedisTemplate.execute(connection -> {
-            List<String> keys = new ArrayList<>();
+        List<String> idsToDelete = stringRedisTemplate.execute(connection -> {
+            List<String> ids = new ArrayList<>();
             try (Cursor<byte[]> cursor = connection.scan(options)) {
-                cursor.forEachRemaining(
-                        key -> keys.add(new String(key, StandardCharsets.UTF_8)));
+                cursor.forEachRemaining(key -> {
+                    String fullKey = new String(key, StandardCharsets.UTF_8);
+                    if (fullKey.startsWith(KEY_PREFIX)) {
+                        ids.add(fullKey.substring(KEY_PREFIX.length()));
+                    }
+                });
             }
-            return keys;
+            return ids;
         }, true);
 
-        if (keysToDelete != null && !keysToDelete.isEmpty()) {
-            stringRedisTemplate.delete(keysToDelete);
+        if (idsToDelete != null && !idsToDelete.isEmpty()) {
+            refreshTokenRepository.deleteAllById(idsToDelete);
         }
     }
 }
