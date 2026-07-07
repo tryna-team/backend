@@ -7,17 +7,17 @@ public final class ApiResponse<T> {
     private final boolean success;
     private final String code;
     private final String message;
-    private final T result;
+    private final T data;
 
-    private ApiResponse(boolean success, String code, String message, T result) {
+    private ApiResponse(boolean success, String code, String message, T data) {
         this.success = success;
         this.code = code;
         this.message = message;
-        this.result = result;
+        this.data = data;
     }
 
-    public static <T> ApiResponse<T> success(String code, String message, T result) {
-        return new ApiResponse<>(true, code, message, result);
+    public static <T> ApiResponse<T> success(String code, String message, T data) {
+        return new ApiResponse<>(true, code, message, data);
     }
 
     public static ApiResponse<Void> success(String code, String message) {
@@ -44,7 +44,7 @@ public final class ApiResponse<T> {
         return message;
     }
 
-    public T getResult() {
-        return result;
+    public T getData() {
+        return data;
     }
 }
