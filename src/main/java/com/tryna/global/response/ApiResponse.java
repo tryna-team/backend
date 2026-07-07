@@ -1,7 +1,9 @@
 package com.tryna.global.response;
 
 import com.tryna.global.exception.ErrorCode;
+import lombok.Getter;
 
+@Getter
 public final class ApiResponse<T> {
 
     private final boolean success;
@@ -30,21 +32,5 @@ public final class ApiResponse<T> {
 
     public static ApiResponse<Void> fail(String code, String message) {
         return new ApiResponse<>(false, code, message, null);
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public T getData() {
-        return data;
     }
 }
