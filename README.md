@@ -19,6 +19,21 @@ TRYNA는 이러한 차이를 단순 키워드 매칭으로 처리하지 않습�
 사용자는 추천된 할 일을 그대로 사용할 수도 있고, 필요 없는 항목을
 삭제하거나 새로운 항목을 직접 추가할 수도 있습니다.
 
+## 📚 Tech Stacks
+
+| Type | Tool |
+| :---: | :---: |
+| Language | ![Java](https://img.shields.io/badge/Java-007396?style=for-the-badge&logo=openjdk&logoColor=white) |
+| Framework | ![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white) |
+| ORM | ![Spring Data JPA](https://img.shields.io/badge/Spring_Data_JPA-6DB33F?style=for-the-badge&logo=spring&logoColor=white) |
+| Security | ![Spring Security](https://img.shields.io/badge/Spring_Security-6DB33F?style=for-the-badge&logo=springsecurity&logoColor=white) |
+| Database | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white) |
+| API Documentation | ![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black) |
+| In-Memory Store | ![Valkey](https://img.shields.io/badge/Valkey-FF4438?style=for-the-badge&logo=valkey&logoColor=white) |
+| Build Tool | ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white) |
+| Version Control | ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white) |
+| Collaboration | ![Notion](https://img.shields.io/badge/Notion-000000?style=for-the-badge&logo=notion&logoColor=white) |
+
 ## 👥 Team Members
 
 | 담당 영역 | 담당자 | 담당 기능 |
