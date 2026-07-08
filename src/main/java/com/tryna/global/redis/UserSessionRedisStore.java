@@ -32,10 +32,10 @@ public class UserSessionRedisStore {
     ) {
         String key = RedisKey.session(userId, deviceId);
         stringRedisTemplate.opsForHash().putAll(key, Map.of(
-                SessionHashField.TOKEN_VALUE, tokenValue,
+                SessionHashField.TOKEN_VALUE, nullToEmpty(tokenValue),
                 SessionHashField.FCM_TOKEN, nullToEmpty(fcmToken),
                 SessionHashField.SCOPES, nullToEmpty(scopes),
-                SessionHashField.CREATED_AT, createdAt.toString()
+                SessionHashField.CREATED_AT, nullToIsoString(createdAt)
         ));
         stringRedisTemplate.expire(key, ttl);
     }
@@ -96,5 +96,9 @@ public class UserSessionRedisStore {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String nullToIsoString(Instant value) {
+        return value == null ? "" : value.toString();
     }
 }
