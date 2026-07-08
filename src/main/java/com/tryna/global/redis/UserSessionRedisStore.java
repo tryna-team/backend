@@ -50,7 +50,7 @@ public class UserSessionRedisStore {
 
     public void updateTokenValue(Long userId, String deviceId, String tokenValue, Duration ttl) {
         String key = RedisKey.session(userId, deviceId);
-        stringRedisTemplate.opsForHash().put(key, SessionHashField.TOKEN_VALUE, tokenValue);
+        stringRedisTemplate.opsForHash().put(key, SessionHashField.TOKEN_VALUE, nullToEmpty(tokenValue));
         stringRedisTemplate.expire(key, ttl);
     }
 

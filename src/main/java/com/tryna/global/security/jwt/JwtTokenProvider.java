@@ -76,7 +76,6 @@ public class JwtTokenProvider {
         return userId.longValue();
     }
 
-    // TODO_TOKEN: refresh token 만료 시간 반환
     public long getRefreshExpirationSeconds() {
         return jwtProperties.getRefreshExpiration();
     }
