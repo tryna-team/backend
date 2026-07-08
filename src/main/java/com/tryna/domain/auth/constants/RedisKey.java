@@ -1,4 +1,4 @@
-package com.tryna.global.redis;
+package com.tryna.domain.auth.constants;
 
 public final class RedisKey {
 

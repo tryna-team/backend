@@ -1,7 +1,7 @@
 package com.tryna.domain.auth.service;
 
-import com.tryna.global.redis.UserFcmTokenRedisStore;
-import com.tryna.global.redis.UserSessionRedisStore;
+import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
+import com.tryna.domain.auth.repository.SessionRedisRepository;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import lombok.RequiredArgsConstructor;
@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserSessionRedisStore userSessionRedisStore;
-    private final UserFcmTokenRedisStore userFcmTokenRedisStore;
+    private final SessionRedisRepository sessionRedisRepository;
+    private final FcmTokenRedisRepository fcmTokenRedisRepository;
 
     // TODO: 로그인(GUEST/USER 공통) — session Hash 저장 + fcm Set 추가
     public TokenPair issueSession(Long userId, String deviceId, String fcmToken, String scopes) {

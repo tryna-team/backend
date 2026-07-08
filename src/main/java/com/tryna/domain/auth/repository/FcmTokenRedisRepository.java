@@ -1,18 +1,18 @@
-package com.tryna.global.redis;
+package com.tryna.domain.auth.repository;
 
+import com.tryna.domain.auth.constants.RedisKey;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Set;
 
-// 사용자별 활성 FCM 토큰(Set) 저장소.
-@Component
+@Repository
 @RequiredArgsConstructor
-public class UserFcmTokenRedisStore {
+public class FcmTokenRedisRepository {
 
     private final StringRedisTemplate stringRedisTemplate;
 

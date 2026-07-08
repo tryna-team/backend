@@ -1,10 +1,12 @@
-package com.tryna.global.redis;
+package com.tryna.domain.auth.repository;
 
+import com.tryna.domain.auth.constants.RedisKey;
+import com.tryna.domain.auth.constants.SessionHashField;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -14,10 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-// 사용자 기기별 세션(Hash) 저장소.
-@Component
+@Repository
 @RequiredArgsConstructor
-public class UserSessionRedisStore {
+public class SessionRedisRepository {
 
     private final StringRedisTemplate stringRedisTemplate;
 
