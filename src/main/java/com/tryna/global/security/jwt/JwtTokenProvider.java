@@ -76,6 +76,10 @@ public class JwtTokenProvider {
         return userId.longValue();
     }
 
+    public long getRefreshExpirationSeconds() {
+        return jwtProperties.getRefreshExpiration();
+    }
+
     private String createToken(Long userId, long expirationSeconds, TokenType tokenType) {
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(expirationSeconds);
