@@ -94,4 +94,9 @@ public class JwtTokenProvider {
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
+
+    // AccessToken 만료 시간 조회 (A102 응답용)
+    public long getAccessExpirationSeconds() {
+        return jwtProperties.getAccessExpiration();
+    }
 }

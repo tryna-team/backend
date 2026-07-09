@@ -1,6 +1,6 @@
 package com.tryna.global.security.exception;
 
-import com.tryna.global.exception.CommonErrorCode;
+import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.ErrorCode;
 import com.tryna.global.response.ApiResponse;
 import jakarta.servlet.ServletException;
@@ -24,7 +24,7 @@ public class CustomEntryPoint implements AuthenticationEntryPoint {
 
         ObjectMapper objectMapper = new ObjectMapper();
 
-        ErrorCode code = CommonErrorCode.AUTH_401;
+        ErrorCode code = AuthErrorCode.AUTH_401;
 
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(code.getHttpStatus().value());

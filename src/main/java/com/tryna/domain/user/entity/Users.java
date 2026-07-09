@@ -51,4 +51,11 @@ public class Users extends BaseEntity {
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private UserSettings userSettings;
 
+    // 비회원 생성용 정적 팩토리 메서드
+    public static Users createGuest(String guestId) {
+        Users user = new Users();
+        user.userRole = UserRole.GUEST;
+        user.guestId = guestId;
+        return user;
+    }
 }

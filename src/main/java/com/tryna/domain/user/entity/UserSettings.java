@@ -68,4 +68,11 @@ public class UserSettings extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // 기본 설정 생성용 정적 팩토리 메서드
+    public static UserSettings createDefault(Users user) {
+        UserSettings settings = new UserSettings();
+        settings.user = user;
+        // 필드 초기화는 @ColumnDefault 및 초기값 선언으로 자동 처리됨
+        return settings;
+    }
 }
