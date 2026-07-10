@@ -15,6 +15,8 @@ import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.domain.user.repository.UserSettingsRepository;
+import com.tryna.global.exception.AuthErrorCode;
+import com.tryna.global.exception.BusinessException;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import lombok.RequiredArgsConstructor;
@@ -44,14 +46,14 @@ public class AuthService {
      * A104: 로그인 필요 여부 확인
      */
     @Transactional(readOnly = true)
-    public PermissionCheckResponse checkPermission(String actionTypeStr) {
-        try {
-            PermissionAction action = PermissionAction.valueOf(actionTypeStr.toUpperCase());
-            return new PermissionCheckResponse(action.isLoginRequired(), action.getGuideMessage());
-        } catch (IllegalArgumentException | NullPointerException e) {
-            // 지원하지 않는 액션 타입이거나 null인 경우 A104_PERMISSION_CHECK_400 에러 발생
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A104_PERMISSION_CHECK_400);
+    public PermissionCheckResponse checkPermission(PermissionAction actionType) {
+        if (actionType == null) {
+            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
         }
+        return new PermissionCheckResponse(
+                actionType.isLoginRequired(),
+                actionType.getGuideMessage()
+        );
     }
 
     /**

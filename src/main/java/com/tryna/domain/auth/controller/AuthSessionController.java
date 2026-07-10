@@ -2,7 +2,10 @@ package com.tryna.domain.auth.controller;
 
 import com.tryna.domain.auth.controller.docs.AuthSessionControllerDocs;
 import com.tryna.domain.auth.dto.*;
+import com.tryna.domain.auth.enums.PermissionAction;
 import com.tryna.domain.auth.service.AuthService;
+import com.tryna.global.exception.AuthErrorCode;
+import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,8 +26,18 @@ public class AuthSessionController implements AuthSessionControllerDocs {
     public ResponseEntity<ApiResponse<PermissionCheckResponse>> checkPermission(
             @RequestParam("actionType") String actionType
     ) {
-        PermissionCheckResponse response = authService.checkPermission(actionType);
+        if (actionType == null || actionType.isBlank()) {
+            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
+        }
 
+        PermissionAction action;
+        try {
+            action = PermissionAction.valueOf(actionType.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
+        }
+
+        PermissionCheckResponse response = authService.checkPermission(action);
         return ResponseEntity.ok(
                 ApiResponse.success("A104_PERMISSION_CHECK_200", "로그인 필요 여부 확인에 성공했습니다.", response)
         );
