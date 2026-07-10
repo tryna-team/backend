@@ -240,9 +240,56 @@ public class AuthService {
         return tokenPair;
     }
 
-    // TODO: refresh — token_value 일치 검증 후 Rotation 및 TTL 연장
-    public TokenPair reissue(Long userId, String deviceId, String refreshToken) {
-        throw new UnsupportedOperationException("Not implemented");
+    /**
+     * A108: 토큰 갱신 (Refresh Token Rotation)
+     */
+    @Transactional
+    public AuthTokenResponse reissue(AuthTokenRefreshRequest request) {
+        String providedRefreshToken = request.refreshToken();
+        String deviceId = request.deviceId();
+
+        // 1. 리프레시 토큰 자체의 유효성(만료, 위변조) 1차 검증
+        try {
+            jwtTokenProvider.validateToken(providedRefreshToken, com.tryna.global.security.jwt.TokenType.REFRESH);
+        } catch (com.tryna.global.exception.BusinessException e) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401);
+        }
+
+        // 2. 토큰에서 userId 추출
+        Long userId = jwtTokenProvider.getUserId(providedRefreshToken);
+
+        // 3. Redis 세션 2차 검증 (DB에 저장된 실제 토큰과 일치하는지 확인)
+        Optional<String> storedRefreshToken = sessionRedisRepository.findTokenValue(userId, deviceId);
+
+        // 저장된 토큰이 없거나, 보낸 토큰과 다르면 -> 토큰 탈취(RTR 위반) 또는 이미 로그아웃된 상태
+        if (storedRefreshToken.isEmpty() || !storedRefreshToken.get().equals(providedRefreshToken)) {
+            // 보안을 위해 해당 기기의 세션을 즉시 파기합니다.
+            sessionRedisRepository.delete(userId, deviceId);
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401);
+        }
+
+        // 4. 유저 상태 확인 (그 사이 탈퇴했거나 상태가 변경되었는지 검증)
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401));
+
+        // 5. 기존 FCM 토큰 유지 (Redis 세션을 덮어씌울 때 기존 FCM 토큰이 날아가지 않도록 조회)
+        String existingFcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
+
+        // 6. 새로운 토큰 쌍 발급 및 Redis 세션 갱신 (기존 세션은 덮어씌워짐 - Refresh Token Rotation)
+        TokenPair newTokenPair = issueSession(userId, deviceId, existingFcmToken, user.getUserRole().name());
+
+        // 7. 응답 DTO 조립
+        String refreshTokenExpiresAt = java.time.Instant.now()
+                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
+                .toString();
+
+        return new AuthTokenResponse(
+                "Bearer",
+                newTokenPair.accessToken(),
+                jwtTokenProvider.getAccessExpirationSeconds(),
+                newTokenPair.refreshToken(),
+                refreshTokenExpiresAt
+        );
     }
 
     // TODO: 로그아웃 — session 삭제 + fcm Set에서 제거

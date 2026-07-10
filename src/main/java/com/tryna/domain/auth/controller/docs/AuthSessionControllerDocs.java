@@ -1,8 +1,6 @@
 package com.tryna.domain.auth.controller.docs;
 
-import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
-import com.tryna.domain.auth.dto.AuthSessionResponse;
-import com.tryna.domain.auth.dto.PermissionCheckResponse;
+import com.tryna.domain.auth.dto.*;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,5 +30,14 @@ public interface AuthSessionControllerDocs {
     )
     ResponseEntity<ApiResponse<AuthSessionResponse>> socialLogin(
             @Valid @RequestBody AuthSessionCreateRequest request
+    );
+
+    @Operation(
+            summary = "A108 토큰 갱신",
+            description = "만료된 액세스 토큰을 재발급받기 위해 리프레시 토큰을 검증하고 새로운 토큰 쌍을 반환합니다. (Refresh Token Rotation 정책 적용)",
+            operationId = "reissueToken"
+    )
+    ResponseEntity<ApiResponse<AuthTokenResponse>> reissueToken(
+            @Valid @RequestBody AuthTokenRefreshRequest request
     );
 }

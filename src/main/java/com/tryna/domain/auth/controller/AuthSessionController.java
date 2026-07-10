@@ -1,9 +1,7 @@
 package com.tryna.domain.auth.controller;
 
 import com.tryna.domain.auth.controller.docs.AuthSessionControllerDocs;
-import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
-import com.tryna.domain.auth.dto.AuthSessionResponse;
-import com.tryna.domain.auth.dto.PermissionCheckResponse;
+import com.tryna.domain.auth.dto.*;
 import com.tryna.domain.auth.service.AuthService;
 import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -39,6 +37,19 @@ public class AuthSessionController implements AuthSessionControllerDocs {
 
         return ResponseEntity.ok(
                 ApiResponse.success("A105_AUTH_SESSION_200", "소셜 로그인에 성공했습니다.", response)
+        );
+    }
+
+    @PostMapping("/refresh")
+    @Override
+    public ResponseEntity<ApiResponse<AuthTokenResponse>> reissueToken(
+            @Valid @RequestBody AuthTokenRefreshRequest request
+    ) {
+        // 서비스 단에서 검증 및 재발급 처리
+        AuthTokenResponse response = authService.reissue(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("A108_AUTH_REFRESH_200", "토큰 갱신에 성공했습니다.", response)
         );
     }
 }
