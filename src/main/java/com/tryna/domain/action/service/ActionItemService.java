@@ -1,9 +1,6 @@
 package com.tryna.domain.action.service;
 
-import com.tryna.domain.action.dto.ActionItemSaveRequest;
-import com.tryna.domain.action.dto.ActionItemSaveResponse;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
+import com.tryna.domain.action.dto.*;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.repository.ActionItemsRepository;
@@ -231,5 +228,52 @@ public class ActionItemService {
 
         // 6. JPA 더티 체킹으로 변경사항 저장 후 응답 반환
         return ActionItemStatusUpdateResponse.from(actionItem);
+    }
+
+    /**
+     * F103: 일정 상세 내 준비/실행 항목 조회
+     *
+     * 일정 존재 여부와 현재 사용자의 일정 접근 권한을 확인한 뒤,
+     * 해당 일정에 연결된 삭제되지 않은 준비/실행 항목을 반환합니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param eventId 조회할 일정 ID
+     * @return 일정 상세 내 준비/실행 항목 목록
+     */
+    public EventActionItemResponse getEventActionItems(
+            Long userId,
+            Long eventId
+    ) {
+        // 1. 일정 존재 여부 확인
+        if (!eventsRepository.existsById(eventId)) {
+            throw new BusinessException(
+                    ActionErrorCode.F103_ACTION_ITEM_404
+            );
+        }
+
+        // 2. user_events 연결 정보를 기준으로 일정 접근 권한 확인
+        boolean hasEventAccess =
+                userEventsRepository.existsByUser_UserIdAndEvent_EventId(
+                        userId,
+                        eventId
+                );
+
+        if (!hasEventAccess) {
+            throw new BusinessException(
+                    ActionErrorCode.F103_ACTION_ITEM_403
+            );
+        }
+
+        // 3. 일정에 연결된 삭제되지 않은 준비/실행 항목 조회
+        List<ActionItems> actionItems = actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        eventId
+                );
+
+        // 4. 조회 결과를 응답 DTO로 변환하여 반환
+        return EventActionItemResponse.from(
+                eventId,
+                actionItems
+        );
     }
 }

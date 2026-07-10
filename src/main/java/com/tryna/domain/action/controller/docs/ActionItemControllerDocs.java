@@ -1,9 +1,6 @@
 package com.tryna.domain.action.controller.docs;
 
-import com.tryna.domain.action.dto.ActionItemSaveRequest;
-import com.tryna.domain.action.dto.ActionItemSaveResponse;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
+import com.tryna.domain.action.dto.*;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -46,5 +43,19 @@ public interface ActionItemControllerDocs {
             @Valid
             @RequestBody
             ActionItemStatusUpdateRequest request
+    );
+
+    @Operation(
+            summary = "F103 일정 상세 내 준비/실행 항목 조회",
+            description = "특정 일정의 상세 화면에 노출할 준비/실행 항목 목록을 조회합니다.",
+            operationId = "getEventActionItems"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
+            @Parameter(
+                    description = "준비/실행 항목을 조회할 일정 ID",
+                    required = true
+            )
+            @PathVariable("eventId") Long eventId
     );
 }

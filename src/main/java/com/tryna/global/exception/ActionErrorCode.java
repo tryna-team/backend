@@ -44,6 +44,21 @@ public enum ActionErrorCode implements ErrorCode {
             HttpStatus.NOT_FOUND,
             "E106_ACTION_ITEM_404",
             "준비/실행 항목을 찾을 수 없습니다."
+    ),
+
+    /**
+     * F103: 일정 상세 내 준비/실행 항목 조회
+     */
+    F103_ACTION_ITEM_403(
+            HttpStatus.FORBIDDEN,
+            "F103_ACTION_ITEM_403",
+            "해당 일정의 준비/실행 항목을 조회할 권한이 없습니다."
+    ),
+
+    F103_ACTION_ITEM_404(
+            HttpStatus.NOT_FOUND,
+            "F103_ACTION_ITEM_404",
+            "일정을 찾을 수 없습니다."
     );
 
     private final HttpStatus httpStatus;

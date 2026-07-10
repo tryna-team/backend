@@ -1,10 +1,7 @@
 package com.tryna.domain.action.controller;
 
 import com.tryna.domain.action.controller.docs.ActionItemControllerDocs;
-import com.tryna.domain.action.dto.ActionItemSaveRequest;
-import com.tryna.domain.action.dto.ActionItemSaveResponse;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
-import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
+import com.tryna.domain.action.dto.*;
 import com.tryna.domain.action.service.ActionItemService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -109,5 +106,40 @@ public class ActionItemController implements ActionItemControllerDocs {
         }
 
         return null;
+    }
+
+    /**
+     * F103: 일정 상세 내 준비/실행 항목 조회
+     */
+    @GetMapping("/events/{eventId}/action-items")
+    @Override
+    public ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
+            @PathVariable("eventId") Long eventId
+    ) {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 일정에 연결된 준비/실행 항목 조회
+        EventActionItemResponse response =
+                actionItemService.getEventActionItems(
+                        userId,
+                        eventId
+                );
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "F103_ACTION_ITEM_200",
+                        "일정의 준비/실행 항목 조회에 성공했습니다.",
+                        response
+                )
+        );
     }
 }
