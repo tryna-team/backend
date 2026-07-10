@@ -68,4 +68,21 @@ public class UserSettings extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // 기본 설정 생성용 정적 팩토리 메서드
+    public static UserSettings createDefault(Users user) {
+        UserSettings settings = new UserSettings();
+        settings.user = user;
+        // 필드 초기화는 @ColumnDefault 및 초기값 선언으로 자동 처리됨
+
+        // ERD 명세서 기준 기본값 세팅
+        settings.isAllNotificationEnabled = true;
+        settings.isEventReminderEnabled = true;
+        settings.isActionItemReminderEnabled = true;
+        settings.defaultAllDayEventTime = java.time.LocalTime.of(9, 0);
+        settings.defaultActionItemTime = java.time.LocalTime.of(9, 0);
+        settings.defaultEventReminderOffsetMinutes = 30;
+        settings.isFeedbackDataCollected = false;
+        settings.isPersonalizationEnabled = true;
+        return settings;
+    }
 }
