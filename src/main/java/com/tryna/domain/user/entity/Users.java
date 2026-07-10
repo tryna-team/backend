@@ -65,4 +65,10 @@ public class Users extends BaseEntity {
         user.userRole = UserRole.USER;
         return user;
     }
+
+    // A106 회원 전환용 승급 메서드
+    public void upgradeToUser() {
+        this.userRole = UserRole.USER;
+        this.guestId = null; // 다른 사람이 해당 기기로 다시 비회원을 시작할 수 있도록 비워줌
+    }
 }

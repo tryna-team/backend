@@ -10,6 +10,7 @@ import com.tryna.domain.term.entity.Terms;
 import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
 import com.tryna.domain.term.repository.TermsRepository;
 import com.tryna.domain.term.repository.UserAgreedTermsRepository;
+import com.tryna.domain.user.dto.UserConversionResponse;
 import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
@@ -129,6 +130,81 @@ public class AuthService {
                 user.getUserId(),
                 user.getUserRole().name(),
                 isNewUser,
+                authTokenResponse
+        );
+    }
+
+    /**
+     * A106: 회원 전환 유도 (비회원 -> 정식 회원)
+     */
+    @Transactional
+    public UserConversionResponse convertGuestToUser(Long userId, AuthSessionCreateRequest request) {
+        // 1. 기존 비회원 유저 조회 및 권한 검증
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.tryna.global.exception.BusinessException(com.tryna.global.exception.UserErrorCode.USER_404));
+
+        if (user.getUserRole() != com.tryna.domain.user.enums.UserRole.GUEST) {
+            // 이미 정식 회원이거나 권한이 없는 경우
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A106_USER_CONVERSION_403);
+        }
+
+        // 2. 소셜 프로필 조회
+        OAuthClient.SocialUserProfile profile = oAuthClient.getProfile(request.provider(), request.oauthAccessToken());
+        String socialId = profile.socialId();
+        String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
+
+        // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
+        Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
+        if (existingAuth.isPresent()) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
+        }
+
+        // 4. 필수 약관 검증
+        List<com.tryna.domain.term.enums.TermType> agreedTypes = request.agreedTermTypes() != null ? request.agreedTermTypes() : List.of();
+        List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
+        if (!agreedTypes.containsAll(requiredTypes)) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
+        }
+
+        // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
+        user.upgradeToUser();
+
+        // 6. Auths 정보 생성 및 약관 매핑 저장
+        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+        authsRepository.save(newAuth);
+
+        if (!agreedTypes.isEmpty()) {
+            List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(agreedTypes);
+            List<UserAgreedTerms> agreedTermsList = latestTerms.stream()
+                    .map(term -> UserAgreedTerms.create(user, term))
+                    .toList();
+            userAgreedTermsRepository.saveAll(agreedTermsList);
+        }
+
+        // 7. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
+        sessionRedisRepository.delete(userId, request.deviceId());
+        if (request.fcmToken() != null && !request.fcmToken().isBlank()) {
+            fcmTokenRedisRepository.remove(userId, request.fcmToken());
+        }
+
+        // 8. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
+        TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
+
+        String refreshTokenExpiresAt = java.time.Instant.now()
+                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
+                .toString();
+
+        AuthTokenResponse authTokenResponse = new AuthTokenResponse(
+                "Bearer",
+                tokenPair.accessToken(),
+                jwtTokenProvider.getAccessExpirationSeconds(),
+                tokenPair.refreshToken(),
+                refreshTokenExpiresAt
+        );
+
+        return new UserConversionResponse(
+                user.getUserId(),
+                user.getUserRole().name(),
                 authTokenResponse
         );
     }
