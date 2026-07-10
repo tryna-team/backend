@@ -2,7 +2,10 @@ package com.tryna.domain.action.service;
 
 import com.tryna.domain.action.dto.ActionItemSaveRequest;
 import com.tryna.domain.action.dto.ActionItemSaveResponse;
+import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
+import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
 import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.repository.EventsRepository;
@@ -166,5 +169,67 @@ public class ActionItemService {
                     ActionErrorCode.E105_ACTION_ITEM_400_2
             );
         }
+    }
+
+    /**
+     * E106: 준비/실행 항목 완료 상태 변경
+     *
+     * 준비/실행 항목이 존재하는지 확인하고,
+     * 현재 사용자가 해당 항목의 부모 일정에 연결되어 있는지 검증한 뒤
+     * 항목 상태를 COMPLETED 또는 PENDING으로 변경합니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param actionItemId 상태를 변경할 준비/실행 항목 ID
+     * @param request 변경할 상태 정보
+     * @return 상태 변경 결과
+     */
+    @Transactional
+    public ActionItemStatusUpdateResponse updateActionItemStatus(
+            Long userId,
+            Long actionItemId,
+            ActionItemStatusUpdateRequest request
+    ) {
+        // 1. E106에서는 완료 처리와 완료 취소만 허용
+        ActionItemStatus requestedStatus = request.actionItemStatus();
+
+        if (requestedStatus != ActionItemStatus.COMPLETED
+                && requestedStatus != ActionItemStatus.PENDING) {
+            throw new BusinessException(
+                    ActionErrorCode.E106_ACTION_ITEM_400
+            );
+        }
+
+        // 2. 삭제되지 않은 준비/실행 항목 조회
+        ActionItems actionItem = actionItemsRepository
+                .findByActionItemIdAndDeletedAtIsNull(actionItemId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ActionErrorCode.E106_ACTION_ITEM_404
+                        )
+                );
+
+        // 3. 준비/실행 항목의 부모 일정 ID 조회
+        Long eventId = actionItem
+                .getParentEvent()
+                .getEventId();
+
+        // 4. user_events 연결 정보를 기준으로 일정 접근 권한 확인
+        boolean hasEventAccess =
+                userEventsRepository.existsByUser_UserIdAndEvent_EventId(
+                        userId,
+                        eventId
+                );
+
+        if (!hasEventAccess) {
+            throw new BusinessException(
+                    ActionErrorCode.E106_ACTION_ITEM_403
+            );
+        }
+
+        // 5. 엔티티 상태 및 완료 일시 변경
+        actionItem.updateStatus(requestedStatus);
+
+        // 6. JPA 더티 체킹으로 변경사항 저장 후 응답 반환
+        return ActionItemStatusUpdateResponse.from(actionItem);
     }
 }

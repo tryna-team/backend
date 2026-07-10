@@ -2,6 +2,8 @@ package com.tryna.domain.action.controller.docs;
 
 import com.tryna.domain.action.dto.ActionItemSaveRequest;
 import com.tryna.domain.action.dto.ActionItemSaveResponse;
+import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
+import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,5 +28,23 @@ public interface ActionItemControllerDocs {
             @PathVariable("eventId") Long eventId,
 
             @Valid @RequestBody ActionItemSaveRequest request
+    );
+
+    @Operation(
+            summary = "E106 준비/실행 항목 완료 처리",
+            description = "준비/실행 항목을 완료 상태로 변경하거나 완료 처리를 취소하여 대기 상태로 되돌립니다.",
+            operationId = "updateActionItemStatus"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<ActionItemStatusUpdateResponse>> updateActionItemStatus(
+            @Parameter(
+                    description = "상태를 변경할 준비/실행 항목 ID",
+                    required = true
+            )
+            @PathVariable("actionItemId") Long actionItemId,
+
+            @Valid
+            @RequestBody
+            ActionItemStatusUpdateRequest request
     );
 }

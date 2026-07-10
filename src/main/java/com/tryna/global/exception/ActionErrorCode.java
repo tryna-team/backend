@@ -23,6 +23,27 @@ public enum ActionErrorCode implements ErrorCode {
             HttpStatus.FORBIDDEN,
             "E105_ACTION_ITEM_403",
             "해당 일정에 준비/실행 항목을 저장할 권한이 없습니다."
+    ),
+
+    /**
+     * E106: 준비/실행 항목 완료 상태 변경
+     */
+    E106_ACTION_ITEM_400(
+            HttpStatus.BAD_REQUEST,
+            "E106_ACTION_ITEM_400",
+            "준비/실행 항목 상태 변경 요청이 올바르지 않습니다."
+    ),
+
+    E106_ACTION_ITEM_403(
+            HttpStatus.FORBIDDEN,
+            "E106_ACTION_ITEM_403",
+            "해당 준비/실행 항목의 상태를 변경할 권한이 없습니다."
+    ),
+
+    E106_ACTION_ITEM_404(
+            HttpStatus.NOT_FOUND,
+            "E106_ACTION_ITEM_404",
+            "준비/실행 항목을 찾을 수 없습니다."
     );
 
     private final HttpStatus httpStatus;

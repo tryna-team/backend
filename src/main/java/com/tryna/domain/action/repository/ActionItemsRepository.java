@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> {
 
@@ -20,5 +21,15 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     int softDeleteById(
             @Param("actionItemId") Long actionItemId,
             @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    /**
+     * 삭제되지 않은 준비/실행 항목을 ID로 조회합니다.
+     *
+     * @param actionItemId 준비/실행 항목 ID
+     * @return 삭제되지 않은 준비/실행 항목
+     */
+    Optional<ActionItems> findByActionItemIdAndDeletedAtIsNull(
+            Long actionItemId
     );
 }

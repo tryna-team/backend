@@ -113,4 +113,23 @@ public class ActionItems extends BaseEntity {
         return actionItem;
     }
 
+    /**
+     * E106: 준비/실행 항목 상태 변경
+     *
+     * COMPLETED 상태로 변경하면 현재 시각을 완료 일시로 기록합니다.
+     * PENDING 상태로 되돌리면 기존 완료 일시를 제거합니다.
+     *
+     * @param status 변경할 준비/실행 항목 상태
+     */
+    public void updateStatus(ActionItemStatus status) {
+        this.actionItemStatus = status;
+
+        if (status == ActionItemStatus.COMPLETED) {
+            this.completedAt = LocalDateTime.now();
+            return;
+        }
+
+        this.completedAt = null;
+    }
+
 }
