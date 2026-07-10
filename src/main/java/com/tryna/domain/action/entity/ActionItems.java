@@ -82,4 +82,35 @@ public class ActionItems extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /**
+     * E105: 준비/실행 항목 생성
+     *
+     * 프론트엔드에서 최종 확정된 준비/실행 항목 정보를 받아
+     * 부모 일정과 연결된 ActionItems 엔티티를 생성합니다.
+     */
+    public static ActionItems create(
+            Events parentEvent,
+            String title,
+            ItemType itemType,
+            LocalDate displayDate,
+            LocalDateTime displayDatetime,
+            Integer offsetDays,
+            CreatedBy createdBy,
+            String sourceTemplateId
+    ) {
+        ActionItems actionItem = new ActionItems();
+
+        actionItem.parentEvent = parentEvent;
+        actionItem.title = title;
+        actionItem.itemType = itemType;
+        actionItem.displayDate = displayDate;
+        actionItem.displayDatetime = displayDatetime;
+        actionItem.offsetDays = offsetDays;
+        actionItem.actionItemStatus = ActionItemStatus.PENDING;
+        actionItem.createdBy = createdBy;
+        actionItem.sourceTemplateId = sourceTemplateId;
+
+        return actionItem;
+    }
+
 }
