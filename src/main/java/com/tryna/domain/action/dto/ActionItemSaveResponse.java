@@ -83,7 +83,7 @@ public record ActionItemSaveResponse(
                     description = "캘린더에 표시할 날짜와 시간",
                     example = "2026-07-03T09:00:00"
             )
-            LocalDateTime displayDatetime,
+            LocalDateTime displayTime,
 
             @Schema(
                     description = "준비/실행 항목 상태",

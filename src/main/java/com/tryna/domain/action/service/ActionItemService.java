@@ -99,7 +99,7 @@ public class ActionItemService {
                         item.title(),
                         item.itemType(),
                         item.displayDate(),
-                        item.displayDatetime(),
+                        item.displayTime(),
                         item.offsetDays(),
                         item.createdBy(),
                         item.sourceTemplateId()
@@ -156,7 +156,7 @@ public class ActionItemService {
 
                     case UNTIMED_PREP ->
                             item.displayDate() != null
-                                    || item.displayDatetime() != null;
+                                    || item.displayTime() != null;
 
                     case UNRESOLVED -> false;
                 });

@@ -47,7 +47,7 @@ public record ActionItemSaveRequest(
             LocalDate displayDate,
 
             @Schema(description = "캘린더 표시 일시", example = "2026-07-03T09:00:00")
-            LocalDateTime displayDatetime,
+            LocalDateTime displayTime,
 
             @Schema(description = "부모 일정 기준 상대 일수", example = "-7")
             Integer offsetDays,
