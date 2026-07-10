@@ -184,10 +184,14 @@ public class AuthService {
         }
 
         // 7. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
+        // 7-1. 기존 세션에서 FCM 토큰을 안전하게 조회
+        Optional<String> existingFcmToken = sessionRedisRepository.findFcmToken(userId, request.deviceId());
+
+        // 7-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
+        existingFcmToken.ifPresent(token -> fcmTokenRedisRepository.remove(userId, token));
+
+        // 7-3. 안전하게 세션 Hash를 삭제
         sessionRedisRepository.delete(userId, request.deviceId());
-        if (request.fcmToken() != null && !request.fcmToken().isBlank()) {
-            fcmTokenRedisRepository.remove(userId, request.fcmToken());
-        }
 
         // 8. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
@@ -223,20 +227,34 @@ public class AuthService {
         long refreshExpirationSeconds = jwtTokenProvider.getRefreshExpirationSeconds();
         Duration ttl = Duration.ofSeconds(refreshExpirationSeconds);
 
-        // 3. Redis 세션 Hash 저장 (기기별 Hash 업데이트 및 TTL 설정)
+        // 3. 기존 FCM 토큰 조회
+        String existingFcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
+
+        // 4. 최종 FCM 토큰 결정 (값이 없으면 기존 것 유지)
+        String finalFcmToken = (fcmToken != null && !fcmToken.isBlank())
+                ? fcmToken
+                : existingFcmToken;
+
+        // 5. [핵심] 기존 토큰과 새로운 토큰이 다를 경우, 기존 토큰을 Set에서 확실하게 제거
+        if (existingFcmToken != null && !existingFcmToken.isBlank()
+                && finalFcmToken != null && !finalFcmToken.equals(existingFcmToken)) {
+            fcmTokenRedisRepository.remove(userId, existingFcmToken);
+        }
+
+        // 6. Redis 세션 Hash 저장
         sessionRedisRepository.save(
                 userId,
                 deviceId,
                 tokenPair.refreshToken(),
-                fcmToken,
+                finalFcmToken,
                 scopes,
                 Instant.now(),
                 ttl
         );
 
-        // 4. Redis FCM Set에 토큰 추가 (FCM 토큰이 존재하는 경우에만)
-        if (fcmToken != null && !fcmToken.isBlank()) {
-            fcmTokenRedisRepository.add(userId, fcmToken, ttl);
+        // 7. 새로운 토큰을 Set에 추가
+        if (finalFcmToken != null && !finalFcmToken.isBlank()) {
+            fcmTokenRedisRepository.add(userId, finalFcmToken, ttl);
         }
 
         return tokenPair;

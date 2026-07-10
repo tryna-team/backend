@@ -22,13 +22,18 @@ public class CustomEntryPoint implements AuthenticationEntryPoint {
             AuthenticationException authException
     ) throws IOException, ServletException {
 
-        ObjectMapper objectMapper = new ObjectMapper();
+        // 1. Filter에서 setAttribute("exception", ErrorCode) 한 값을 가져옴
+        Object exception = request.getAttribute("exception");
 
-        ErrorCode code = AuthErrorCode.AUTH_401;
+        // 2. ErrorCode 타입이면 사용하고, 아니면 기본 AUTH_401 사용
+        ErrorCode code = (exception instanceof ErrorCode) ? (ErrorCode) exception : AuthErrorCode.AUTH_401;
+
+        ObjectMapper objectMapper = new ObjectMapper();
 
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(code.getHttpStatus().value());
 
+        // 3. 구체적인 에러 코드(code)를 응답에 반영
         ApiResponse<Void> errorResponse = ApiResponse.fail(code);
 
         objectMapper.writeValue(response.getOutputStream(), errorResponse);
