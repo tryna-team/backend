@@ -3,6 +3,7 @@ package com.tryna.domain.action.service;
 import com.tryna.domain.action.dto.*;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
+import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.repository.EventsRepository;
@@ -17,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Service
@@ -273,6 +276,46 @@ public class ActionItemService {
         // 4. 조회 결과를 응답 DTO로 변환하여 반환
         return EventActionItemResponse.from(
                 eventId,
+                actionItems
+        );
+    }
+
+    /**
+     * F104: 캘린더 내 시간형 실행 항목 조회
+     *
+     * 요청 날짜를 검증한 뒤 현재 사용자의 일정에 연결된 항목 중
+     * displayDate가 일치하는 TIMED_ACTION 항목만 반환합니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param dateText 조회 날짜 문자열
+     * @return 선택한 날짜의 시간형 실행 항목 목록
+     */
+    public TimedActionItemResponse getTimedActionItems(
+            Long userId,
+            String dateText
+    ) {
+        // 1. yyyy-MM-dd 형식의 조회 날짜 검증
+        LocalDate date;
+
+        try {
+            date = LocalDate.parse(dateText);
+        } catch (DateTimeParseException | NullPointerException e) {
+            throw new BusinessException(
+                    ActionErrorCode.F104_ACTION_ITEM_400
+            );
+        }
+
+        // 2. 현재 사용자의 시간형 실행 항목 조회
+        List<ActionItems> actionItems = actionItemsRepository
+                .findCalendarActionItemsByDate(
+                        userId,
+                        date,
+                        ItemType.TIMED_ACTION
+                );
+
+        // 3. 응답 DTO로 변환
+        return TimedActionItemResponse.from(
+                date,
                 actionItems
         );
     }

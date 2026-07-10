@@ -142,4 +142,39 @@ public class ActionItemController implements ActionItemControllerDocs {
                 )
         );
     }
+
+    /**
+     * F104: 캘린더 내 시간형 실행 항목 조회
+     */
+    @GetMapping("/calendar/action-items/timed")
+    @Override
+    public ResponseEntity<ApiResponse<TimedActionItemResponse>> getTimedActionItems(
+            @RequestParam("date") String date
+    ) {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 선택한 날짜의 시간형 실행 항목 조회
+        TimedActionItemResponse response =
+                actionItemService.getTimedActionItems(
+                        userId,
+                        date
+                );
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "F104_ACTION_ITEM_200",
+                        "시간형 실행 항목 조회에 성공했습니다.",
+                        response
+                )
+        );
+    }
 }

@@ -1,11 +1,13 @@
 package com.tryna.domain.action.repository;
 
 import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.enums.ItemType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -46,5 +48,31 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     List<ActionItems>
     findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
             Long eventId
+    );
+
+    /**
+     * 현재 사용자의 일정에 연결된 항목 중
+     * 선택한 날짜에 표시할 시간형 실행 항목을 조회합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param date 조회 날짜
+     * @param itemType 항목 유형
+     * @return 시간형 실행 항목 목록
+     */
+    @Query("""
+            SELECT a
+              FROM ActionItems a
+              JOIN a.parentEvent e
+              JOIN UserEvents ue ON ue.event = e
+             WHERE ue.user.userId = :userId
+               AND a.displayDate = :date
+               AND a.itemType = :itemType
+               AND a.deletedAt IS NULL
+             ORDER BY a.displayDatetime ASC, a.actionItemId ASC
+            """)
+    List<ActionItems> findCalendarActionItemsByDate(
+            @Param("userId") Long userId,
+            @Param("date") LocalDate date,
+            @Param("itemType") ItemType itemType
     );
 }

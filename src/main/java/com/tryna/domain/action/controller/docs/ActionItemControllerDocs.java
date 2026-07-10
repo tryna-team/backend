@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Tag(name = "Action Items", description = "준비/실행 항목 관리 API")
 public interface ActionItemControllerDocs {
@@ -57,5 +58,20 @@ public interface ActionItemControllerDocs {
                     required = true
             )
             @PathVariable("eventId") Long eventId
+    );
+
+    @Operation(
+            summary = "F104 캘린더 내 시간형 실행 항목 조회",
+            description = "선택한 날짜에 표시할 시간형 실행 항목을 조회합니다. 현재 사용자의 일정에 연결된 TIMED_ACTION 항목만 반환합니다.",
+            operationId = "getTimedActionItems"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<TimedActionItemResponse>> getTimedActionItems(
+            @Parameter(
+                    description = "조회할 날짜(yyyy-MM-dd)",
+                    required = true,
+                    example = "2026-07-03"
+            )
+            @RequestParam("date") String date
     );
 }

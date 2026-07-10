@@ -59,6 +59,15 @@ public enum ActionErrorCode implements ErrorCode {
             HttpStatus.NOT_FOUND,
             "F103_ACTION_ITEM_404",
             "일정을 찾을 수 없습니다."
+    ),
+
+    /**
+     * F104: 캘린더 내 시간형 실행 항목 조회
+     */
+    F104_ACTION_ITEM_400(
+            HttpStatus.BAD_REQUEST,
+            "F104_ACTION_ITEM_400",
+            "조회 날짜가 올바르지 않습니다."
     );
 
     private final HttpStatus httpStatus;
