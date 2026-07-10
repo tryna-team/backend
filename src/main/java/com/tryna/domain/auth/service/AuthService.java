@@ -292,9 +292,21 @@ public class AuthService {
         );
     }
 
-    // TODO: 로그아웃 — session 삭제 + fcm Set에서 제거
+    /**
+     * A109: 로그아웃
+     */
+    @Transactional
     public void logout(Long userId, String deviceId) {
-        throw new UnsupportedOperationException("Not implemented");
+        // 1. 기존 기기의 FCM 토큰을 Redis Hash에서 꺼내기
+        String fcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
+
+        // 2. FCM 토큰이 존재하면 FCM Set에서 확실하게 제거 (푸시 알림 차단)
+        if (fcmToken != null && !fcmToken.isBlank()) {
+            fcmTokenRedisRepository.remove(userId, fcmToken);
+        }
+
+        // 3. 마지막으로 해당 기기의 세션(Hash) 자체를 완전히 삭제
+        sessionRedisRepository.delete(userId, deviceId);
     }
 
     // TODO: 앱 실행 시 FCM 토큰만 갱신 (session Hash + fcm Set 동기화)

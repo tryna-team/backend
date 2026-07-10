@@ -4,6 +4,7 @@ import com.tryna.domain.auth.dto.*;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -39,5 +40,16 @@ public interface AuthSessionControllerDocs {
     )
     ResponseEntity<ApiResponse<AuthTokenResponse>> reissueToken(
             @Valid @RequestBody AuthTokenRefreshRequest request
+    );
+
+    @Operation(
+            summary = "A109 로그아웃",
+            description = "현재 기기의 세션을 만료시키고 푸시 알림(FCM) 토큰을 제거하여 로그아웃 처리합니다.",
+            operationId = "logout"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<Void>> logout(
+            @Parameter(description = "접속 기기 식별자", required = true)
+            @RequestParam("deviceId") String deviceId
     );
 }

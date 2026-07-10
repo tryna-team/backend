@@ -7,6 +7,8 @@ import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -51,5 +53,33 @@ public class AuthSessionController implements AuthSessionControllerDocs {
         return ResponseEntity.ok(
                 ApiResponse.success("A108_AUTH_REFRESH_200", "토큰 갱신에 성공했습니다.", response)
         );
+    }
+
+    @DeleteMapping("/me")
+    @Override
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @RequestParam("deviceId") String deviceId
+    ) {
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 토큰이 없거나 만료된 상태면 Filter에서 튕겨내지만, 방어적 코드 추가
+        if (userId == null) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
+        }
+
+        authService.logout(userId, deviceId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("A109_AUTH_LOGOUT_200", "로그아웃 되었습니다.", null)
+        );
+    }
+
+    // SecurityContext에서 안전하게 userId 추출 (비로그인이면 null 반환)
+    private Long extractUserIdFromSecurityContext() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        return null;
     }
 }
