@@ -1,9 +1,19 @@
 package com.tryna.domain.auth.service;
 
-import com.tryna.domain.auth.dto.PermissionCheckResponse;
+import com.tryna.domain.auth.dto.*;
+import com.tryna.domain.auth.entity.Auths;
 import com.tryna.domain.auth.enums.PermissionAction;
+import com.tryna.domain.auth.repository.AuthsRepository;
 import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
 import com.tryna.domain.auth.repository.SessionRedisRepository;
+import com.tryna.domain.term.entity.Terms;
+import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
+import com.tryna.domain.term.repository.TermsRepository;
+import com.tryna.domain.term.repository.UserAgreedTermsRepository;
+import com.tryna.domain.user.entity.UserSettings;
+import com.tryna.domain.user.entity.Users;
+import com.tryna.domain.user.repository.UserRepository;
+import com.tryna.domain.user.repository.UserSettingsRepository;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +32,12 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final SessionRedisRepository sessionRedisRepository;
     private final FcmTokenRedisRepository fcmTokenRedisRepository;
+    private final AuthsRepository authsRepository;
+    private final TermsRepository termsRepository;
+    private final UserAgreedTermsRepository userAgreedTermsRepository;
+    private final UserRepository userRepository;
+    private final UserSettingsRepository userSettingsRepository;
+    private final OAuthClient oAuthClient;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -33,6 +51,86 @@ public class AuthService {
             // 지원하지 않는 액션 타입이거나 null인 경우 A104_PERMISSION_CHECK_400 에러 발생
             throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A104_PERMISSION_CHECK_400);
         }
+    }
+
+    /**
+     * A105: 소셜 로그인 및 회원가입
+     */
+    @Transactional
+    public AuthSessionResponse socialLogin(AuthSessionCreateRequest request) {
+
+        // 1. 소셜 서버를 통해 토큰 검증 및 유저 프로필 획득
+        OAuthClient.SocialUserProfile profile = oAuthClient.getProfile(request.provider(), request.oauthAccessToken());
+        String socialId = profile.socialId();
+        // 클라이언트가 이메일을 별도로 넘겨줬다면 우선 사용, 없으면 소셜 서버에서 받은 이메일 사용
+        String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
+
+        // 2. 이미 연동된 소셜 계정인지 확인
+        Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
+
+        final Users user;
+        boolean isNewUser;
+
+        if (existingAuth.isPresent()) {
+            // [A. 기존 회원 로그인]
+            user = existingAuth.get().getUser();
+            isNewUser = false;
+        } else {
+            // [B. 신규 회원 가입]
+
+            // B-1. 필수 약관 검증
+            List<com.tryna.domain.term.enums.TermType> agreedTypes = request.agreedTermTypes() != null ? request.agreedTermTypes() : List.of();
+            List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
+
+            if (!agreedTypes.containsAll(requiredTypes)) {
+                throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
+            }
+
+            // B-2. Users 엔티티 생성 및 저장
+            Users newUser = Users.createUser();
+            user = userRepository.save(newUser);
+
+            // B-3. UserSettings 기본 설정 생성 및 저장
+            UserSettings defaultSettings = UserSettings.createDefault(user);
+            userSettingsRepository.save(defaultSettings);
+
+            //B-4. Auths 인증 정보 저장
+            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+            authsRepository.save(newAuth);
+
+            // B-5. 최신 약관 매핑 및 동의 이력 저장
+            if (!agreedTypes.isEmpty()) {
+                List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(agreedTypes);
+                List<UserAgreedTerms> agreedTermsList = latestTerms.stream()
+                        .map(term -> UserAgreedTerms.create(user, term))
+                        .toList();
+                userAgreedTermsRepository.saveAll(agreedTermsList);
+            }
+            isNewUser = true;
+        }
+
+        // 3. 토큰 발급 및 Redis 세션/FCM 저장
+        TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
+
+        // 4. 응답 토큰 포맷팅 및 DTO 반환
+        String refreshTokenExpiresAt = Instant.now()
+                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
+                .toString();
+
+        AuthTokenResponse authTokenResponse = new AuthTokenResponse(
+                "Bearer",
+                tokenPair.accessToken(),
+                jwtTokenProvider.getAccessExpirationSeconds(),
+                tokenPair.refreshToken(),
+                refreshTokenExpiresAt
+        );
+
+        return new AuthSessionResponse(
+                user.getUserId(),
+                user.getUserRole().name(),
+                isNewUser,
+                authTokenResponse
+        );
     }
 
     /**

@@ -99,17 +99,19 @@ public class UserService {
     // --- Helper Method ---
 
     private AuthTokenResponse mapToAuthTokenResponse(TokenPair tokenPair) {
-        // MVP: accessToken 만료시간은 JwtProperties 값을 직접 가져오거나 기본값 적용
-        // (추후 JwtTokenProvider에 getAccessExpirationSeconds() 추가 권장)
         long refreshExpiration = jwtTokenProvider.getRefreshExpirationSeconds();
         long accessExpiration = jwtTokenProvider.getAccessExpirationSeconds();
+
+        String refreshTokenExpiresAt = java.time.Instant.now()
+                .plusSeconds(refreshExpiration)
+                .toString();
 
         return new AuthTokenResponse(
                 "Bearer",
                 tokenPair.accessToken(),
                 accessExpiration,
                 tokenPair.refreshToken(),
-                LocalDateTime.now().plusSeconds(refreshExpiration)
+                refreshTokenExpiresAt
         );
     }
 

@@ -73,6 +73,16 @@ public class UserSettings extends BaseEntity {
         UserSettings settings = new UserSettings();
         settings.user = user;
         // 필드 초기화는 @ColumnDefault 및 초기값 선언으로 자동 처리됨
+
+        // ERD 명세서 기준 기본값 세팅
+        settings.isAllNotificationEnabled = true;
+        settings.isEventReminderEnabled = true;
+        settings.isActionItemReminderEnabled = true;
+        settings.defaultAllDayEventTime = java.time.LocalTime.of(9, 0);
+        settings.defaultActionItemTime = java.time.LocalTime.of(9, 0);
+        settings.defaultEventReminderOffsetMinutes = 30;
+        settings.isFeedbackDataCollected = false;
+        settings.isPersonalizationEnabled = true;
         return settings;
     }
 }

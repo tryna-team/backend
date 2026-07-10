@@ -58,4 +58,11 @@ public class Users extends BaseEntity {
         user.guestId = guestId;
         return user;
     }
+
+    // 정식 회원(소셜 로그인/가입) 생성용 정적 팩토리 메서드
+    public static Users createUser() {
+        Users user = new Users();
+        user.userRole = UserRole.USER;
+        return user;
+    }
 }

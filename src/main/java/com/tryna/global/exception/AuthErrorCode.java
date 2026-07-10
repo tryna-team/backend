@@ -6,6 +6,7 @@ public enum AuthErrorCode implements ErrorCode {
 
     AUTH_401(HttpStatus.UNAUTHORIZED, "AUTH_401", "인증이 필요합니다."),
     AUTH_409(HttpStatus.CONFLICT, "AUTH_409", "이미 가입된 소셜 계정입니다."),
+    TERMS_400(HttpStatus.BAD_REQUEST, "TERMS_400", "필수 약관에 모두 동의해야 합니다."),
     A104_PERMISSION_CHECK_400(HttpStatus.BAD_REQUEST, "A104_PERMISSION_CHECK_400", "로그인 필요 여부 확인 요청이 올바르지 않습니다."),
     A105_AUTH_SESSION_400(HttpStatus.BAD_REQUEST, "A105_AUTH_SESSION_400", "소셜 로그인 요청이 올바르지 않습니다."),
     A106_USER_CONVERSION_400(HttpStatus.BAD_REQUEST, "A106_USER_CONVERSION_400", "회원 전환 요청이 올바르지 않습니다."),
