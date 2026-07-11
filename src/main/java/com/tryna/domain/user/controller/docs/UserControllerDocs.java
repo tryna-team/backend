@@ -2,6 +2,7 @@ package com.tryna.domain.user.controller.docs;
 
 import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
 import com.tryna.domain.user.dto.UserConversionResponse;
+import com.tryna.domain.user.dto.UserProfileResponse;
 import com.tryna.domain.user.dto.UserStatusResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,4 +29,18 @@ public interface UserControllerDocs {
     ResponseEntity<ApiResponse<UserConversionResponse>> convertGuestToUser(
             @Valid @RequestBody AuthSessionCreateRequest request
     );
+
+    @Operation(
+            summary = "G103 계정 정보 확인",
+            description = "현재 로그인한 사용자의 프로필 및 소셜 연동 여부, 외부 캘린더 연동 여부를 조회합니다.",
+            operationId = "getUserProfile"
+    )
+    ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile();
+
+    @Operation(
+            summary = "G104 데이터 삭제 (회원 탈퇴)",
+            description = "현재 사용자의 모든 데이터를 삭제(Hard/Soft)하고 회원을 탈퇴합니다.",
+            operationId = "withdraw"
+    )
+    ResponseEntity<ApiResponse<Void>> withdraw(); // data: null을 반환하므로 제네릭은 Void
 }

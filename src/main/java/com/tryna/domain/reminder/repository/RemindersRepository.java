@@ -54,4 +54,11 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
             @Param("nextStatus") ReminderStatus nextStatus,
             @Param("updatedAt") LocalDateTime updatedAt
     );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            DELETE FROM Reminders r
+             WHERE r.user.userId = :userId
+            """)
+    int deleteByUserId(@Param("userId") Long userId);
 }
