@@ -31,7 +31,7 @@ public class OpenApiConfig {
     public GroupedOpenApi trynaV1Api() {
         return GroupedOpenApi.builder()
                 .group("tryna-v1")
-                .pathsToMatch("/api/v1/**")
+                .pathsToMatch("/api/v1/**", "/health", "/")
                 .build();
     }
 }
