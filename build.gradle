@@ -48,6 +48,10 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql'
 }
 
+tasks.named('jar') {
+	enabled = false
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 }
