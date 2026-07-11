@@ -28,4 +28,4 @@ COPY --from=build /home/gradle/project/build/libs/*.jar app.jar
 USER spring:spring
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
