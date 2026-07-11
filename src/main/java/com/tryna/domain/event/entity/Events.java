@@ -137,4 +137,36 @@ public class Events extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    public static Events createInternalEvent(
+            String sourceText,
+            String title,
+            String description,
+            LocalDate startDate,
+            LocalDateTime startDatetime,
+            LocalDate endDate,
+            LocalDateTime endDatetime,
+            Boolean isAllDay,
+            String location,
+            String eventTypeCandidate,
+            EventStatus eventStatus
+    ) {
+        Events event = new Events();
+        event.sourceText = sourceText;
+        event.title = title;
+        event.description = description;
+        event.startDate = startDate;
+        event.startDatetime = startDatetime;
+        event.endDate = endDate;
+        event.endDatetime = endDatetime;
+        event.isAllDay = isAllDay;
+        event.isRecurring = false;
+        event.recurrenceType = RecurrenceType.NONE;
+        event.recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
+        event.location = location;
+        event.eventTypeCandidate = eventTypeCandidate;
+        event.sourceType = SourceType.USER_NATURAL_LANGUAGE;
+        event.eventStatus = eventStatus;
+        return event;
+    }
+
 }
