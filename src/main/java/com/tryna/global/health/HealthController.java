@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Tag(name = "Health", description = "인프라 헬스체크")
 @RestController
@@ -26,7 +30,10 @@ import java.sql.SQLException;
 public class HealthController {
 
     private static final int DB_VALIDATION_TIMEOUT_SECONDS = 2;
+    private static final int REDIS_PING_TIMEOUT_SECONDS = 2;
     private static final String REDIS_PING_RESPONSE = "PONG";
+    private static final String DB_DOWN_MESSAGE = "Database connectivity check failed";
+    private static final String REDIS_DOWN_MESSAGE = "Redis connectivity check failed";
 
     private final DataSource dataSource;
     private final StringRedisTemplate redisTemplate;
@@ -53,22 +60,35 @@ public class HealthController {
         try (Connection connection = dataSource.getConnection()) {
             return connection.isValid(DB_VALIDATION_TIMEOUT_SECONDS)
                     ? ComponentHealth.up()
-                    : ComponentHealth.down("Connection validation failed");
+                    : ComponentHealth.down(DB_DOWN_MESSAGE);
         } catch (SQLException e) {
             log.warn("[Health] DB 헬스체크 실패", e);
-            return ComponentHealth.down(e.getMessage());
+            return ComponentHealth.down(DB_DOWN_MESSAGE);
         }
     }
 
     private ComponentHealth checkRedis() {
+        CompletableFuture<String> pingFuture = CompletableFuture
+                .supplyAsync(() -> redisTemplate.execute((RedisCallback<String>) RedisConnection::ping));
         try {
-            String pong = redisTemplate.execute((RedisCallback<String>) RedisConnection::ping);
-            return REDIS_PING_RESPONSE.equalsIgnoreCase(pong)
-                    ? ComponentHealth.up()
-                    : ComponentHealth.down("Unexpected ping response: " + pong);
-        } catch (Exception e) {
-            log.warn("[Health] Redis 헬스체크 실패", e);
-            return ComponentHealth.down(e.getMessage());
+            String pong = pingFuture.get(REDIS_PING_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (REDIS_PING_RESPONSE.equalsIgnoreCase(pong)) {
+                return ComponentHealth.up();
+            }
+            log.warn("[Health] Redis 헬스체크 실패: unexpected ping response={}", pong);
+            return ComponentHealth.down(REDIS_DOWN_MESSAGE);
+        } catch (TimeoutException e) {
+            pingFuture.cancel(true);
+            log.warn("[Health] Redis 헬스체크 타임아웃 ({}s)", REDIS_PING_TIMEOUT_SECONDS);
+            return ComponentHealth.down(REDIS_DOWN_MESSAGE);
+        } catch (InterruptedException e) {
+            pingFuture.cancel(true);
+            Thread.currentThread().interrupt();
+            log.warn("[Health] Redis 헬스체크 중단", e);
+            return ComponentHealth.down(REDIS_DOWN_MESSAGE);
+        } catch (ExecutionException e) {
+            log.warn("[Health] Redis 헬스체크 실패", e.getCause());
+            return ComponentHealth.down(REDIS_DOWN_MESSAGE);
         }
     }
 }
