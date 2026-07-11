@@ -5,8 +5,7 @@ import org.springframework.http.HttpStatus;
 
 public enum EventErrorCode implements ErrorCode {
 
-    B102_CALENDAR_MONTHLY_400(HttpStatus.BAD_REQUEST, "B102_CALENDAR_MONTHLY_400", "잘못된 월간 캘린더 조회 요청입니다."),
-    AUTH_401(HttpStatus.UNAUTHORIZED, "AUTH_401", "인증이 필요합니다.");
+    B102_CALENDAR_MONTHLY_400(HttpStatus.BAD_REQUEST, "B102_CALENDAR_MONTHLY_400", "잘못된 월간 캘린더 조회 요청입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

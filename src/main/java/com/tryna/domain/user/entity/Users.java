@@ -51,4 +51,24 @@ public class Users extends BaseEntity {
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private UserSettings userSettings;
 
+    // 비회원 생성용 정적 팩토리 메서드
+    public static Users createGuest(String guestId) {
+        Users user = new Users();
+        user.userRole = UserRole.GUEST;
+        user.guestId = guestId;
+        return user;
+    }
+
+    // 정식 회원(소셜 로그인/가입) 생성용 정적 팩토리 메서드
+    public static Users createUser() {
+        Users user = new Users();
+        user.userRole = UserRole.USER;
+        return user;
+    }
+
+    // A106 회원 전환용 승급 메서드
+    public void upgradeToUser() {
+        this.userRole = UserRole.USER;
+        this.guestId = null; // 다른 사람이 해당 기기로 다시 비회원을 시작할 수 있도록 비워줌
+    }
 }

@@ -4,6 +4,7 @@ import com.tryna.domain.event.dto.CalendarMonthlyResponse;
 import com.tryna.domain.event.enums.EventErrorCode;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -79,7 +80,7 @@ public class EventQueryService {
 
     private void validateUserId(Long userId) {
         if (userId == null || userId <= 0) {
-            throw new BusinessException(EventErrorCode.AUTH_401);
+            throw new BusinessException(AuthErrorCode.AUTH_401);
         }
     }
 

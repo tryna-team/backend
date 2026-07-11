@@ -42,4 +42,11 @@ public class UserAgreedTerms extends BaseCreatedEntity {
     @JoinColumn(name = "term_id", nullable = false)
     private Terms term;
 
+    // A105 소셜 회원가입 시 약관 매핑 객체를 쉽게 생성하기 위한 메서드
+    public static UserAgreedTerms create(Users user, Terms term) {
+        UserAgreedTerms agreedTerms = new UserAgreedTerms();
+        agreedTerms.user = user;
+        agreedTerms.term = term;
+        return agreedTerms;
+    }
 }

@@ -57,7 +57,16 @@ public class Auths extends BaseEntity {
     @Column(name = "email", length = 255)
     private String email;
 
+    // 명세서 삭제 정책: Soft Delete
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    public static Auths createAuth(Users user, Provider provider, String socialId, String email) {
+        Auths auth = new Auths();
+        auth.user = user;
+        auth.provider = provider;
+        auth.socialId = socialId;
+        auth.email = email;
+        return auth;
+    }
 }
