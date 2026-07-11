@@ -2,10 +2,13 @@ package com.tryna.domain.event.service;
 
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
+import com.tryna.domain.event.dto.EventDetailResponse;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventErrorCode;
 import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import java.time.LocalDate;
@@ -39,6 +42,7 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
+    private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
 
     public CalendarMonthlyResponse getMonthlyCalendar(Long userId, Integer year, Integer month) {
@@ -89,6 +93,25 @@ public class EventQueryService {
         );
     }
 
+    public EventDetailResponse getEventDetail(Long userId, String eventIdValue) {
+        validateUserId(userId);
+        Long eventId = parseEventId(eventIdValue);
+
+        if (!eventsRepository.existsByEventIdAndEventStatusIn(eventId, VISIBLE_EVENT_STATUSES)) {
+            throw new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404);
+        }
+
+        Events event = eventsRepository.findVisibleEventAccessibleToUser(
+                        userId,
+                        eventId,
+                        VISIBLE_EVENT_STATUSES,
+                        ConnectionStatus.ACTIVE
+                )
+                .orElseThrow(() -> new BusinessException(EventErrorCode.B104_EVENT_DETAIL_403));
+
+        return toEventDetailResponse(event);
+    }
+
     private Map<LocalDate, Long> getCountsByDate(Long userId, LocalDate startDate, LocalDate endDate) {
         List<Object[]> rows = userEventsRepository.countEventsByDate(
                 userId,
@@ -126,6 +149,18 @@ public class EventQueryService {
         }
     }
 
+    private Long parseEventId(String eventIdValue) {
+        try {
+            Long eventId = Long.parseLong(eventIdValue);
+            if (eventId <= 0) {
+                throw new NumberFormatException();
+            }
+            return eventId;
+        } catch (NumberFormatException | NullPointerException e) {
+            throw new BusinessException(EventErrorCode.B104_EVENT_DETAIL_400);
+        }
+    }
+
     private CalendarDateEventsResponse.EventSummary toEventSummary(Events event) {
         return new CalendarDateEventsResponse.EventSummary(
                 event.getEventId(),
@@ -138,6 +173,27 @@ public class EventQueryService {
                 event.getLocation(),
                 event.getSourceType(),
                 event.getEventStatus()
+        );
+    }
+
+    private EventDetailResponse toEventDetailResponse(Events event) {
+        return new EventDetailResponse(
+                event.getEventId(),
+                event.getSourceText(),
+                event.getTitle(),
+                event.getDescription(),
+                event.getStartDate(),
+                formatTime(event.getStartDatetime()),
+                event.getEndDate(),
+                formatTime(event.getEndDatetime()),
+                event.getIsAllDay(),
+                event.getLocation(),
+                event.getEventTypeCandidate(),
+                event.getEventType(),
+                event.getSourceType(),
+                event.getEventStatus(),
+                event.getExternalEventId(),
+                event.getProvider()
         );
     }
 
