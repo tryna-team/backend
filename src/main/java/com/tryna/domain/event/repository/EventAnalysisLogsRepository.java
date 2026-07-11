@@ -15,6 +15,7 @@ public interface EventAnalysisLogsRepository extends JpaRepository<EventAnalysis
                    SELECT ue.event.eventId 
                      FROM UserEvents ue 
                     WHERE ue.user.userId = :userId
+                      AND ue.eventRole = 'OWNER'
              )
             """)
     int deleteByUserId(@Param("userId") Long userId);
