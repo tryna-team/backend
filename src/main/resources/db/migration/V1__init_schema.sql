@@ -149,7 +149,7 @@ CREATE TABLE events (
     CONSTRAINT fk_events_external_calendar
         FOREIGN KEY (external_calendar_id)
         REFERENCES external_calendars (external_calendar_id)
-        ON DELETE SET NULL,
+        ON DELETE RESTRICT,
     CONSTRAINT ck_events_external_required
         CHECK (
             source_type <> 'EXTERNAL_CALENDAR'
