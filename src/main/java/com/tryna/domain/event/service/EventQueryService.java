@@ -1,14 +1,20 @@
 package com.tryna.domain.event.service;
 
+import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
+import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventErrorCode;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -26,6 +32,8 @@ public class EventQueryService {
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
     private static final int MIN_YEAR = 1970;
     private static final int MAX_YEAR = 2100;
+    private static final String NO_SELECTED_DATE_EVENTS = "NO_SELECTED_DATE_EVENTS";
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final EnumSet<EventStatus> VISIBLE_EVENT_STATUSES = EnumSet.of(
             EventStatus.CONFIRMED,
             EventStatus.NEEDS_CONFIRMATION
@@ -61,6 +69,26 @@ public class EventQueryService {
         );
     }
 
+    public CalendarDateEventsResponse getDateEvents(Long userId, String dateValue) {
+        validateUserId(userId);
+        LocalDate date = parseDate(dateValue);
+        List<CalendarDateEventsResponse.EventSummary> events = userEventsRepository.findEventsByDate(
+                        userId,
+                        date,
+                        VISIBLE_EVENT_STATUSES
+                )
+                .stream()
+                .map(this::toEventSummary)
+                .toList();
+
+        return new CalendarDateEventsResponse(
+                date,
+                events.size(),
+                events.isEmpty() ? NO_SELECTED_DATE_EVENTS : null,
+                events
+        );
+    }
+
     private Map<LocalDate, Long> getCountsByDate(Long userId, LocalDate startDate, LocalDate endDate) {
         List<Object[]> rows = userEventsRepository.countEventsByDate(
                 userId,
@@ -88,5 +116,36 @@ public class EventQueryService {
         if (year == null || year < MIN_YEAR || year > MAX_YEAR || month == null || month < 1 || month > 12) {
             throw new BusinessException(EventErrorCode.B102_CALENDAR_MONTHLY_400);
         }
+    }
+
+    private LocalDate parseDate(String dateValue) {
+        try {
+            return LocalDate.parse(dateValue);
+        } catch (DateTimeParseException | NullPointerException e) {
+            throw new BusinessException(EventErrorCode.B013_CALENDAR_DATE_EVENTS_400);
+        }
+    }
+
+    private CalendarDateEventsResponse.EventSummary toEventSummary(Events event) {
+        return new CalendarDateEventsResponse.EventSummary(
+                event.getEventId(),
+                event.getTitle(),
+                event.getStartDate(),
+                formatTime(event.getStartDatetime()),
+                event.getEndDate(),
+                formatTime(event.getEndDatetime()),
+                event.getIsAllDay(),
+                event.getLocation(),
+                event.getSourceType(),
+                event.getEventStatus()
+        );
+    }
+
+    private String formatTime(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        LocalTime time = dateTime.toLocalTime();
+        return time.format(TIME_FORMATTER);
     }
 }
