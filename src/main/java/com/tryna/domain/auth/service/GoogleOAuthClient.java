@@ -68,11 +68,15 @@ public class GoogleOAuthClient implements OAuthClient {
     private void verifyTokenAudience(String accessToken) {
         ResponseEntity<Map> response;
 
-        // [통신 영역]: 구글 서버 통신 에러만 잡음
+        // [통신 영역]: 외부 구글 서버와의 통신만 예외 처리
         try {
             response = restTemplate.getForEntity(TOKEN_INFO_URL + accessToken, Map.class);
-        } catch (Exception e) {
+        } catch (HttpClientErrorException e) {
+            // 4xx 에러 (구글이 토큰을 거절함)
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+        } catch (Exception e) {
+            // 5xx 타임아웃, DNS 등 네트워크 통신 장애
+            throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400); // (서버 에러용 코드가 있다면 그걸로 변경 권장)
         }
 
         // [비즈니스 검증 영역]: 통신 완료 후 응답값 검증
