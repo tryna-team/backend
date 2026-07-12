@@ -2,9 +2,11 @@ package com.tryna.domain.user.repository;
 
 import com.tryna.domain.user.entity.Users;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<Users, Long> {
@@ -26,4 +28,21 @@ public interface UserRepository extends JpaRepository<Users, Long> {
             "WHERE user_id = :userId AND connection_status = 'ACTIVE')",
             nativeQuery = true)
     boolean hasExternalCalendarConnection(@Param("userId") Long userId);
+
+    // G103: 삭제되지 않은 활성 유저 조회
+    Optional<Users> findByUserIdAndDeletedAtIsNull(Long userId);
+
+    // G104: Soft Delete 벌크 연산
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Users u
+               SET u.deletedAt = :deletedAt,
+                           u.guestId = NULL
+             WHERE u.userId = :userId
+               AND u.deletedAt IS NULL
+            """)
+    int softDeleteByUserId(
+            @Param("userId") Long userId,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
 }

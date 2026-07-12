@@ -45,7 +45,7 @@ import java.time.LocalDateTime;
                 )
         }
 )
-@Check(constraints = "source_type <> 'EXTERNAL_CALENDAR' OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)")
+@Check(constraints = "deleted_at IS NOT NULL OR source_type <> 'EXTERNAL_CALENDAR' OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)")
 @SQLRestriction("deleted_at IS NULL")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
