@@ -25,4 +25,4 @@ jwt:
 
 oauth2:
   google:
-    client-id: ${GOOGLE_CLIENT_ID}
+    client-id: ${GOOGLE_CLIENT_ID:dummy-client-id-for-ci}
