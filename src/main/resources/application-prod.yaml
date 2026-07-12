@@ -36,3 +36,7 @@ jwt:
 oauth2:
   google:
     client-id: ${GOOGLE_CLIENT_ID}
+
+brain:
+  base-url: ${FASTAPI_BASE_URL}
+  api-key: ${INTERNAL_API_KEY}
