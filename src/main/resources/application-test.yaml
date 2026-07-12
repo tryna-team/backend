@@ -22,3 +22,7 @@ jwt:
   access-expiration: 1800
   refresh-expiration: 1209600
   issuer: tryna-test
+
+oauth2:
+  google:
+    client-id: dummy-google-client-id-for-test

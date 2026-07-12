@@ -41,7 +41,7 @@ public class AuthService {
     private final UserAgreedTermsRepository userAgreedTermsRepository;
     private final UserRepository userRepository;
     private final UserSettingsRepository userSettingsRepository;
-    private final OAuthClient oAuthClient;
+    private final OAuthClientProvider oAuthClientProvider;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -64,7 +64,8 @@ public class AuthService {
     public AuthSessionResponse socialLogin(AuthSessionCreateRequest request) {
 
         // 1. 소셜 서버를 통해 토큰 검증 및 유저 프로필 획득
-        OAuthClient.SocialUserProfile profile = oAuthClient.getProfile(request.provider(), request.oauthAccessToken());
+        OAuthClient client = oAuthClientProvider.getClient(request.provider());
+        OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         // 클라이언트가 이메일을 별도로 넘겨줬다면 우선 사용, 없으면 소셜 서버에서 받은 이메일 사용
         String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
@@ -132,7 +133,8 @@ public class AuthService {
         }
 
         // 2. 소셜 프로필 조회
-        OAuthClient.SocialUserProfile profile = oAuthClient.getProfile(request.provider(), request.oauthAccessToken());
+        OAuthClient client = oAuthClientProvider.getClient(request.provider());
+        OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
 
