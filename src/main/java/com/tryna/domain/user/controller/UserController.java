@@ -82,7 +82,7 @@ public class UserController implements UserControllerDocs {
 
         userService.withdraw(userId);
 
-        // 명세서 요구사항에 맞게 data: null 반환
+        // data: null 반환
         return ResponseEntity.ok(
                 ApiResponse.success("G104_USER_DELETE_200", "계정 및 데이터 삭제에 성공했습니다.", null)
         );
