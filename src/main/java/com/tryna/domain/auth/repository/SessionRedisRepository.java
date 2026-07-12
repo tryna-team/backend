@@ -1,0 +1,105 @@
+package com.tryna.domain.auth.repository;
+
+import com.tryna.domain.auth.constants.RedisKey;
+import com.tryna.domain.auth.constants.SessionHashField;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Repository;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Repository
+@RequiredArgsConstructor
+public class SessionRedisRepository {
+
+    private final StringRedisTemplate stringRedisTemplate;
+
+    public void save(
+            Long userId,
+            String deviceId,
+            String tokenValue,
+            String fcmToken,
+            String scopes,
+            Instant createdAt,
+            Duration ttl
+    ) {
+        String key = RedisKey.session(userId, deviceId);
+        stringRedisTemplate.opsForHash().putAll(key, Map.of(
+                SessionHashField.TOKEN_VALUE, nullToEmpty(tokenValue),
+                SessionHashField.FCM_TOKEN, nullToEmpty(fcmToken),
+                SessionHashField.SCOPES, nullToEmpty(scopes),
+                SessionHashField.CREATED_AT, nullToIsoString(createdAt)
+        ));
+        stringRedisTemplate.expire(key, ttl);
+    }
+
+    public Optional<String> findTokenValue(Long userId, String deviceId) {
+        return findHashField(userId, deviceId, SessionHashField.TOKEN_VALUE);
+    }
+
+    public Optional<String> findFcmToken(Long userId, String deviceId) {
+        return findHashField(userId, deviceId, SessionHashField.FCM_TOKEN);
+    }
+
+    public void updateTokenValue(Long userId, String deviceId, String tokenValue, Duration ttl) {
+        String key = RedisKey.session(userId, deviceId);
+        stringRedisTemplate.opsForHash().put(key, SessionHashField.TOKEN_VALUE, nullToEmpty(tokenValue));
+        stringRedisTemplate.expire(key, ttl);
+    }
+
+    public void updateFcmToken(Long userId, String deviceId, String fcmToken) {
+        stringRedisTemplate.opsForHash().put(
+                RedisKey.session(userId, deviceId),
+                SessionHashField.FCM_TOKEN,
+                nullToEmpty(fcmToken)
+        );
+    }
+
+    public void delete(Long userId, String deviceId) {
+        stringRedisTemplate.delete(RedisKey.session(userId, deviceId));
+    }
+
+    public void deleteAllByUserId(Long userId) {
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(RedisKey.sessionPattern(userId))
+                .count(100)
+                .build();
+
+        List<String> keysToDelete = stringRedisTemplate.execute(connection -> {
+            List<String> keys = new ArrayList<>();
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                cursor.forEachRemaining(key -> keys.add(new String(key, StandardCharsets.UTF_8)));
+            }
+            return keys;
+        }, true);
+
+        if (keysToDelete != null && !keysToDelete.isEmpty()) {
+            stringRedisTemplate.delete(keysToDelete);
+        }
+    }
+
+    private Optional<String> findHashField(Long userId, String deviceId, String field) {
+        Object value = stringRedisTemplate.opsForHash().get(RedisKey.session(userId, deviceId), field);
+        if (value == null) {
+            return Optional.empty();
+        }
+        String text = value.toString();
+        return text.isEmpty() ? Optional.empty() : Optional.of(text);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String nullToIsoString(Instant value) {
+        return value == null ? "" : value.toString();
+    }
+}

@@ -1,0 +1,24 @@
+spring:
+  flyway:
+    # 테스트는 H2 + ddl-auto(create-drop)로 스키마를 즉석 생성한다.
+    # V1 마이그레이션은 PostgreSQL 전용 문법(partial index, array 등)을 사용하므로 H2에서는 비활성화한다.
+    enabled: false
+  datasource:
+    url: jdbc:h2:mem:tryna;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: test-jwt-secret-key-for-local-tests-only
+  access-expiration: 1800
+  refresh-expiration: 1209600
+  issuer: tryna-test

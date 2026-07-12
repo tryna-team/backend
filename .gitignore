@@ -35,3 +35,15 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### AI ###
+agent.md
+/rules
+
+### Environment ###
+.env
+.env.*
+!.env.example
+
+### MAC ###
+.DS_Store
