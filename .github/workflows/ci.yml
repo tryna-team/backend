@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
 
     # 단위 테스트는 H2로 충분하지만, Flyway 마이그레이션(V*.sql)은 PostgreSQL 전용 문법을 쓰고

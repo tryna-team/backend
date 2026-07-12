@@ -8,7 +8,7 @@ on:
 jobs:
   # main에 대한 PR은 ci.yml이 Actions 체크로 이미 검증하지만, 직접 push(머지 포함)로
   # 워크플로가 트리거될 때도 동일한 CI를 한 번 더 게이트로 실행해 "CI 성공 후 배포"를 보장한다.
-  ci:
+  prod-CI/CD:
     uses: ./.github/workflows/ci.yml
 
   build-and-deploy:
