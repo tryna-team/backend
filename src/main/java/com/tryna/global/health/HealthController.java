@@ -3,6 +3,7 @@ package com.tryna.global.health;
 import com.tryna.global.health.dto.ComponentHealth;
 import com.tryna.global.health.dto.HealthResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,12 +40,14 @@ public class HealthController {
     private final StringRedisTemplate redisTemplate;
 
     @Operation(summary = "기본 헬스체크", description = "ALB 타겟 그룹 헬스체크용. 외부 의존성 없이 서버 생존 여부만 확인한다.")
+    @SecurityRequirements({})
     @GetMapping(value = "/", produces = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("OK");
     }
 
     @Operation(summary = "상세 헬스체크", description = "DB(PostgreSQL), Redis 연결 상태를 포함한 상세 상태를 반환한다.")
+    @SecurityRequirements({})
     @GetMapping("/health")
     public ResponseEntity<HealthResponse> health() {
         ComponentHealth database = checkDatabase();
