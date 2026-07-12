@@ -75,6 +75,7 @@ jobs:
           VALKEY_PORT: 6379
           JWT_SECRET: ci-dummy-secret-key-for-github-actions-min-32-bytes-long
           JWT_ISSUER: tryna-ci
+          GOOGLE_CLIENT_ID: "dummy-client-id-for-ci"
         run: |
           set -euo pipefail
           LOG=/tmp/tryna-boot.log
