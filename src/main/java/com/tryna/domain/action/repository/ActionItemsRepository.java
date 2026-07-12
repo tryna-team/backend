@@ -2,6 +2,7 @@ package com.tryna.domain.action.repository;
 
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ItemType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -46,6 +47,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
      * @param eventId 일정 ID
      * @return 일정에 연결된 준비/실행 항목 목록
      */
+    @EntityGraph(attributePaths = "parentEvent")
     List<ActionItems>
     findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
             Long eventId
@@ -63,7 +65,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     @Query("""
             SELECT a
               FROM ActionItems a
-              JOIN a.parentEvent e
+              JOIN FETCH a.parentEvent e
               JOIN UserEvents ue ON ue.event = e
              WHERE ue.user.userId = :userId
                AND a.displayDate = :date
@@ -94,4 +96,4 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("userId") Long userId,
             @Param("deletedAt") LocalDateTime deletedAt
     );
-}   
+}
