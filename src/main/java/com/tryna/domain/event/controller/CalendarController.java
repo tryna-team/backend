@@ -1,6 +1,7 @@
 package com.tryna.domain.event.controller;
 
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
+import com.tryna.domain.event.dto.CalendarMainResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
 import com.tryna.domain.event.service.EventQueryService;
 import com.tryna.global.exception.AuthErrorCode;
@@ -20,6 +21,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class CalendarController {
 
     private final EventQueryService eventQueryService;
+
+    @GetMapping("/main")
+    public ApiResponse<CalendarMainResponse> getCalendarMain(
+            Authentication authentication,
+            @RequestParam Integer year,
+            @RequestParam Integer month,
+            @RequestParam String selectedDate
+    ) {
+        Long userId = extractUserId(authentication);
+        CalendarMainResponse response = eventQueryService.getCalendarMain(userId, year, month, selectedDate);
+        return ApiResponse.success(
+                "B101_CALENDAR_MAIN_200",
+                "캘린더 메인 화면 조회에 성공했습니다.",
+                response
+        );
+    }
 
     @GetMapping("/monthly")
     public ApiResponse<CalendarMonthlyResponse> getMonthlyCalendar(

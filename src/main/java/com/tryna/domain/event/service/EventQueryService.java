@@ -1,6 +1,7 @@
 package com.tryna.domain.event.service;
 
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
+import com.tryna.domain.event.dto.CalendarMainResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
 import com.tryna.domain.event.dto.EventDetailResponse;
 import com.tryna.domain.event.entity.Events;
@@ -35,6 +36,7 @@ public class EventQueryService {
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
     private static final int MIN_YEAR = 1970;
     private static final int MAX_YEAR = 2100;
+    private static final String NO_EVENTS = "NO_EVENTS";
     private static final String NO_SELECTED_DATE_EVENTS = "NO_SELECTED_DATE_EVENTS";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final EnumSet<EventStatus> VISIBLE_EVENT_STATUSES = EnumSet.of(
@@ -45,10 +47,42 @@ public class EventQueryService {
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
 
+    public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
+        validateUserId(userId);
+        validateYearMonth(year, month, EventErrorCode.B101_CALENDAR_MAIN_400);
+        LocalDate selectedDate = parseDate(selectedDateValue, EventErrorCode.B101_CALENDAR_MAIN_400);
+        validateSelectedDateInMonth(year, month, selectedDate);
+
+        CalendarMonthlyResponse monthlyCalendar = buildMonthlyCalendar(userId, year, month);
+        CalendarDateEventsResponse dateEvents = buildDateEvents(userId, selectedDate);
+        boolean hasEvents = userEventsRepository.countVisibleEventsByUserId(userId, VISIBLE_EVENT_STATUSES) > 0;
+
+        List<CalendarMonthlyResponse.DayEventCount> monthlyEventDays = monthlyCalendar.days()
+                .stream()
+                .filter(CalendarMonthlyResponse.DayEventCount::hasEvent)
+                .toList();
+
+        return new CalendarMainResponse(
+                year,
+                month,
+                monthlyCalendar.today(),
+                selectedDate,
+                hasEvents,
+                false,
+                hasEvents ? null : NO_EVENTS,
+                monthlyEventDays,
+                dateEvents.events()
+        );
+    }
+
     public CalendarMonthlyResponse getMonthlyCalendar(Long userId, Integer year, Integer month) {
         validateUserId(userId);
-        validateYearMonth(year, month);
+        validateYearMonth(year, month, EventErrorCode.B102_CALENDAR_MONTHLY_400);
 
+        return buildMonthlyCalendar(userId, year, month);
+    }
+
+    private CalendarMonthlyResponse buildMonthlyCalendar(Long userId, Integer year, Integer month) {
         YearMonth yearMonth = YearMonth.of(year, month);
         LocalDate startDate = yearMonth.atDay(1);
         LocalDate endDate = yearMonth.atEndOfMonth();
@@ -75,7 +109,12 @@ public class EventQueryService {
 
     public CalendarDateEventsResponse getDateEvents(Long userId, String dateValue) {
         validateUserId(userId);
-        LocalDate date = parseDate(dateValue);
+        LocalDate date = parseDate(dateValue, EventErrorCode.B013_CALENDAR_DATE_EVENTS_400);
+
+        return buildDateEvents(userId, date);
+    }
+
+    private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
         List<CalendarDateEventsResponse.EventSummary> events = userEventsRepository.findEventsByDate(
                         userId,
                         date,
@@ -135,17 +174,23 @@ public class EventQueryService {
         }
     }
 
-    private void validateYearMonth(Integer year, Integer month) {
+    private void validateYearMonth(Integer year, Integer month, EventErrorCode errorCode) {
         if (year == null || year < MIN_YEAR || year > MAX_YEAR || month == null || month < 1 || month > 12) {
-            throw new BusinessException(EventErrorCode.B102_CALENDAR_MONTHLY_400);
+            throw new BusinessException(errorCode);
         }
     }
 
-    private LocalDate parseDate(String dateValue) {
+    private void validateSelectedDateInMonth(Integer year, Integer month, LocalDate selectedDate) {
+        if (selectedDate.getYear() != year || selectedDate.getMonthValue() != month) {
+            throw new BusinessException(EventErrorCode.B101_CALENDAR_MAIN_400);
+        }
+    }
+
+    private LocalDate parseDate(String dateValue, EventErrorCode errorCode) {
         try {
             return LocalDate.parse(dateValue);
         } catch (DateTimeParseException | NullPointerException e) {
-            throw new BusinessException(EventErrorCode.B013_CALENDAR_DATE_EVENTS_400);
+            throw new BusinessException(errorCode);
         }
     }
 

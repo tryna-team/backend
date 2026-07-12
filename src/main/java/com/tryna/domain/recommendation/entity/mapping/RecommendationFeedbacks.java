@@ -61,4 +61,32 @@ public class RecommendationFeedbacks extends BaseCreatedEntity {
     @Column(name = "reason", length = 255)
     private String reason;
 
+    /**
+     * E105: 추천 항목 피드백 로그 생성
+     *
+     * E101~E104 과정에서 발생한 사용자의 선택, 수정, 삭제,
+     * 직접 추가 행동을 recommendation_feedbacks에 저장합니다.
+     */
+    public static RecommendationFeedbacks create(
+            Users user,
+            Events event,
+            String sourceTemplateId,
+            ActionType actionType,
+            String originalTitle,
+            String editedTitle,
+            String reason
+    ) {
+        RecommendationFeedbacks feedback = new RecommendationFeedbacks();
+
+        feedback.user = user;
+        feedback.event = event;
+        feedback.sourceTemplateId = sourceTemplateId;
+        feedback.actionType = actionType;
+        feedback.originalTitle = originalTitle;
+        feedback.editedTitle = editedTitle;
+        feedback.reason = reason;
+
+        return feedback;
+    }
+    
 }

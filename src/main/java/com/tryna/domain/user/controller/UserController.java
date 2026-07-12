@@ -4,6 +4,7 @@ import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
 import com.tryna.domain.auth.service.AuthService;
 import com.tryna.domain.user.controller.docs.UserControllerDocs;
 import com.tryna.domain.user.dto.UserConversionResponse;
+import com.tryna.domain.user.dto.UserProfileResponse;
 import com.tryna.domain.user.dto.UserStatusResponse;
 import com.tryna.domain.user.service.UserService;
 import com.tryna.global.response.ApiResponse;
@@ -49,6 +50,41 @@ public class UserController implements UserControllerDocs {
 
         return ResponseEntity.ok(
                 ApiResponse.success("A106_USER_CONVERSION_200", "회원 전환에 성공했습니다.", response)
+        );
+    }
+
+    @GetMapping("/me")
+    @Override
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile() {
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 비로그인 상태 접근 방어
+        if (userId == null) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
+        }
+
+        UserProfileResponse response = userService.getUserProfile(userId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("G103_USER_PROFILE_200", "계정 정보 조회에 성공했습니다.", response)
+        );
+    }
+
+    @DeleteMapping("/me")
+    @Override
+    public ResponseEntity<ApiResponse<Void>> withdraw() {
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 비로그인 상태 접근 방어
+        if (userId == null) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
+        }
+
+        userService.withdraw(userId);
+
+        // 명세서 요구사항에 맞게 data: null 반환
+        return ResponseEntity.ok(
+                ApiResponse.success("G104_USER_DELETE_200", "계정 및 데이터 삭제에 성공했습니다.", null)
         );
     }
 

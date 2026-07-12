@@ -29,6 +29,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     private final String[] allowUris = {
+            // 헬스체크 허용
+            "/",
+            "/health",
             // Swagger 허용
             "/swagger-ui/**",
             "/swagger-resources/**",

@@ -1,9 +1,24 @@
 package com.tryna.domain.user.service;
 
+import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.auth.dto.AuthTokenResponse;
+import com.tryna.domain.auth.entity.Auths;
+import com.tryna.domain.auth.repository.AuthsRepository;
+import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
+import com.tryna.domain.auth.repository.SessionRedisRepository;
 import com.tryna.domain.auth.service.AuthService;
+import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
+import com.tryna.domain.event.repository.EventsRepository;
+import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.external.enums.ConnectionStatus;
+import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
+import com.tryna.domain.external.repository.ExternalCalendarsRepository;
+import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
+import com.tryna.domain.reminder.repository.RemindersRepository;
+import com.tryna.domain.term.repository.UserAgreedTermsRepository;
 import com.tryna.domain.user.dto.GuestCreateRequest;
 import com.tryna.domain.user.dto.GuestCreateResponse;
+import com.tryna.domain.user.dto.UserProfileResponse;
 import com.tryna.domain.user.dto.UserStatusResponse;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.entity.UserSettings;
@@ -19,18 +34,34 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
-    private final UserRepository userRepository;
-    private final UserSettingsRepository userSettingsRepository;
+    // --- [Services & Providers] ---
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
-    // private final UserEventRepository userEventRepository;
-    // private final ExternalCalendarConnectionRepository externalCalendarConnectionRepository;
+
+    // --- [JPA Repositories] ---
+    private final ActionItemsRepository actionItemsRepository;
+    private final AuthsRepository authsRepository;
+    private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
+    private final EventsRepository eventsRepository;
+    private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
+    private final ExternalCalendarsRepository externalCalendarsRepository;
+    private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
+    private final RemindersRepository remindersRepository;
+    private final UserAgreedTermsRepository userAgreedTermsRepository;
+    private final UserEventsRepository userEventsRepository;
+    private final UserRepository userRepository;
+    private final UserSettingsRepository userSettingsRepository;
+
+    // --- [Redis Repositories] ---
+    private final FcmTokenRedisRepository fcmTokenRedisRepository;
+    private final SessionRedisRepository sessionRedisRepository;
 
     /**
      * A101: 앱 진입 상태 조회
@@ -94,6 +125,77 @@ public class UserService {
         );
 
         return new GuestResult(isNewUser, response);
+    }
+
+    /**
+     * G103: 계정 정보 확인
+     */
+    @Transactional(readOnly = true)
+    public UserProfileResponse getUserProfile(Long userId) {
+        // 1. 유저 조회 (deleted_at IS NULL 조건, 없으면 404)
+        Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.G103_USER_PROFILE_404));
+
+        // 2. 소셜 연동 정보 조회 (deleted_at IS NULL 조건)
+        List<Auths> activeAuths = authsRepository.findAllByUser_UserIdAndDeletedAtIsNull(userId);
+        List<UserProfileResponse.LinkedAuthDto> linkedAuthDtos = activeAuths.stream()
+                .map(auth -> new UserProfileResponse.LinkedAuthDto(auth.getProvider().name(), auth.getEmail()))
+                .toList();
+
+        // 3. 외부 캘린더 연동 여부 확인
+        boolean hasConnection = externalCalendarConnectionsRepository.existsByUser_UserIdAndConnectionStatus(userId, ConnectionStatus.ACTIVE);
+
+        // 4. 응답 DTO 조립
+        return new UserProfileResponse(
+                user.getUserId(),
+                user.getUserRole().name(),
+                user.getNickname(),
+                user.getCreatedAt().toString(),
+                linkedAuthDtos,
+                hasConnection
+        );
+    }
+
+    /**
+     * G104: 데이터 삭제 (회원 탈퇴)
+     */
+    @Transactional
+    public void withdraw(Long userId) {
+        // 1. 유저 검증
+        if (userRepository.findByUserIdAndDeletedAtIsNull(userId).isEmpty()) {
+            throw new BusinessException(UserErrorCode.G103_USER_PROFILE_404);
+        }
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+
+        // --- [Step 1] Events & ActionItems Soft Delete (가장 먼저!) ---
+        actionItemsRepository.softDeleteByUserId(userId, deletedAt);
+        eventsRepository.softDeleteByUserId(userId, deletedAt);
+
+        // --- [Step 2] UserEvents를 참조하는 자식 테이블 Hard Delete ---
+        eventAnalysisLogsRepository.deleteByUserId(userId);
+
+        // --- [Step 3] 부모/자식 테이블 Hard Delete ---
+        remindersRepository.deleteByUserId(userId);
+        recommendationFeedbacksRepository.deleteByUserId(userId);
+        userAgreedTermsRepository.deleteByUserId(userId);
+
+        // --- [Step 4] 외부 캘린더 도메인 Hard Delete ---
+        // Step 1에서 Events가 이미 Soft Delete 되었으므로, SET_NULL 시 Check 에러 발생 안 함
+        externalCalendarsRepository.deleteByUserId(userId);
+        externalCalendarConnectionsRepository.deleteByUserId(userId);
+
+        // --- [Step 5] 다리(매핑 테이블) 폭파 (Hard Delete) ---
+        userEventsRepository.deleteByUserId(userId);
+
+        // --- [Step 6] 유저 본체와 직접 연결된 것들 Soft Delete ---
+        userSettingsRepository.softDeleteByUserId(userId, deletedAt);
+        authsRepository.softDeleteByUserId(userId, deletedAt);
+        userRepository.softDeleteByUserId(userId, deletedAt);
+
+        // --- [Step 7] Redis 캐시 및 FCM 토큰 파기 ---
+        sessionRedisRepository.deleteAllByUserId(userId);
+        fcmTokenRedisRepository.deleteAllByUserId(userId);
     }
 
     // --- Helper Method ---
