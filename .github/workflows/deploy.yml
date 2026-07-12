@@ -5,8 +5,17 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  # main에 대한 PR은 ci.yml이 Actions 체크로 이미 검증하지만, 직접 push(머지 포함)로
+  # 워크플로가 트리거될 때도 동일한 CI를 한 번 더 게이트로 실행해 "CI 성공 후 배포"를 보장한다.
+  prod-CI/CD:
+    uses: ./.github/workflows/ci.yml
+
   build-and-deploy:
+    needs: ci
     runs-on: ubuntu-latest
 
     env:
@@ -20,21 +29,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'gradle'
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # DB 마이그레이션(V*.sql)은 애플리케이션 기동 시 Flyway가 ECS 컨테이너(VPC 내부)에서
-      # 직접 RDS에 적용한다. CI 러너에서는 RDS에 접근할 수 없으므로 별도 migrate 스텝을 두지 않는다.
-      - name: Build with Gradle
-        run: ./gradlew clean build -x test
 
       # AWS 인증
       - name: Configure AWS credentials
