@@ -6,14 +6,16 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
+      # Flyway가 먼저 마이그레이션을 적용한 뒤 실행된다. 엔티티 변경 시 update가 로컬 스키마를
+      # 보조로 맞춰주지만, 실제 반영은 db/migration에 새 버전 스크립트를 추가하는 것을 원칙으로 한다.
       ddl-auto: update
     properties:
       hibernate:
         format_sql: true
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      host: ${VALKEY_HOST:localhost}
+      port: ${VALKEY_PORT:6379}
 
 jwt:
   secret: ${JWT_SECRET}

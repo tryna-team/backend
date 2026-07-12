@@ -20,6 +20,7 @@ import com.tryna.global.exception.BusinessException;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,23 +72,18 @@ public class AuthService {
         // 2. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
 
-        final Users user;
-        boolean isNewUser;
+        Users user = null;
+        boolean isNewUser = false;
 
         if (existingAuth.isPresent()) {
             // [A. 기존 회원 로그인]
             user = existingAuth.get().getUser();
-            isNewUser = false;
         } else {
             // [B. 신규 회원 가입]
+            isNewUser = true;
 
             // B-1. 필수 약관 검증
-            List<com.tryna.domain.term.enums.TermType> agreedTypes = request.agreedTermTypes() != null ? request.agreedTermTypes() : List.of();
-            List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
-
-            if (!agreedTypes.containsAll(requiredTypes)) {
-                throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
-            }
+            validateRequiredTerms(request.agreedTermTypes());
 
             // B-2. Users 엔티티 생성 및 저장
             Users newUser = Users.createUser();
@@ -99,40 +95,25 @@ public class AuthService {
 
             //B-4. Auths 인증 정보 저장
             Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
-            authsRepository.save(newAuth);
+            try {
+                authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
+            } catch (DataIntegrityViolationException e) {
+                // DB 유니크 제약조건 위반 시 409 비즈니스 에러로 래핑하여 던짐
+                throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
+            }
 
             // B-5. 최신 약관 매핑 및 동의 이력 저장
-            if (!agreedTypes.isEmpty()) {
-                List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(agreedTypes);
-                List<UserAgreedTerms> agreedTermsList = latestTerms.stream()
-                        .map(term -> UserAgreedTerms.create(user, term))
-                        .toList();
-                userAgreedTermsRepository.saveAll(agreedTermsList);
-            }
-            isNewUser = true;
+            saveUserAgreedTerms(user, request.agreedTermTypes());
         }
 
         // 3. 토큰 발급 및 Redis 세션/FCM 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
-        // 4. 응답 토큰 포맷팅 및 DTO 반환
-        String refreshTokenExpiresAt = Instant.now()
-                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
-                .toString();
-
-        AuthTokenResponse authTokenResponse = new AuthTokenResponse(
-                "Bearer",
-                tokenPair.accessToken(),
-                jwtTokenProvider.getAccessExpirationSeconds(),
-                tokenPair.refreshToken(),
-                refreshTokenExpiresAt
-        );
-
         return new AuthSessionResponse(
                 user.getUserId(),
                 user.getUserRole().name(),
                 isNewUser,
-                authTokenResponse
+                createAuthTokenResponse(tokenPair)
         );
     }
 
@@ -162,26 +143,21 @@ public class AuthService {
         }
 
         // 4. 필수 약관 검증
-        List<com.tryna.domain.term.enums.TermType> agreedTypes = request.agreedTermTypes() != null ? request.agreedTermTypes() : List.of();
-        List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
-        if (!agreedTypes.containsAll(requiredTypes)) {
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
-        }
+        validateRequiredTerms(request.agreedTermTypes());
 
         // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
         // 6. Auths 정보 생성 및 약관 매핑 저장
         Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
-        authsRepository.save(newAuth);
-
-        if (!agreedTypes.isEmpty()) {
-            List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(agreedTypes);
-            List<UserAgreedTerms> agreedTermsList = latestTerms.stream()
-                    .map(term -> UserAgreedTerms.create(user, term))
-                    .toList();
-            userAgreedTermsRepository.saveAll(agreedTermsList);
+        try {
+            authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
+        } catch (DataIntegrityViolationException e) {
+            // DB 유니크 제약조건 위반 시 409 비즈니스 에러로 래핑하여 던짐
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
         }
+
+        saveUserAgreedTerms(user, request.agreedTermTypes());
 
         // 7. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
         // 7-1. 기존 세션에서 FCM 토큰을 안전하게 조회
@@ -196,29 +172,16 @@ public class AuthService {
         // 8. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
-        String refreshTokenExpiresAt = java.time.Instant.now()
-                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
-                .toString();
-
-        AuthTokenResponse authTokenResponse = new AuthTokenResponse(
-                "Bearer",
-                tokenPair.accessToken(),
-                jwtTokenProvider.getAccessExpirationSeconds(),
-                tokenPair.refreshToken(),
-                refreshTokenExpiresAt
-        );
-
         return new UserConversionResponse(
                 user.getUserId(),
                 user.getUserRole().name(),
-                authTokenResponse
+                createAuthTokenResponse(tokenPair)
         );
     }
 
     /**
      * 로그인(GUEST/USER 공통) — session Hash 저장 + fcm Set 추가
      */
-    @Transactional
     public TokenPair issueSession(Long userId, String deviceId, String fcmToken, String scopes) {
         // 1. JWT 토큰 발급
         TokenPair tokenPair = jwtTokenProvider.generateTokenPair(userId);
@@ -298,18 +261,7 @@ public class AuthService {
         // 6. 새로운 토큰 쌍 발급 및 Redis 세션 갱신 (기존 세션은 덮어씌워짐 - Refresh Token Rotation)
         TokenPair newTokenPair = issueSession(userId, deviceId, existingFcmToken, user.getUserRole().name());
 
-        // 7. 응답 DTO 조립
-        String refreshTokenExpiresAt = java.time.Instant.now()
-                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
-                .toString();
-
-        return new AuthTokenResponse(
-                "Bearer",
-                newTokenPair.accessToken(),
-                jwtTokenProvider.getAccessExpirationSeconds(),
-                newTokenPair.refreshToken(),
-                refreshTokenExpiresAt
-        );
+        return createAuthTokenResponse(newTokenPair);
     }
 
     /**
@@ -337,5 +289,45 @@ public class AuthService {
     // TODO: 회원 탈퇴 — userId 기준 session/fcm Redis 데이터 전체 삭제 후 DB 정리
     public void withdraw(Long userId) {
         throw new UnsupportedOperationException("Not implemented");
+    }
+
+    // --- Helper Method ---
+    private AuthTokenResponse createAuthTokenResponse(TokenPair tokenPair) {
+        String refreshTokenExpiresAt = java.time.Instant.now()
+                .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
+                .toString();
+
+        return new AuthTokenResponse(
+                "Bearer",
+                tokenPair.accessToken(),
+                jwtTokenProvider.getAccessExpirationSeconds(),
+                tokenPair.refreshToken(),
+                refreshTokenExpiresAt
+        );
+    }
+
+    // --- Terms Helper Methods ---
+
+    // 1. 필수 약관 검증 공통 메서드
+    private void validateRequiredTerms(List<com.tryna.domain.term.enums.TermType> agreedTypes) {
+        List<com.tryna.domain.term.enums.TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
+        List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
+
+        if (!types.containsAll(requiredTypes)) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
+        }
+    }
+
+    // 2. 약관 동의 이력 저장 공통 메서드
+    private void saveUserAgreedTerms(Users user, List<com.tryna.domain.term.enums.TermType> agreedTypes) {
+        List<com.tryna.domain.term.enums.TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
+
+        if (!types.isEmpty()) {
+            List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(types);
+            List<UserAgreedTerms> agreedTermsList = latestTerms.stream()
+                    .map(term -> UserAgreedTerms.create(user, term))
+                    .toList();
+            userAgreedTermsRepository.saveAll(agreedTermsList);
+        }
     }
 }
