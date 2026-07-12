@@ -75,14 +75,14 @@ jobs:
           VALKEY_PORT: 6379
           JWT_SECRET: ci-dummy-secret-key-for-github-actions-min-32-bytes-long
           JWT_ISSUER: tryna-ci
-          GOOGLE_CLIENT_ID: "dummy-client-id-for-ci"
+          GOOGLE_CLIENT_ID: dummy-client-id-for-ci
         run: |
           set -euo pipefail
           LOG=/tmp/tryna-boot.log
           : > "$LOG"
           JAR="$(ls build/libs/*.jar | head -n 1)"
 
-          java -jar "$JAR" --spring.profiles.active=local >>"$LOG" 2>&1 &
+          java -DGOOGLE_CLIENT_ID="dummy-client-id-for-ci" -jar "$JAR" --spring.profiles.active=local >>"$LOG" 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
 
