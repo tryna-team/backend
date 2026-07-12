@@ -34,10 +34,25 @@ public class BrainClient {
             HttpEntity<?> entity,
             Class<T> responseType
     ) {
+        HttpHeaders headers = createInternalHeaders();
+        Object body = null;
+
+        if (entity != null) {
+            if (entity.getHeaders() != null) {
+                entity.getHeaders().forEach((name, values) -> {
+                    if (!INTERNAL_API_KEY_HEADER.equalsIgnoreCase(name)) {
+                        headers.addAll(name, values);
+                    }
+                });
+            }
+            body = entity.getBody();
+        }
+
+        HttpEntity<?> requestEntity = new HttpEntity<>(body, headers);
         return restTemplate.exchange(
                 properties.getBaseUrl() + path,
                 method,
-                entity,
+                requestEntity,
                 responseType
         );
     }
