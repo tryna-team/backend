@@ -82,7 +82,7 @@ jobs:
           : > "$LOG"
           JAR="$(ls build/libs/*.jar | head -n 1)"
 
-          java -DGOOGLE_CLIENT_ID="dummy-client-id-for-ci" -jar "$JAR" --spring.profiles.active=local >>"$LOG" 2>&1 &
+          java -jar "$JAR" --spring.profiles.active=local >>"$LOG" 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
 
