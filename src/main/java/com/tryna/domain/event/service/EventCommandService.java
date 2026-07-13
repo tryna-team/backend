@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class EventCommandService {
 
+    private static final int MAX_TITLE_LENGTH = 255;
+
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
@@ -39,10 +41,11 @@ public class EventCommandService {
 
         validateRequiredText(request.sourceText());
         validateRequiredText(request.title());
+        validateTitleLength(request.title());
 
-        LocalDate startDate = parseDate(request.startDate(), true);
+        LocalDate startDate = parseDate(request.startDate());
         LocalTime startTime = parseTime(request.startTime());
-        LocalDate endDate = parseDate(request.endDate(), false);
+        LocalDate endDate = parseDate(request.endDate());
         LocalTime endTime = parseTime(request.endTime());
         boolean isAllDay = resolveAllDay(request.isAllDay(), startTime);
         validateTimePolicy(startDate, startTime, endDate, endTime, isAllDay);
@@ -79,11 +82,14 @@ public class EventCommandService {
         }
     }
 
-    private LocalDate parseDate(String value, boolean required) {
+    private void validateTitleLength(String title) {
+        if (title.trim().length() > MAX_TITLE_LENGTH) {
+            throw new BusinessException(EventErrorCode.C104_EVENT_SAVE_400);
+        }
+    }
+
+    private LocalDate parseDate(String value) {
         if (value == null || value.isBlank()) {
-            if (required) {
-                return null;
-            }
             return null;
         }
 

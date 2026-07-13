@@ -13,18 +13,26 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
 
-    boolean existsByEventIdAndEventStatusIn(
-            Long eventId,
-            Collection<EventStatus> eventStatuses
+    @Query("""
+            SELECT COUNT(e) > 0
+              FROM Events e
+             WHERE e.eventId = :eventId
+               AND e.eventStatus IN :eventStatuses
+               AND e.deletedAt IS NULL
+            """)
+    boolean existsVisibleByEventIdAndEventStatusIn(
+            @Param("eventId") Long eventId,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     @Query("""
             SELECT e
               FROM Events e
               LEFT JOIN e.externalCalendar ec
-              LEFT JOIN ec.connection ecc
+             LEFT JOIN ec.connection ecc
              WHERE e.eventId = :eventId
                AND e.eventStatus IN :eventStatuses
+               AND e.deletedAt IS NULL
                AND (
                     EXISTS (
                         SELECT 1

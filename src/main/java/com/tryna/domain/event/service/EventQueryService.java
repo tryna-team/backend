@@ -69,7 +69,7 @@ public class EventQueryService {
                 selectedDate,
                 hasEvents,
                 false,
-                hasEvents ? null : NO_EVENTS,
+                resolveMainEmptyState(hasEvents, dateEvents),
                 monthlyEventDays,
                 dateEvents.events()
         );
@@ -109,9 +109,16 @@ public class EventQueryService {
 
     public CalendarDateEventsResponse getDateEvents(Long userId, String dateValue) {
         validateUserId(userId);
-        LocalDate date = parseDate(dateValue, EventErrorCode.B013_CALENDAR_DATE_EVENTS_400);
+        LocalDate date = parseDate(dateValue, EventErrorCode.B103_CALENDAR_DATE_EVENTS_400);
 
         return buildDateEvents(userId, date);
+    }
+
+    private String resolveMainEmptyState(boolean hasEvents, CalendarDateEventsResponse dateEvents) {
+        if (!hasEvents) {
+            return NO_EVENTS;
+        }
+        return dateEvents.emptyStateType();
     }
 
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
@@ -136,7 +143,7 @@ public class EventQueryService {
         validateUserId(userId);
         Long eventId = parseEventId(eventIdValue);
 
-        if (!eventsRepository.existsByEventIdAndEventStatusIn(eventId, VISIBLE_EVENT_STATUSES)) {
+        if (!eventsRepository.existsVisibleByEventIdAndEventStatusIn(eventId, VISIBLE_EVENT_STATUSES)) {
             throw new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404);
         }
 

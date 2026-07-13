@@ -61,7 +61,7 @@ public class CalendarController {
         Long userId = extractUserId(authentication);
         CalendarDateEventsResponse response = eventQueryService.getDateEvents(userId, date);
         return ApiResponse.success(
-                "B013_CALENDAR_DATE_EVENTS_200",
+                "B103_CALENDAR_DATE_EVENTS_200",
                 "날짜별 일정 목록 조회에 성공했습니다.",
                 response
         );
