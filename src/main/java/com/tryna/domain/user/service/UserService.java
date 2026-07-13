@@ -16,10 +16,7 @@ import com.tryna.domain.external.repository.ExternalCalendarsRepository;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
 import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.term.repository.UserAgreedTermsRepository;
-import com.tryna.domain.user.dto.GuestCreateRequest;
-import com.tryna.domain.user.dto.GuestCreateResponse;
-import com.tryna.domain.user.dto.UserProfileResponse;
-import com.tryna.domain.user.dto.UserStatusResponse;
+import com.tryna.domain.user.dto.*;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.enums.UserRole;
@@ -215,6 +212,18 @@ public class UserService {
                 tokenPair.refreshToken(),
                 refreshTokenExpiresAt
         );
+    }
+
+    @Transactional
+    public FeedBackDataSettingResponse feedBackDataSetting(Long userId, FeedBackDataSettingRequest request) {
+        Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
+
+        Boolean result = user.getUserSettings().feedBackDataSetting(request.isFeedbackDataCollected());
+
+        return FeedBackDataSettingResponse.builder()
+                .isFeedbackDataCollected(result)
+                .build();
     }
 
     // Service 내부에서 HTTP 상태 코드 분기를 돕기 위한 내부 Record
