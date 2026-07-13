@@ -3,9 +3,7 @@ package com.tryna.domain.user.controller;
 import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
 import com.tryna.domain.auth.service.AuthService;
 import com.tryna.domain.user.controller.docs.UserControllerDocs;
-import com.tryna.domain.user.dto.UserConversionResponse;
-import com.tryna.domain.user.dto.UserProfileResponse;
-import com.tryna.domain.user.dto.UserStatusResponse;
+import com.tryna.domain.user.dto.*;
 import com.tryna.domain.user.service.UserService;
 import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -87,6 +85,21 @@ public class UserController implements UserControllerDocs {
                 ApiResponse.success("G104_USER_DELETE_200", "계정 및 데이터 삭제에 성공했습니다.", null)
         );
     }
+
+    @PatchMapping("/me/recommendation-feedback-setting")
+    @Override
+    public ResponseEntity<ApiResponse<FeedBackDataSettingResponse>> feedBackDataSetting(
+            @Valid @RequestBody FeedBackDataSettingRequest request) {
+        Long userId = extractUserIdFromSecurityContext();
+        FeedBackDataSettingResponse response = userService.feedBackDataSetting(userId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("G105_FEEDBACK_DATA_SETTING_200",
+                        "추천 피드백 데이터 사용 설정이 변경되었습니다.", response)
+        );
+    }
+
+
 
     // SecurityContext에서 안전하게 userId 추출 (비로그인이면 null 반환)
     private Long extractUserIdFromSecurityContext() {
