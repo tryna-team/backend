@@ -91,6 +91,11 @@ public class UserController implements UserControllerDocs {
     public ResponseEntity<ApiResponse<FeedBackDataSettingResponse>> feedBackDataSetting(
             @Valid @RequestBody FeedBackDataSettingRequest request) {
         Long userId = extractUserIdFromSecurityContext();
+
+        if (userId == null) {
+            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
+        }
+
         FeedBackDataSettingResponse response = userService.feedBackDataSetting(userId, request);
 
         return ResponseEntity.ok(

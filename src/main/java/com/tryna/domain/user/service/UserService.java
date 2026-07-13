@@ -216,7 +216,7 @@ public class UserService {
 
     @Transactional
     public FeedBackDataSettingResponse feedBackDataSetting(Long userId, FeedBackDataSettingRequest request) {
-        Users user = userRepository.findById(userId)
+        Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
 
         Boolean result = user.getUserSettings().feedBackDataSetting(request.isFeedbackDataCollected());
