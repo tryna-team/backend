@@ -85,4 +85,9 @@ public class UserSettings extends BaseEntity {
         settings.isPersonalizationEnabled = true;
         return settings;
     }
+
+    public Boolean feedBackDataSetting(Boolean isFeedbackDataCollected) {
+        this.isFeedbackDataCollected = isFeedbackDataCollected;
+        return this.isFeedbackDataCollected;
+    }
 }
