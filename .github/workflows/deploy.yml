@@ -101,6 +101,7 @@ jobs:
             VALKEY_HOST=${{ secrets.VALKEY_HOST }}
             VALKEY_PORT=${{ secrets.VALKEY_PORT }}
             FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}
+            INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
 

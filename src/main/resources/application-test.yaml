@@ -26,3 +26,7 @@ jwt:
 oauth2:
   google:
     client-id: ${GOOGLE_CLIENT_ID:dummy-client-id-for-ci}
+
+brain:
+  base-url: http://localhost:8000
+  api-key: test-internal-api-key

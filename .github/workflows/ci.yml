@@ -76,6 +76,8 @@ jobs:
           JWT_SECRET: ci-dummy-secret-key-for-github-actions-min-32-bytes-long
           JWT_ISSUER: tryna-ci
           GOOGLE_CLIENT_ID: dummy-client-id-for-ci
+          FASTAPI_BASE_URL: http://localhost:8000
+          INTERNAL_API_KEY: ci-dummy-internal-api-key
         run: |
           set -euo pipefail
           LOG=/tmp/tryna-boot.log
