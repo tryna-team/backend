@@ -14,6 +14,7 @@ import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.ActionErrorCode;
 import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +68,7 @@ public class ActionItemService {
         Events event = eventsRepository.findById(eventId)
                 .orElseThrow(() ->
                         new BusinessException(
-                                ActionErrorCode.E105_ACTION_ITEM_403
+                                CommonErrorCode.COMMON_403
                         )
                 );
 
@@ -75,7 +76,7 @@ public class ActionItemService {
         Users user = userRepository.findById(userId)
                 .orElseThrow(() ->
                         new BusinessException(
-                                ActionErrorCode.E105_ACTION_ITEM_403
+                                CommonErrorCode.COMMON_403
                         )
                 );
 
@@ -88,7 +89,7 @@ public class ActionItemService {
 
         if (!hasEventAccess) {
             throw new BusinessException(
-                    ActionErrorCode.E105_ACTION_ITEM_403
+                    CommonErrorCode.COMMON_403
             );
         }
 
@@ -222,7 +223,7 @@ public class ActionItemService {
 
         if (!hasEventAccess) {
             throw new BusinessException(
-                    ActionErrorCode.E106_ACTION_ITEM_403
+                    CommonErrorCode.COMMON_403
             );
         }
 
@@ -263,7 +264,7 @@ public class ActionItemService {
 
         if (!hasEventAccess) {
             throw new BusinessException(
-                    ActionErrorCode.F103_ACTION_ITEM_403
+                    CommonErrorCode.COMMON_403
             );
         }
 
