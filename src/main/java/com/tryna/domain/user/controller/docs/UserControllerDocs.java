@@ -1,9 +1,7 @@
 package com.tryna.domain.user.controller.docs;
 
 import com.tryna.domain.auth.dto.AuthSessionCreateRequest;
-import com.tryna.domain.user.dto.UserConversionResponse;
-import com.tryna.domain.user.dto.UserProfileResponse;
-import com.tryna.domain.user.dto.UserStatusResponse;
+import com.tryna.domain.user.dto.*;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,4 +41,13 @@ public interface UserControllerDocs {
             operationId = "withdraw"
     )
     ResponseEntity<ApiResponse<Void>> withdraw(); // data: null을 반환하므로 제네릭은 Void
+
+    @Operation(
+            summary = "G105 피드백 데이터 사용 설정",
+            description = "사용자가 추천 개선을 위해 저장되는 피드백 데이터의 사용 여부를 설정합니다.",
+            operationId = "feedBackDataSetting"
+    )
+    ResponseEntity<ApiResponse<FeedBackDataSettingResponse>> feedBackDataSetting(
+            @Valid @RequestBody FeedBackDataSettingRequest request
+    );
 }

@@ -61,4 +61,12 @@ public class UserEvents extends BaseCreatedEntity {
     @ColumnDefault("'OWNER'")
     private EventRole eventRole = EventRole.OWNER;
 
+    public static UserEvents createOwner(Users user, Events event) {
+        UserEvents userEvent = new UserEvents();
+        userEvent.user = user;
+        userEvent.event = event;
+        userEvent.eventRole = EventRole.OWNER;
+        return userEvent;
+    }
+
 }

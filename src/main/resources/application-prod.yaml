@@ -32,3 +32,11 @@ jwt:
   access-expiration: ${JWT_ACCESS_EXPIRATION}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION}
   issuer: ${JWT_ISSUER}
+
+oauth2:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+
+brain:
+  base-url: ${FASTAPI_BASE_URL}
+  api-key: ${INTERNAL_API_KEY}

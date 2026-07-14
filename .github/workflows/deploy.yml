@@ -101,6 +101,9 @@ jobs:
             VALKEY_HOST=${{ secrets.VALKEY_HOST }}
             VALKEY_PORT=${{ secrets.VALKEY_PORT }}
             FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}
+            INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
+            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       # ECS 배포 (새 리비전 등록 + 서비스 업데이트 + 안정화 대기)
       - name: Deploy to Amazon ECS
