@@ -6,6 +6,7 @@ import com.tryna.domain.event.enums.EventErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.infra.brain.BrainClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -16,6 +17,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class EventParseService {
 
@@ -41,6 +43,7 @@ public class EventParseService {
 
             return body;
         } catch (RestClientException e) {
+            log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
     }
