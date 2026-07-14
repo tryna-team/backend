@@ -100,6 +100,7 @@ jobs:
             JWT_ISSUER=${{ secrets.JWT_ISSUER }}
             VALKEY_HOST=${{ secrets.VALKEY_HOST }}
             VALKEY_PORT=${{ secrets.VALKEY_PORT }}
+            VALKEY_PASSWORD=${{ secrets.VALKEY_PASSWORD }}
             FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}
             INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
