@@ -19,12 +19,6 @@ public enum ActionErrorCode implements ErrorCode {
             "준비/실행 항목 요청값이 올바르지 않습니다."
     ),
 
-    E105_ACTION_ITEM_403(
-            HttpStatus.FORBIDDEN,
-            "E105_ACTION_ITEM_403",
-            "해당 일정에 준비/실행 항목을 저장할 권한이 없습니다."
-    ),
-
     /**
      * E106: 준비/실행 항목 완료 상태 변경
      */
@@ -32,12 +26,6 @@ public enum ActionErrorCode implements ErrorCode {
             HttpStatus.BAD_REQUEST,
             "E106_ACTION_ITEM_400",
             "준비/실행 항목 상태 변경 요청이 올바르지 않습니다."
-    ),
-
-    E106_ACTION_ITEM_403(
-            HttpStatus.FORBIDDEN,
-            "E106_ACTION_ITEM_403",
-            "해당 준비/실행 항목의 상태를 변경할 권한이 없습니다."
     ),
 
     E106_ACTION_ITEM_404(
@@ -49,11 +37,6 @@ public enum ActionErrorCode implements ErrorCode {
     /**
      * F103: 일정 상세 내 준비/실행 항목 조회
      */
-    F103_ACTION_ITEM_403(
-            HttpStatus.FORBIDDEN,
-            "F103_ACTION_ITEM_403",
-            "해당 일정의 준비/실행 항목을 조회할 권한이 없습니다."
-    ),
 
     F103_ACTION_ITEM_404(
             HttpStatus.NOT_FOUND,
