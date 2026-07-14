@@ -53,7 +53,8 @@ jobs:
 
       # PR 머지 전, 소스 브랜치가 대상 브랜치(develop/main) 최신 커밋을 포함하는지 검증한다.
       - name: Check if branch is up-to-date with base branch
-        if: github.event_name == 'pull_request'
+        # develop → main 머지 PR은 release 흐름이므로 up-to-date 검사를 생략한다.
+        if: github.event_name == 'pull_request' && !(github.base_ref == 'main' && github.head_ref == 'develop')
         run: |
           set -euo pipefail
           TARGET_BRANCH="${{ github.base_ref }}"
