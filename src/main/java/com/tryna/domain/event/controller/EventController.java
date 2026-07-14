@@ -3,7 +3,10 @@ package com.tryna.domain.event.controller;
 import com.tryna.domain.event.dto.EventCreateRequest;
 import com.tryna.domain.event.dto.EventCreateResponse;
 import com.tryna.domain.event.dto.EventDetailResponse;
+import com.tryna.domain.event.dto.EventParseRequest;
+import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.domain.event.service.EventCommandService;
+import com.tryna.domain.event.service.EventParseService;
 import com.tryna.domain.event.service.EventQueryService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -26,6 +29,21 @@ public class EventController {
 
     private final EventCommandService eventCommandService;
     private final EventQueryService eventQueryService;
+    private final EventParseService eventParseService;
+
+    @PostMapping("/parse")
+    public ApiResponse<EventParseResponse> parseEvent(
+            Authentication authentication,
+            @RequestBody EventParseRequest request
+    ) {
+        extractUserId(authentication);
+        EventParseResponse response = eventParseService.parseEvent(request);
+        return ApiResponse.success(
+                "C103_EVENT_PREVIEW_200",
+                "일정 생성 미리보기 후보 조회에 성공했습니다.",
+                response
+        );
+    }
 
     @PostMapping
     public ResponseEntity<ApiResponse<EventCreateResponse>> createEvent(
