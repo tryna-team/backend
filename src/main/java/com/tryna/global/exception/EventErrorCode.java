@@ -1,6 +1,5 @@
-package com.tryna.domain.event.enums;
+package com.tryna.global.exception;
 
-import com.tryna.global.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 public enum EventErrorCode implements ErrorCode {
