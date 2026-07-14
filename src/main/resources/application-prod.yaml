@@ -21,6 +21,8 @@ spring:
     redis:
       host: ${VALKEY_HOST}
       port: ${VALKEY_PORT}
+      ssl:
+        enabled: true
 
 logging:
   level:

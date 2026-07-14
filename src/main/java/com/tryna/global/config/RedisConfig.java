@@ -1,18 +1,41 @@
 package com.tryna.global.config;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
-// Redis 전역 설정.
+import java.time.Duration;
 
-// 현재는 {@code application-*.yaml}의 {@code spring.data.redis} 설정과
-// Spring Boot auto-config({@code StringRedisTemplate})만으로 충분하여 Bean 정의가 없다.
-// 도메인별 Redis 접근은 {@code domain/auth/repository} 등 각 bounded context에서 처리한다.
-//
-// 향후 이 클래스에 추가될 수 있는 설정:
-//  - {@code RedisConnectionFactory} 커스터마이징 — Sentinel, Cluster, SSL/TLS
-//  - {@code StringRedisTemplate} / {@code RedisTemplate} Bean — serializer, transaction 옵션 등 전역 override
-//  - {@code RedisCacheManager} + {@code @EnableCaching} — API/조회 캐시 레이어 도입 시
-//  - {@code RedisMessageListenerContainer} — Pub/Sub, 알림 큐 등 이벤트 기반 연동 시
+// ElastiCache/Valkey 전송 중 암호화(TLS) 연동 설정.
+// 저장 중 암호화(at-rest)는 AWS가 처리하므로 애플리케이션 설정이 필요 없다.
+// TLS는 Spring Data Redis의 {@code spring.data.redis.ssl.enabled} 한 가지로 활성화한다.
 @Configuration
+@ConditionalOnProperty(name = "spring.data.redis.ssl.enabled", havingValue = "true")
 public class RedisConfig {
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory(
+            @Value("${spring.data.redis.host}") String host,
+            @Value("${spring.data.redis.port}") int port,
+            @Value("${VALKEY_PASSWORD:#{null}}") String password
+    ) {
+        RedisStandaloneConfiguration standaloneConfig = new RedisStandaloneConfiguration(host, port);
+        if (password != null && !password.isBlank()) {
+            standaloneConfig.setPassword(password);
+        }
+
+        // ElastiCache는 AWS 관리 인증서를 사용하므로 peer verification을 비활성화한다.
+        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                .commandTimeout(Duration.ofSeconds(2))
+                .useSsl()
+                .disablePeerVerification()
+                .build();
+
+        return new LettuceConnectionFactory(standaloneConfig, clientConfig);
+    }
 }
