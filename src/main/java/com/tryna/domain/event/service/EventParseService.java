@@ -2,8 +2,8 @@ package com.tryna.domain.event.service;
 
 import com.tryna.domain.event.dto.EventParseRequest;
 import com.tryna.domain.event.dto.EventParseResponse;
-import com.tryna.domain.event.enums.EventErrorCode;
 import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.EventErrorCode;
 import com.tryna.infra.brain.BrainClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
