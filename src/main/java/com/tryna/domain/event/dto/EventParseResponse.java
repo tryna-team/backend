@@ -7,7 +7,7 @@ public record EventParseResponse(
         String dateCandidate,
         String timeCandidate,
         String placeCandidate,
-        String toEmbedding,
+        List<String> toEmbedding,
         Boolean isAllDayCandidate,
         Boolean needsConfirmation,
         List<Warning> warnings
