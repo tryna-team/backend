@@ -4,11 +4,10 @@ import java.util.List;
 
 public record EventParseResponse(
         String sourceText,
-        String titleCandidate,
         String dateCandidate,
         String timeCandidate,
         String placeCandidate,
-        String eventTypeCandidate,
+        String toEmbedding,
         Boolean isAllDayCandidate,
         Boolean needsConfirmation,
         List<Warning> warnings
