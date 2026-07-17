@@ -103,33 +103,29 @@ public class ActionItemService {
             Events event,
             ActionItemSaveRequest request
     ) {
-        // C104에서는 선택 항목이 없을 수도 있으므로 빈 응답으로 처리한다.
-        if (request == null || request.items() == null || request.items().isEmpty()) {
-            return ActionItemSaveResponse.from(
-                    event.getEventId(),
-                    List.of()
-            );
+        // C104에서는 선택 항목이 없어도 피드백 로그는 저장될 수 있다.
+        List<ActionItems> savedActionItems = List.of();
+
+        if (request != null && request.items() != null && !request.items().isEmpty()) {
+            validateActionItems(request.items());
+
+            // 6. 요청 항목을 ActionItems 엔티티로 변환
+            List<ActionItems> actionItems = request.items().stream()
+                    .map(item -> ActionItems.create(
+                            event,
+                            item.title(),
+                            item.itemType(),
+                            item.displayDate(),
+                            item.displayTime(),
+                            item.offsetDays(),
+                            item.createdBy(),
+                            item.sourceTemplateId()
+                    ))
+                    .toList();
+
+            // 7. 준비/실행 항목 일괄 저장
+            savedActionItems = actionItemsRepository.saveAll(actionItems);
         }
-
-        validateActionItems(request.items());
-
-        // 6. 요청 항목을 ActionItems 엔티티로 변환
-        List<ActionItems> actionItems = request.items().stream()
-                .map(item -> ActionItems.create(
-                        event,
-                        item.title(),
-                        item.itemType(),
-                        item.displayDate(),
-                        item.displayTime(),
-                        item.offsetDays(),
-                        item.createdBy(),
-                        item.sourceTemplateId()
-                ))
-                .toList();
-
-        // 7. 준비/실행 항목 일괄 저장
-        List<ActionItems> savedActionItems =
-                actionItemsRepository.saveAll(actionItems);
 
         // 8. 피드백 로그를 RecommendationFeedbacks 엔티티로 변환
         List<RecommendationFeedbacks> feedbacks =
@@ -160,7 +156,7 @@ public class ActionItemService {
     private List<ActionItemSaveRequest.Feedback> safeFeedbackLogs(
             ActionItemSaveRequest request
     ) {
-        if (request.feedbackLogs() == null) {
+        if (request == null || request.feedbackLogs() == null) {
             return List.of();
         }
         return request.feedbackLogs();
