@@ -1,5 +1,7 @@
 package com.tryna.domain.event.service;
 
+import com.tryna.domain.action.dto.ActionItemSaveResponse;
+import com.tryna.domain.action.service.ActionItemService;
 import com.tryna.domain.event.dto.EventCreateRequest;
 import com.tryna.domain.event.dto.EventCreateResponse;
 import com.tryna.domain.event.entity.Events;
@@ -29,6 +31,7 @@ public class EventCommandService {
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
+    private final ActionItemService actionItemService;
 
     @Transactional
     public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
@@ -61,18 +64,25 @@ public class EventCommandService {
                 combine(endDate, endTime),
                 isAllDay,
                 normalizeBlank(request.location()),
-                normalizeBlank(request.eventTypeCandidate()),
+                normalizeBlank(request.eventType()),
                 status
         );
 
         Events savedEvent = eventsRepository.save(event);
         userEventsRepository.save(UserEvents.createOwner(user, savedEvent));
+        ActionItemSaveResponse savedActionItems =
+                actionItemService.saveActionItemsForEvent(
+                        user,
+                        savedEvent,
+                        request.actionItems()
+                );
 
         return new EventCreateResponse(
                 savedEvent.getEventId(),
                 savedEvent.getEventStatus(),
                 savedEvent.getSourceType(),
-                savedEvent.getCreatedAt()
+                savedEvent.getCreatedAt(),
+                savedActionItems.items()
         );
     }
 

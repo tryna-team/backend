@@ -147,7 +147,7 @@ public class Events extends BaseEntity {
             LocalDateTime endDatetime,
             Boolean isAllDay,
             String location,
-            String eventTypeCandidate,
+            String eventType,
             EventStatus eventStatus
     ) {
         Events event = new Events();
@@ -163,7 +163,7 @@ public class Events extends BaseEntity {
         event.recurrenceType = RecurrenceType.NONE;
         event.recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
         event.location = location;
-        event.eventTypeCandidate = eventTypeCandidate;
+        event.eventType = eventType;
         event.sourceType = SourceType.USER_NATURAL_LANGUAGE;
         event.eventStatus = eventStatus;
         return event;
