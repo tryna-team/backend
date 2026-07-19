@@ -2,6 +2,8 @@ package com.tryna.domain.action.repository;
 
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ItemType;
+import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.event.enums.SourceType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -10,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -95,5 +98,37 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     int softDeleteByUserId(
             @Param("userId") Long userId,
             @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    /**
+     * 현재 사용자의 Tryna 내부 일정에 연결된 준비/실행 항목 중
+     * 제목에 검색어가 포함된 항목을 조회합니다.
+     *
+     * 삭제된 항목, 외부 캘린더 일정에 연결된 항목,
+     * 검색 결과에 노출하지 않는 상태의 일정에 연결된 항목은 제외합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param keyword 검색 키워드
+     * @param eventStatuses 검색 가능한 일정 상태
+     * @param excludedSourceType 검색에서 제외할 일정 출처 유형
+     * @return 제목이 검색어와 일치한 준비/실행 항목 목록
+     */
+    @Query("""
+            SELECT a
+              FROM ActionItems a
+              JOIN FETCH a.parentEvent e
+              JOIN UserEvents ue ON ue.event = e
+             WHERE ue.user.userId = :userId
+               AND e.eventStatus IN :eventStatuses
+               AND e.sourceType <> :excludedSourceType
+               AND a.deletedAt IS NULL
+               AND LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+             ORDER BY a.actionItemId ASC
+            """)
+    List<ActionItems> findSearchMatchesByUserIdAndKeyword(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses,
+            @Param("excludedSourceType") SourceType excludedSourceType
     );
 }

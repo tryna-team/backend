@@ -1,10 +1,6 @@
 package com.tryna.domain.event.controller;
 
-import com.tryna.domain.event.dto.EventCreateRequest;
-import com.tryna.domain.event.dto.EventCreateResponse;
-import com.tryna.domain.event.dto.EventDetailResponse;
-import com.tryna.domain.event.dto.EventParseRequest;
-import com.tryna.domain.event.dto.EventParseResponse;
+import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.service.EventCommandService;
 import com.tryna.domain.event.service.EventParseService;
 import com.tryna.domain.event.service.EventQueryService;
@@ -15,12 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -81,5 +72,30 @@ public class EventController {
         }
 
         return userId;
+    }
+
+    /**
+     * B107: 키워드 검색
+     */
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<EventSearchResponse>> searchEvents(
+            Authentication authentication,
+            @RequestParam("keyword") String keyword
+    ) {
+        // 1. Authentication에서 현재 사용자 ID 추출
+        Long userId = extractUserId(authentication);
+
+        // 2. 일정 및 준비/실행 항목 키워드 검색
+        EventSearchResponse response =
+                eventQueryService.searchEvents(userId, keyword);
+
+        // 3. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "B107_EVENT_SEARCH_200",
+                        "검색 결과 조회에 성공했습니다.",
+                        response
+                )
+        );
     }
 }

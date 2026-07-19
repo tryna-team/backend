@@ -1,11 +1,11 @@
 package com.tryna.domain.event.service;
 
-import com.tryna.domain.event.dto.CalendarDateEventsResponse;
-import com.tryna.domain.event.dto.CalendarMainResponse;
-import com.tryna.domain.event.dto.CalendarMonthlyResponse;
-import com.tryna.domain.event.dto.EventDetailResponse;
+import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.repository.ActionItemsRepository;
+import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.enums.ConnectionStatus;
@@ -19,11 +19,9 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +44,7 @@ public class EventQueryService {
 
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
+    private final ActionItemsRepository actionItemsRepository;
 
     public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
         validateUserId(userId);
@@ -139,6 +138,78 @@ public class EventQueryService {
         );
     }
 
+    /**
+     * B107: 키워드 검색
+     *
+     * 현재 사용자의 Tryna 내부 일정 제목과 저장된 준비/실행 항목 제목에서
+     * 검색어가 포함된 결과를 조회하고 일정 단위로 묶어서 반환합니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param keywordValue 검색 키워드
+     * @return 일정 단위 키워드 검색 결과
+     */
+    public EventSearchResponse searchEvents(
+            Long userId,
+            String keywordValue
+    ) {
+        // 1. 인증 사용자 ID 검증
+        validateUserId(userId);
+
+        // 2. 검색어 앞뒤 공백 제거 및 유효성 검증
+        String keyword = normalizeSearchKeyword(keywordValue);
+
+        // 3. 일정 제목이 검색어와 일치한 Tryna 내부 일정 조회
+        List<Events> matchedEvents = userEventsRepository
+                .findInternalEventsByTitleContaining(
+                        userId,
+                        keyword,
+                        VISIBLE_EVENT_STATUSES,
+                        SourceType.EXTERNAL_CALENDAR
+                );
+
+        // 4. 준비/실행 항목 제목이 검색어와 일치한 항목 조회
+        List<ActionItems> matchedActionItems = actionItemsRepository
+                .findSearchMatchesByUserIdAndKeyword(
+                        userId,
+                        keyword,
+                        VISIBLE_EVENT_STATUSES,
+                        SourceType.EXTERNAL_CALENDAR
+                );
+
+        // 5. 동일한 일정이 중복되지 않도록 일정 ID 기준으로 검색 결과 구성
+        Map<Long, SearchResultGroup> groupedResults = new LinkedHashMap<>();
+
+        matchedEvents.forEach(event ->
+                groupedResults.putIfAbsent(
+                        event.getEventId(),
+                        new SearchResultGroup(event, new ArrayList<>())
+                )
+        );
+
+        matchedActionItems.forEach(actionItem -> {
+            Events event = actionItem.getParentEvent();
+            SearchResultGroup group = groupedResults.computeIfAbsent(
+                    event.getEventId(),
+                    eventId -> new SearchResultGroup(event, new ArrayList<>())
+            );
+            group.matchedActionItems().add(actionItem);
+        });
+
+        // 6. 오늘을 기준으로 가까운 일정 날짜와 시작 시간 순으로 정렬
+        LocalDate today = LocalDate.now(SERVICE_ZONE);
+        List<EventSearchResponse.Result> results = groupedResults.values()
+                .stream()
+                .sorted(searchResultComparator(today))
+                .map(group -> EventSearchResponse.Result.from(
+                        group.event(),
+                        group.matchedActionItems()
+                ))
+                .toList();
+
+        // 7. 정규화된 검색어와 일정 단위 검색 결과 반환
+        return EventSearchResponse.of(keyword, results);
+    }
+
     public EventDetailResponse getEventDetail(Long userId, String eventIdValue) {
         validateUserId(userId);
         Long eventId = parseEventId(eventIdValue);
@@ -173,6 +244,57 @@ public class EventQueryService {
             countsByDate.put(date, count);
         }
         return countsByDate;
+    }
+
+    /**
+     * B107 검색어를 정규화하고 유효성을 검증합니다.
+     *
+     * @param keywordValue 원본 검색 키워드
+     * @return 앞뒤 공백이 제거된 검색 키워드
+     */
+    private String normalizeSearchKeyword(String keywordValue) {
+        if (keywordValue == null) {
+            throw new BusinessException(EventErrorCode.B107_EVENT_SEARCH_400);
+        }
+
+        String keyword = keywordValue.trim();
+
+        return keyword;
+    }
+
+    /**
+     * B107 검색 결과를 오늘과 가까운 날짜 순으로 정렬합니다.
+     *
+     * 날짜가 동일하면 시작 시간이 빠른 일정을 우선하고,
+     * 날짜가 없는 일정은 검색 결과 하단에 배치합니다.
+     *
+     * @param today 서비스 기준 오늘 날짜
+     * @return 검색 결과 정렬 기준
+     */
+    private Comparator<SearchResultGroup> searchResultComparator(LocalDate today) {
+        return Comparator
+                .comparingLong((SearchResultGroup group) ->
+                        distanceFromToday(group.event().getStartDate(), today)
+                )
+                .thenComparing(group ->
+                        group.event().getStartDate() == null
+                                ? LocalDate.MAX
+                                : group.event().getStartDate()
+                )
+                .thenComparing(group ->
+                        group.event().getStartDatetime() == null
+                                ? LocalDateTime.MAX
+                                : group.event().getStartDatetime()
+                )
+                .thenComparing(group -> group.event().getEventId());
+    }
+
+    private long distanceFromToday(LocalDate startDate, LocalDate today) {
+        if (startDate == null) {
+            return Long.MAX_VALUE;
+        }
+
+        return Math.abs(ChronoUnit.DAYS.between(today, startDate));
     }
 
     private void validateUserId(Long userId) {
@@ -255,5 +377,14 @@ public class EventQueryService {
         }
         LocalTime time = dateTime.toLocalTime();
         return time.format(TIME_FORMATTER);
+    }
+
+    /**
+     * B107 검색 결과를 일정 단위로 묶기 위한 내부 자료 구조입니다.
+     */
+    private record SearchResultGroup(
+            Events event,
+            List<ActionItems> matchedActionItems
+    ) {
     }
 }
