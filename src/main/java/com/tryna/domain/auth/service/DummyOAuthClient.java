@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("!prod")
+@Profile("oauth-dummy")
 public class DummyOAuthClient implements OAuthClient {
 
     @Override

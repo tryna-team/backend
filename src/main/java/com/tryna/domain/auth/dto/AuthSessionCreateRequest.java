@@ -18,9 +18,6 @@ public record AuthSessionCreateRequest(
         @NotBlank(message = "OAuth 액세스 토큰은 필수입니다.")
         String oauthAccessToken,
 
-        @Schema(description = "획득한 소셜 이메일 정보 (선택)", example = "user@example.com")
-        String email,
-
         @Schema(description = "신규 가입 시 동의한 약관 유형 목록 (기존 회원은 빈 배열 가능)", example = "[\"SERVICE\", \"PRIVACY\", \"LOCATION\"]")
         @NotNull(message = "약관 동의 목록은 Null일 수 없습니다.")
         List<TermType> agreedTermTypes,
