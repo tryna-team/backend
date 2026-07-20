@@ -5,6 +5,7 @@ import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.EventErrorCode;
 import com.tryna.infra.brain.BrainClient;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -41,11 +42,27 @@ public class EventParseService {
                 throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
             }
 
-            return body;
+            return withTempEventId(body);
         } catch (RestClientException e) {
             log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
+    }
+
+    private EventParseResponse withTempEventId(EventParseResponse response) {
+        return new EventParseResponse(
+                "tmp_" + UUID.randomUUID(),
+                response.sourceText(),
+                response.startDate(),
+                response.endDate(),
+                response.startTime(),
+                response.endTime(),
+                response.placeCandidate(),
+                response.toEmbedding(),
+                response.isAllDayCandidate(),
+                response.needsConfirmation(),
+                response.warnings()
+        );
     }
 
     private void validateSourceText(EventParseRequest request) {
