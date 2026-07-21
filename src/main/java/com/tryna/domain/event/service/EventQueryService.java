@@ -1,11 +1,11 @@
 package com.tryna.domain.event.service;
 
-import com.tryna.domain.event.dto.CalendarDateEventsResponse;
-import com.tryna.domain.event.dto.CalendarMainResponse;
-import com.tryna.domain.event.dto.CalendarMonthlyResponse;
-import com.tryna.domain.event.dto.EventDetailResponse;
+import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.repository.ActionItemsRepository;
+import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.enums.ConnectionStatus;
@@ -19,11 +19,9 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,8 +42,10 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
+
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
+    private final ActionItemsRepository actionItemsRepository;
 
     public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
         validateUserId(userId);
@@ -139,6 +139,132 @@ public class EventQueryService {
         );
     }
 
+    /**
+     * B107: 키워드 검색
+     *
+     * 현재 사용자의 Tryna 내부 일정 제목과 저장된 준비/실행 항목 제목에서
+     * 검색어가 포함된 결과를 조회합니다.
+     *
+     * 일정 제목이 직접 매칭된 결과를 우선 배치하고,
+     * 동일 일정의 준비/실행 항목도 매칭된 경우 일정 바로 다음에 배치합니다.
+     *
+     * 준비/실행 항목만 매칭된 경우 부모 일정은 별도의 EVENT 결과로 반환하지 않고,
+     * ACTION_ITEM 결과에 부모 일정 정보를 포함합니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param keywordValue 검색 키워드
+     * @return 일정 및 준비/실행 항목 키워드 검색 결과
+     */
+    public EventSearchResponse searchEvents(
+            Long userId,
+            String keywordValue
+    ) {
+        // 1. 인증 사용자 ID 검증
+        validateUserId(userId);
+
+        // 2. 검색어 앞뒤 공백 제거 및 유효성 검증
+        String keyword = normalizeSearchKeyword(keywordValue);
+
+        // 3. 일정 제목이 검색어와 일치한 Tryna 내부 일정 조회
+        List<Events> matchedEvents = userEventsRepository
+                .findInternalEventsByTitleContaining(
+                        userId,
+                        keyword,
+                        VISIBLE_EVENT_STATUSES,
+                        SourceType.EXTERNAL_CALENDAR
+                );
+
+        // 4. 준비/실행 항목 제목이 검색어와 일치한 저장 항목 조회
+        List<ActionItems> matchedActionItems = actionItemsRepository
+                .findSearchMatchesByUserIdAndKeyword(
+                        userId,
+                        keyword,
+                        VISIBLE_EVENT_STATUSES,
+                        SourceType.EXTERNAL_CALENDAR
+                );
+
+        // 5. 일정 제목이 직접 매칭된 일정 ID 구성
+        Set<Long> titleMatchedEventIds = matchedEvents.stream()
+                .map(Events::getEventId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // 6. 매칭된 준비/실행 항목을 부모 일정 ID 기준으로 그룹화
+        Map<Long, List<ActionItems>> actionItemsByEventId =
+                matchedActionItems.stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                actionItem -> actionItem.getParentEvent().getEventId(),
+                                LinkedHashMap::new,
+                                java.util.stream.Collectors.toList()
+                        ));
+
+        // 7. 부모 일정 ID를 기준으로 준비/실행 항목 순서 고정
+        actionItemsByEventId.values().forEach(actionItems ->
+                actionItems.sort(
+                        Comparator.comparing(ActionItems::getActionItemId)
+                )
+        );
+
+        LocalDate today = LocalDate.now(SERVICE_ZONE);
+        Comparator<Events> eventComparator = eventSearchComparator(today);
+
+        List<EventSearchResponse.Result> results = new ArrayList<>();
+
+        // 8. 일정 제목이 직접 매칭된 결과를 날짜가 가까운 순으로 우선 배치
+        matchedEvents.stream()
+                .sorted(eventComparator)
+                .forEach(event -> {
+                    // 8-1. EVENT 결과 추가
+                    results.add(EventSearchResponse.Result.fromEvent(event));
+
+                    // 8-2. 동일 일정의 매칭된 ACTION_ITEM 결과를 바로 다음에 추가
+                    actionItemsByEventId
+                            .getOrDefault(event.getEventId(), List.of())
+                            .stream()
+                            .map(actionItem ->
+                                    EventSearchResponse.Result.fromActionItem(
+                                            event,
+                                            actionItem
+                                    )
+                            )
+                            .forEach(results::add);
+                });
+
+        // 9. 준비/실행 항목만 매칭된 부모 일정을 날짜가 가까운 순으로 정렬
+        List<Events> actionItemOnlyMatchedEvents =
+                matchedActionItems.stream()
+                        .map(ActionItems::getParentEvent)
+                        .filter(event ->
+                                !titleMatchedEventIds.contains(event.getEventId())
+                        )
+                        .collect(java.util.stream.Collectors.toMap(
+                                Events::getEventId,
+                                event -> event,
+                                (existing, replacement) -> existing,
+                                LinkedHashMap::new
+                        ))
+                        .values()
+                        .stream()
+                        .sorted(eventComparator)
+                        .toList();
+
+        // 10. 준비/실행 항목만 매칭된 경우 ACTION_ITEM 결과만 추가
+        actionItemOnlyMatchedEvents.forEach(event ->
+                actionItemsByEventId
+                        .getOrDefault(event.getEventId(), List.of())
+                        .stream()
+                        .map(actionItem ->
+                                EventSearchResponse.Result.fromActionItem(
+                                        event,
+                                        actionItem
+                                )
+                        )
+                        .forEach(results::add)
+        );
+
+        // 11. 정규화된 검색어와 평면 검색 결과 반환
+        return EventSearchResponse.of(keyword, results);
+    }
+
     public EventDetailResponse getEventDetail(Long userId, String eventIdValue) {
         validateUserId(userId);
         Long eventId = parseEventId(eventIdValue);
@@ -173,6 +299,61 @@ public class EventQueryService {
             countsByDate.put(date, count);
         }
         return countsByDate;
+    }
+
+    /**
+     * B107 검색어를 정규화하고 유효성을 검증합니다.
+     *
+     * @param keywordValue 원본 검색 키워드
+     * @return 앞뒤 공백이 제거된 검색 키워드
+     */
+    private String normalizeSearchKeyword(String keywordValue) {
+        if (keywordValue == null) {
+            throw new BusinessException(EventErrorCode.B107_EVENT_SEARCH_400);
+        }
+
+        String keyword = keywordValue.trim();
+
+        if (keyword.isBlank()) {
+            throw new BusinessException(EventErrorCode.B107_EVENT_SEARCH_400);
+        }
+
+        return keyword;
+    }
+
+    /**
+     * B107 검색 결과의 부모 일정을 오늘과 가까운 날짜 순으로 정렬합니다.
+     *
+     * 날짜가 동일하면 시작 시간이 빠른 일정을 우선하고,
+     * 날짜가 없는 일정은 검색 결과 그룹 하단에 배치합니다.
+     *
+     * @param today 서비스 기준 오늘 날짜
+     * @return 일정 검색 결과 정렬 기준
+     */
+    private Comparator<Events> eventSearchComparator(LocalDate today) {
+        return Comparator
+                .comparingLong((Events event) ->
+                        distanceFromToday(event.getStartDate(), today)
+                )
+                .thenComparing(event ->
+                        event.getStartDate() == null
+                                ? LocalDate.MAX
+                                : event.getStartDate()
+                )
+                .thenComparing(event ->
+                        event.getStartDatetime() == null
+                                ? LocalDateTime.MAX
+                                : event.getStartDatetime()
+                )
+                .thenComparing(Events::getEventId);
+    }
+
+    private long distanceFromToday(LocalDate startDate, LocalDate today) {
+        if (startDate == null) {
+            return Long.MAX_VALUE;
+        }
+
+        return Math.abs(ChronoUnit.DAYS.between(today, startDate));
     }
 
     private void validateUserId(Long userId) {
