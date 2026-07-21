@@ -2,6 +2,7 @@ package com.tryna.domain.event.dto;
 
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.event.entity.Events;
+import com.tryna.domain.event.enums.EventSearchResultType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
@@ -13,10 +14,10 @@ import java.util.List;
 @Schema(description = "B107 키워드 검색 응답 DTO")
 public record EventSearchResponse(
 
-        @Schema(description = "앞뒤 공백이 제거된 검색 키워드", example = "고기")
+        @Schema(description = "앞뒤 공백이 제거된 검색 키워드", example = "여행")
         String keyword,
 
-        @Schema(description = "검색된 일정 목록")
+        @Schema(description = "일정 및 준비/실행 항목 검색 결과")
         List<Result> results
 
 ) {
@@ -25,7 +26,7 @@ public record EventSearchResponse(
             DateTimeFormatter.ofPattern("HH:mm");
 
     /**
-     * 검색된 일정과 일치한 준비/실행 항목을 B107 응답 DTO로 변환합니다.
+     * 검색 키워드와 검색 결과 목록을 B107 응답 DTO로 생성
      *
      * @param keyword 정규화된 검색 키워드
      * @param results 검색 결과 목록
@@ -39,91 +40,97 @@ public record EventSearchResponse(
     }
 
     /**
-     * 검색 결과에 표시할 일정 하나를 표현합니다.
+     * 일정 또는 준비/실행 항목 하나의 검색 결과를 표현
      */
-    @Schema(description = "키워드 검색 결과 일정")
+    @Schema(description = "키워드 검색 결과")
     public record Result(
 
-            @Schema(description = "일정 ID", example = "1")
+            @Schema(
+                    description = "검색 결과 유형",
+                    example = "EVENT",
+                    allowableValues = {"EVENT", "ACTION_ITEM"}
+            )
+            EventSearchResultType type,
+
+            @Schema(
+                    description = "일정 ID. ACTION_ITEM 유형에서는 부모 일정 ID",
+                    example = "3"
+            )
             Long eventId,
 
-            @Schema(description = "일정 제목", example = "김치찜 만들기")
-            String title,
-
-            @Schema(description = "일정 장소", example = "집", nullable = true)
-            String location,
-
-            @Schema(description = "일정 시작 날짜", example = "2026-07-20", nullable = true)
-            LocalDate startDate,
-
-            @Schema(description = "일정 시작 시간", example = "18:00", nullable = true)
-            String startTime,
-
-            @Schema(description = "일정 종료 날짜", example = "2026-07-20", nullable = true)
-            LocalDate endDate,
-
-            @Schema(description = "일정 종료 시간", example = "19:30", nullable = true)
-            String endTime,
-
-            @Schema(description = "종일 일정 여부", example = "false")
-            Boolean isAllDay,
-
-            @Schema(description = "검색어와 일치한 준비/실행 항목 목록")
-            List<MatchedActionItem> matchedActionItems
-
-    ) {
-
-        /**
-         * 일정 엔티티와 검색어에 일치한 준비/실행 항목을 검색 결과로 변환합니다.
-         *
-         * @param event 검색된 일정 엔티티
-         * @param matchedActionItems 검색어와 일치한 준비/실행 항목 목록
-         * @return 일정 검색 결과
-         */
-        public static Result from(
-                Events event,
-                List<ActionItems> matchedActionItems
-        ) {
-            return new Result(
-                    event.getEventId(),
-                    event.getTitle(),
-                    event.getLocation(),
-                    event.getStartDate(),
-                    formatTime(event.getStartDatetime()),
-                    event.getEndDate(),
-                    formatTime(event.getEndDatetime()),
-                    event.getIsAllDay(),
-                    matchedActionItems.stream()
-                            .map(MatchedActionItem::from)
-                            .toList()
-            );
-        }
-    }
-
-    /**
-     * 검색어와 일치한 준비/실행 항목 하나를 표현합니다.
-     */
-    @Schema(description = "검색어와 일치한 준비/실행 항목")
-    public record MatchedActionItem(
-
-            @Schema(description = "준비/실행 항목 ID", example = "10")
+            @Schema(
+                    description = "준비/실행 항목 ID. EVENT 유형에서는 null",
+                    example = "31",
+                    nullable = true
+            )
             Long actionItemId,
 
-            @Schema(description = "준비/실행 항목 제목", example = "고기 구매")
-            String title
+            @Schema(
+                    description = "검색된 일정 또는 준비/실행 항목 제목",
+                    example = "일본 여행"
+            )
+            String title,
+
+            @Schema(
+                    description = "부모 일정 제목. EVENT 유형에서는 null",
+                    example = "일본 여행",
+                    nullable = true
+            )
+            String parentEventTitle,
+
+            @Schema(
+                    description = "일정 날짜 또는 부모 일정 날짜",
+                    example = "2026-07-25",
+                    nullable = true
+            )
+            LocalDate date,
+
+            @Schema(
+                    description = "일정 시작 시간 또는 부모 일정 시작 시간",
+                    example = "14:00",
+                    nullable = true
+            )
+            String time
 
     ) {
 
         /**
-         * ActionItems 엔티티를 검색 결과 하위 항목으로 변환합니다.
+         * 일정 제목이 검색어와 일치한 결과를 생성
          *
-         * @param actionItem 준비/실행 항목 엔티티
-         * @return 검색어와 일치한 준비/실행 항목
+         * @param event 검색된 일정 엔티티
+         * @return EVENT 유형 검색 결과
          */
-        private static MatchedActionItem from(ActionItems actionItem) {
-            return new MatchedActionItem(
+        public static Result fromEvent(Events event) {
+            return new Result(
+                    EventSearchResultType.EVENT,
+                    event.getEventId(),
+                    null,
+                    event.getTitle(),
+                    null,
+                    event.getStartDate(),
+                    formatTime(event.getStartDatetime())
+            );
+        }
+
+        /**
+         * 준비/실행 항목 제목이 검색어와 일치한 결과를 생성
+         *
+         * @param event 부모 일정 엔티티
+         * @param actionItem 검색된 준비/실행 항목 엔티티
+         * @return ACTION_ITEM 유형 검색 결과
+         */
+        public static Result fromActionItem(
+                Events event,
+                ActionItems actionItem
+        ) {
+            return new Result(
+                    EventSearchResultType.ACTION_ITEM,
+                    event.getEventId(),
                     actionItem.getActionItemId(),
-                    actionItem.getTitle()
+                    actionItem.getTitle(),
+                    event.getTitle(),
+                    event.getStartDate(),
+                    formatTime(event.getStartDatetime())
             );
         }
     }

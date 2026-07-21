@@ -42,6 +42,7 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
+
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
@@ -142,11 +143,17 @@ public class EventQueryService {
      * B107: 키워드 검색
      *
      * 현재 사용자의 Tryna 내부 일정 제목과 저장된 준비/실행 항목 제목에서
-     * 검색어가 포함된 결과를 조회하고 일정 단위로 묶어서 반환합니다.
+     * 검색어가 포함된 결과를 조회합니다.
+     *
+     * 일정 제목이 직접 매칭된 결과를 우선 배치하고,
+     * 동일 일정의 준비/실행 항목도 매칭된 경우 일정 바로 다음에 배치합니다.
+     *
+     * 준비/실행 항목만 매칭된 경우 부모 일정은 별도의 EVENT 결과로 반환하지 않고,
+     * ACTION_ITEM 결과에 부모 일정 정보를 포함합니다.
      *
      * @param userId 현재 인증된 사용자 ID
      * @param keywordValue 검색 키워드
-     * @return 일정 단위 키워드 검색 결과
+     * @return 일정 및 준비/실행 항목 키워드 검색 결과
      */
     public EventSearchResponse searchEvents(
             Long userId,
@@ -167,7 +174,7 @@ public class EventQueryService {
                         SourceType.EXTERNAL_CALENDAR
                 );
 
-        // 4. 준비/실행 항목 제목이 검색어와 일치한 항목 조회
+        // 4. 준비/실행 항목 제목이 검색어와 일치한 저장 항목 조회
         List<ActionItems> matchedActionItems = actionItemsRepository
                 .findSearchMatchesByUserIdAndKeyword(
                         userId,
@@ -176,37 +183,85 @@ public class EventQueryService {
                         SourceType.EXTERNAL_CALENDAR
                 );
 
-        // 5. 동일한 일정이 중복되지 않도록 일정 ID 기준으로 검색 결과 구성
-        Map<Long, SearchResultGroup> groupedResults = new LinkedHashMap<>();
+        // 5. 일정 제목이 직접 매칭된 일정 ID 구성
+        Set<Long> titleMatchedEventIds = matchedEvents.stream()
+                .map(Events::getEventId)
+                .collect(java.util.stream.Collectors.toSet());
 
-        matchedEvents.forEach(event ->
-                groupedResults.putIfAbsent(
-                        event.getEventId(),
-                        new SearchResultGroup(event, new ArrayList<>())
+        // 6. 매칭된 준비/실행 항목을 부모 일정 ID 기준으로 그룹화
+        Map<Long, List<ActionItems>> actionItemsByEventId =
+                matchedActionItems.stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                actionItem -> actionItem.getParentEvent().getEventId(),
+                                LinkedHashMap::new,
+                                java.util.stream.Collectors.toList()
+                        ));
+
+        // 7. 부모 일정 ID를 기준으로 준비/실행 항목 순서 고정
+        actionItemsByEventId.values().forEach(actionItems ->
+                actionItems.sort(
+                        Comparator.comparing(ActionItems::getActionItemId)
                 )
         );
 
-        matchedActionItems.forEach(actionItem -> {
-            Events event = actionItem.getParentEvent();
-            SearchResultGroup group = groupedResults.computeIfAbsent(
-                    event.getEventId(),
-                    eventId -> new SearchResultGroup(event, new ArrayList<>())
-            );
-            group.matchedActionItems().add(actionItem);
-        });
-
-        // 6. 오늘을 기준으로 가까운 일정 날짜와 시작 시간 순으로 정렬
         LocalDate today = LocalDate.now(SERVICE_ZONE);
-        List<EventSearchResponse.Result> results = groupedResults.values()
-                .stream()
-                .sorted(searchResultComparator(today))
-                .map(group -> EventSearchResponse.Result.from(
-                        group.event(),
-                        group.matchedActionItems()
-                ))
-                .toList();
+        Comparator<Events> eventComparator = eventSearchComparator(today);
 
-        // 7. 정규화된 검색어와 일정 단위 검색 결과 반환
+        List<EventSearchResponse.Result> results = new ArrayList<>();
+
+        // 8. 일정 제목이 직접 매칭된 결과를 날짜가 가까운 순으로 우선 배치
+        matchedEvents.stream()
+                .sorted(eventComparator)
+                .forEach(event -> {
+                    // 8-1. EVENT 결과 추가
+                    results.add(EventSearchResponse.Result.fromEvent(event));
+
+                    // 8-2. 동일 일정의 매칭된 ACTION_ITEM 결과를 바로 다음에 추가
+                    actionItemsByEventId
+                            .getOrDefault(event.getEventId(), List.of())
+                            .stream()
+                            .map(actionItem ->
+                                    EventSearchResponse.Result.fromActionItem(
+                                            event,
+                                            actionItem
+                                    )
+                            )
+                            .forEach(results::add);
+                });
+
+        // 9. 준비/실행 항목만 매칭된 부모 일정을 날짜가 가까운 순으로 정렬
+        List<Events> actionItemOnlyMatchedEvents =
+                matchedActionItems.stream()
+                        .map(ActionItems::getParentEvent)
+                        .filter(event ->
+                                !titleMatchedEventIds.contains(event.getEventId())
+                        )
+                        .collect(java.util.stream.Collectors.toMap(
+                                Events::getEventId,
+                                event -> event,
+                                (existing, replacement) -> existing,
+                                LinkedHashMap::new
+                        ))
+                        .values()
+                        .stream()
+                        .sorted(eventComparator)
+                        .toList();
+
+        // 10. 준비/실행 항목만 매칭된 경우 ACTION_ITEM 결과만 추가
+        actionItemOnlyMatchedEvents.forEach(event ->
+                actionItemsByEventId
+                        .getOrDefault(event.getEventId(), List.of())
+                        .stream()
+                        .map(actionItem ->
+                                EventSearchResponse.Result.fromActionItem(
+                                        event,
+                                        actionItem
+                                )
+                        )
+                        .forEach(results::add)
+        );
+
+        // 11. 정규화된 검색어와 평면 검색 결과 반환
         return EventSearchResponse.of(keyword, results);
     }
 
@@ -259,34 +314,38 @@ public class EventQueryService {
 
         String keyword = keywordValue.trim();
 
+        if (keyword.isBlank()) {
+            throw new BusinessException(EventErrorCode.B107_EVENT_SEARCH_400);
+        }
+
         return keyword;
     }
 
     /**
-     * B107 검색 결과를 오늘과 가까운 날짜 순으로 정렬합니다.
+     * B107 검색 결과의 부모 일정을 오늘과 가까운 날짜 순으로 정렬합니다.
      *
      * 날짜가 동일하면 시작 시간이 빠른 일정을 우선하고,
-     * 날짜가 없는 일정은 검색 결과 하단에 배치합니다.
+     * 날짜가 없는 일정은 검색 결과 그룹 하단에 배치합니다.
      *
      * @param today 서비스 기준 오늘 날짜
-     * @return 검색 결과 정렬 기준
+     * @return 일정 검색 결과 정렬 기준
      */
-    private Comparator<SearchResultGroup> searchResultComparator(LocalDate today) {
+    private Comparator<Events> eventSearchComparator(LocalDate today) {
         return Comparator
-                .comparingLong((SearchResultGroup group) ->
-                        distanceFromToday(group.event().getStartDate(), today)
+                .comparingLong((Events event) ->
+                        distanceFromToday(event.getStartDate(), today)
                 )
-                .thenComparing(group ->
-                        group.event().getStartDate() == null
+                .thenComparing(event ->
+                        event.getStartDate() == null
                                 ? LocalDate.MAX
-                                : group.event().getStartDate()
+                                : event.getStartDate()
                 )
-                .thenComparing(group ->
-                        group.event().getStartDatetime() == null
+                .thenComparing(event ->
+                        event.getStartDatetime() == null
                                 ? LocalDateTime.MAX
-                                : group.event().getStartDatetime()
+                                : event.getStartDatetime()
                 )
-                .thenComparing(group -> group.event().getEventId());
+                .thenComparing(Events::getEventId);
     }
 
     private long distanceFromToday(LocalDate startDate, LocalDate today) {
@@ -377,14 +436,5 @@ public class EventQueryService {
         }
         LocalTime time = dateTime.toLocalTime();
         return time.format(TIME_FORMATTER);
-    }
-
-    /**
-     * B107 검색 결과를 일정 단위로 묶기 위한 내부 자료 구조입니다.
-     */
-    private record SearchResultGroup(
-            Events event,
-            List<ActionItems> matchedActionItems
-    ) {
     }
 }

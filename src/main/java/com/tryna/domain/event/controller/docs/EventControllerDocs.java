@@ -15,7 +15,24 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "B107 키워드 검색",
-            description = "현재 사용자의 Tryna 내부 일정 제목과 저장된 준비/실행 항목 제목에서 키워드를 검색합니다.",
+            description = """
+                    현재 사용자의 Tryna 내부 일정 제목과 저장된 준비/실행 항목 제목에서
+                    입력한 키워드가 포함된 결과를 검색합니다.
+                    
+                    일정 제목이 일치하면 EVENT 유형으로 반환하고,
+                    준비/실행 항목 제목이 일치하면 ACTION_ITEM 유형으로 반환합니다.
+                    
+                    일정 제목과 하위 준비/실행 항목이 모두 일치하면
+                    EVENT 결과를 먼저 반환하고 해당 ACTION_ITEM 결과를 바로 다음에 반환합니다.
+                    
+                    준비/실행 항목만 일치한 경우 부모 일정은 별도의 EVENT 결과로 반환하지 않으며,
+                    ACTION_ITEM 결과에 부모 일정 ID, 제목, 날짜 및 시간 정보를 포함합니다.
+                    
+                    삭제된 일정, 삭제된 준비/실행 항목, 외부 캘린더 일정,
+                    저장 전 추천 후보 항목은 검색 대상에서 제외합니다.
+                    
+                    검색 결과가 없는 경우에도 200 OK와 빈 배열을 반환합니다.
+                    """,
             operationId = "searchEvents"
     )
     @SecurityRequirement(name = "bearerAuth")
@@ -24,9 +41,8 @@ public interface EventControllerDocs {
             @Parameter(
                     description = "검색할 키워드",
                     required = true,
-                    example = "고기"
+                    example = "여행"
             )
             @RequestParam("keyword") String keyword
     );
-
 }

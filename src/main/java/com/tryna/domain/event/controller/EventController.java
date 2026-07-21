@@ -1,5 +1,6 @@
 package com.tryna.domain.event.controller;
 
+import com.tryna.domain.event.controller.docs.EventControllerDocs;
 import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.service.EventCommandService;
 import com.tryna.domain.event.service.EventParseService;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/events")
-public class EventController {
+public class EventController implements EventControllerDocs {
 
     private final EventCommandService eventCommandService;
     private final EventQueryService eventQueryService;
@@ -77,6 +78,7 @@ public class EventController {
     /**
      * B107: 키워드 검색
      */
+    @Override
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<EventSearchResponse>> searchEvents(
             Authentication authentication,
