@@ -3,8 +3,7 @@ package com.tryna.domain.event.dto;
 import com.tryna.domain.action.dto.ActionItemSaveRequest;
 
 public record EventCreateRequest(
-        String sourceText,
-        String title,
+        String eventTitle,
         String description,
         String startDate,
         String startTime,
