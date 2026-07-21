@@ -4,7 +4,7 @@ import java.util.List;
 
 public record EventParseResponse(
         String tempEventId,
-        String sourceText,
+        String eventTitle,
         String startDate,
         String endDate,
         String startTime,

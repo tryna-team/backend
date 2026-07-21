@@ -7,8 +7,7 @@ import java.time.LocalDate;
 
 public record EventDetailResponse(
         Long eventId,
-        String sourceText,
-        String title,
+        String eventTitle,
         String description,
         LocalDate startDate,
         String startTime,

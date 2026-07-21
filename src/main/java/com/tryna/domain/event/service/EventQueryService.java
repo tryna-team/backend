@@ -412,7 +412,6 @@ public class EventQueryService {
     private EventDetailResponse toEventDetailResponse(Events event) {
         return new EventDetailResponse(
                 event.getEventId(),
-                event.getSourceText(),
                 event.getTitle(),
                 event.getDescription(),
                 event.getStartDate(),

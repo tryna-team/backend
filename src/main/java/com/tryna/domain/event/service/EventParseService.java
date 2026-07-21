@@ -27,7 +27,7 @@ public class EventParseService {
     private final BrainClient brainClient;
 
     public EventParseResponse parseEvent(EventParseRequest request) {
-        validateSourceText(request);
+        validateEventTitle(request);
 
         try {
             ResponseEntity<EventParseResponse> response = brainClient.exchange(
@@ -52,7 +52,7 @@ public class EventParseService {
     private EventParseResponse withTempEventId(EventParseResponse response) {
         return new EventParseResponse(
                 "tmp_" + UUID.randomUUID(),
-                response.sourceText(),
+                response.eventTitle(),
                 response.startDate(),
                 response.endDate(),
                 response.startTime(),
@@ -65,8 +65,8 @@ public class EventParseService {
         );
     }
 
-    private void validateSourceText(EventParseRequest request) {
-        if (request == null || !StringUtils.hasText(request.sourceText())) {
+    private void validateEventTitle(EventParseRequest request) {
+        if (request == null || !StringUtils.hasText(request.eventTitle())) {
             throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
         }
     }

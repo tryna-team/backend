@@ -42,9 +42,8 @@ public class EventCommandService {
         Users user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
 
-        validateRequiredText(request.sourceText());
-        validateRequiredText(request.title());
-        validateTitleLength(request.title());
+        validateRequiredText(request.eventTitle());
+        validateTitleLength(request.eventTitle());
 
         LocalDate startDate = parseDate(request.startDate());
         LocalTime startTime = parseTime(request.startTime());
@@ -55,8 +54,8 @@ public class EventCommandService {
 
         EventStatus status = startDate == null ? EventStatus.NEEDS_CONFIRMATION : EventStatus.CONFIRMED;
         Events event = Events.createInternalEvent(
-                request.sourceText().trim(),
-                request.title().trim(),
+                request.eventTitle().trim(),
+                request.eventTitle().trim(),
                 normalizeBlank(request.description()),
                 startDate,
                 combine(startDate, startTime),
