@@ -67,8 +67,7 @@ public class AuthService {
         OAuthClient client = oAuthClientProvider.getClient(request.provider());
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
-        // 클라이언트가 이메일을 별도로 넘겨줬다면 우선 사용, 없으면 소셜 서버에서 받은 이메일 사용
-        String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
+        String email = profile.email();
 
         // 2. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
@@ -136,7 +135,7 @@ public class AuthService {
         OAuthClient client = oAuthClientProvider.getClient(request.provider());
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
-        String email = (request.email() != null && !request.email().isBlank()) ? request.email() : profile.email();
+        String email = profile.email();
 
         // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);

@@ -3,9 +3,12 @@ package com.tryna.domain.event.dto;
 import java.util.List;
 
 public record EventParseResponse(
+        String tempEventId,
         String sourceText,
-        String dateCandidate,
-        String timeCandidate,
+        String startDate,
+        String endDate,
+        String startTime,
+        String endTime,
         String placeCandidate,
         List<String> toEmbedding,
         Boolean isAllDayCandidate,
