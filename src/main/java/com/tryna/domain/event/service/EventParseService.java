@@ -54,6 +54,7 @@ public class EventParseService {
                 "tmp_" + UUID.randomUUID(),
                 response.eventTitle(),
                 response.startDate(),
+                response.dateSource(),
                 response.endDate(),
                 response.startTime(),
                 response.endTime(),
