@@ -23,6 +23,7 @@ public class EventController implements EventControllerDocs {
     private final EventQueryService eventQueryService;
     private final EventParseService eventParseService;
 
+    @Override
     @PostMapping("/parse")
     public ApiResponse<EventParseResponse> parseEvent(
             Authentication authentication,
@@ -37,6 +38,7 @@ public class EventController implements EventControllerDocs {
         );
     }
 
+    @Override
     @PostMapping
     public ResponseEntity<ApiResponse<EventCreateResponse>> createEvent(
             Authentication authentication,
@@ -53,6 +55,7 @@ public class EventController implements EventControllerDocs {
                 ));
     }
 
+    @Override
     @GetMapping("/{eventId}")
     public ApiResponse<EventDetailResponse> getEventDetail(
             Authentication authentication,
