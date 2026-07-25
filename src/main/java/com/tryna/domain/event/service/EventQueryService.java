@@ -11,6 +11,7 @@ import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.CommonErrorCode;
 import com.tryna.global.exception.EventErrorCode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -279,7 +280,7 @@ public class EventQueryService {
                         VISIBLE_EVENT_STATUSES,
                         ConnectionStatus.ACTIVE
                 )
-                .orElseThrow(() -> new BusinessException(EventErrorCode.B104_EVENT_DETAIL_403));
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.COMMON_403));
 
         return toEventDetailResponse(event);
     }
