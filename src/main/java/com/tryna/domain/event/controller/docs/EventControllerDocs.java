@@ -1,5 +1,10 @@
 package com.tryna.domain.event.controller.docs;
 
+import com.tryna.domain.event.dto.EventCreateRequest;
+import com.tryna.domain.event.dto.EventCreateResponse;
+import com.tryna.domain.event.dto.EventDetailResponse;
+import com.tryna.domain.event.dto.EventParseRequest;
+import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.domain.event.dto.EventSearchResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,10 +13,47 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@Tag(name = "Events", description = "일정 관리 API")
+@Tag(name = "Events", description = "일정 생성/상세 관리 API")
 public interface EventControllerDocs {
+
+    @Operation(
+            summary = "C103 일정 생성 미리보기",
+            description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다.",
+            operationId = "parseEvent"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ApiResponse<EventParseResponse> parseEvent(
+            Authentication authentication,
+            @RequestBody EventParseRequest request
+    );
+
+    @Operation(
+            summary = "C104 일정 최종 저장",
+            description = "사용자가 확인한 일정 정보와 선택한 준비/실행 항목을 최종 저장합니다.",
+            operationId = "createEvent"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<EventCreateResponse>> createEvent(
+            Authentication authentication,
+            @RequestBody EventCreateRequest request
+    );
+
+    @Operation(
+            summary = "B104 일정 상세 조회",
+            description = "사용자에게 연결된 일정의 상세 정보를 조회합니다. 연결된 준비/실행 항목은 F103 API에서 조회합니다.",
+            operationId = "getEventDetail"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ApiResponse<EventDetailResponse> getEventDetail(
+            Authentication authentication,
+
+            @Parameter(description = "조회할 일정 ID", required = true, example = "1")
+            @PathVariable String eventId
+    );
 
     @Operation(
             summary = "B107 키워드 검색",
