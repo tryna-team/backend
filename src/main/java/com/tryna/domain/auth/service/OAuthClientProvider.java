@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -16,8 +17,17 @@ public class OAuthClientProvider {
     private final List<OAuthClient> clients;
 
     public OAuthClient getClient(Provider provider) {
-        return clients.stream()
+        List<OAuthClient> matchedClients = clients.stream()
                 .filter(client -> client.isSupported(provider))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400));    }
+                .collect(Collectors.toList());
+
+        if (matchedClients.isEmpty()) {
+            throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400);
+        }
+        if (matchedClients.size() > 1) {
+            throw new IllegalStateException("Multiple OAuth clients found for provider: " + provider);
+        }
+
+        return matchedClients.get(0);
+    }
 }

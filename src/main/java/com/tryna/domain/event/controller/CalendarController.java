@@ -1,5 +1,6 @@
 package com.tryna.domain.event.controller;
 
+import com.tryna.domain.event.controller.docs.CalendarControllerDocs;
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMainResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
@@ -18,10 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/calendars")
-public class CalendarController {
+public class CalendarController implements CalendarControllerDocs {
 
     private final EventQueryService eventQueryService;
 
+    @Override
     @GetMapping("/main")
     public ApiResponse<CalendarMainResponse> getCalendarMain(
             Authentication authentication,
@@ -38,6 +40,7 @@ public class CalendarController {
         );
     }
 
+    @Override
     @GetMapping("/monthly")
     public ApiResponse<CalendarMonthlyResponse> getMonthlyCalendar(
             Authentication authentication,
@@ -53,6 +56,7 @@ public class CalendarController {
         );
     }
 
+    @Override
     @GetMapping("/dates/{date}/events")
     public ApiResponse<CalendarDateEventsResponse> getDateEvents(
             Authentication authentication,

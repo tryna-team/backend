@@ -1,5 +1,7 @@
 package com.tryna.domain.event.service;
 
+import com.tryna.domain.action.dto.ActionItemSaveResponse;
+import com.tryna.domain.action.service.ActionItemService;
 import com.tryna.domain.event.dto.EventCreateRequest;
 import com.tryna.domain.event.dto.EventCreateResponse;
 import com.tryna.domain.event.entity.Events;
@@ -29,6 +31,7 @@ public class EventCommandService {
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
+    private final ActionItemService actionItemService;
 
     @Transactional
     public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
@@ -39,9 +42,8 @@ public class EventCommandService {
         Users user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
 
-        validateRequiredText(request.sourceText());
-        validateRequiredText(request.title());
-        validateTitleLength(request.title());
+        validateRequiredText(request.eventTitle());
+        validateTitleLength(request.eventTitle());
 
         LocalDate startDate = parseDate(request.startDate());
         LocalTime startTime = parseTime(request.startTime());
@@ -52,8 +54,8 @@ public class EventCommandService {
 
         EventStatus status = startDate == null ? EventStatus.NEEDS_CONFIRMATION : EventStatus.CONFIRMED;
         Events event = Events.createInternalEvent(
-                request.sourceText().trim(),
-                request.title().trim(),
+                request.eventTitle().trim(),
+                request.eventTitle().trim(),
                 normalizeBlank(request.description()),
                 startDate,
                 combine(startDate, startTime),
@@ -61,18 +63,25 @@ public class EventCommandService {
                 combine(endDate, endTime),
                 isAllDay,
                 normalizeBlank(request.location()),
-                normalizeBlank(request.eventTypeCandidate()),
+                normalizeBlank(request.eventType()),
                 status
         );
 
         Events savedEvent = eventsRepository.save(event);
         userEventsRepository.save(UserEvents.createOwner(user, savedEvent));
+        ActionItemSaveResponse savedActionItems =
+                actionItemService.saveActionItemsForEvent(
+                        user,
+                        savedEvent,
+                        request.actionItems()
+                );
 
         return new EventCreateResponse(
                 savedEvent.getEventId(),
                 savedEvent.getEventStatus(),
                 savedEvent.getSourceType(),
-                savedEvent.getCreatedAt()
+                savedEvent.getCreatedAt(),
+                savedActionItems.items()
         );
     }
 

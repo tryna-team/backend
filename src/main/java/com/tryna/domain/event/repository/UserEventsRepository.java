@@ -6,6 +6,8 @@ import com.tryna.domain.event.enums.EventStatus;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+
+import com.tryna.domain.event.enums.SourceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -62,7 +64,7 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     /**
      * 특정 사용자가 특정 일정에 연결되어 있는지 확인합니다.
      *
-     * E105, E106, F103에서 현재 사용자가 해당 일정에 접근할 수 있는지
+     * C104, E106, F103에서 현재 사용자가 해당 일정에 접근할 수 있는지
      * 확인하기 위해 사용합니다.
      *
      * @param userId 사용자 ID
@@ -87,5 +89,32 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             """)
     int deleteByUserId(
             @Param("userId") Long userId
+    );
+
+    /**
+     * 현재 사용자의 Tryna 내부 일정 중 제목에 검색어가 포함된 일정을 조회합니다.
+     *
+     * 외부 캘린더 일정과 검색 결과에 노출하지 않는 상태의 일정은 제외합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param keyword 검색 키워드
+     * @param eventStatuses 검색 가능한 일정 상태
+     * @param excludedSourceType 검색에서 제외할 일정 출처 유형
+     * @return 일정 제목이 검색어와 일치한 일정 목록
+     */
+    @Query("""
+            SELECT e
+              FROM UserEvents ue
+              JOIN ue.event e
+             WHERE ue.user.userId = :userId
+               AND e.eventStatus IN :eventStatuses
+               AND e.sourceType <> :excludedSourceType
+               AND LOWER(e.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            """)
+    List<Events> findInternalEventsByTitleContaining(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses,
+            @Param("excludedSourceType") SourceType excludedSourceType
     );
 }

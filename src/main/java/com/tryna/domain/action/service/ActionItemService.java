@@ -55,7 +55,7 @@ public class ActionItemService {
             ActionItemSaveRequest request
     ) {
         // 1. 저장할 준비/실행 항목이 존재하는지 확인
-        if (request.items().isEmpty()) {
+        if (request == null || request.items() == null || request.items().isEmpty()) {
             throw new BusinessException(
                     ActionErrorCode.E105_ACTION_ITEM_400_1
             );
@@ -93,30 +93,43 @@ public class ActionItemService {
             );
         }
 
-        // 5. 준비/실행 항목의 유형별 필수값 검증
-        validateActionItems(request.items());
+        // 5. 실제 저장 로직은 C104에서도 재사용할 수 있도록 공통 메서드로 위임
+        return saveActionItemsForEvent(user, event, request);
+    }
 
-        // 6. 요청 항목을 ActionItems 엔티티로 변환
-        List<ActionItems> actionItems = request.items().stream()
-                .map(item -> ActionItems.create(
-                        event,
-                        item.title(),
-                        item.itemType(),
-                        item.displayDate(),
-                        item.displayTime(),
-                        item.offsetDays(),
-                        item.createdBy(),
-                        item.sourceTemplateId()
-                ))
-                .toList();
+    @Transactional
+    public ActionItemSaveResponse saveActionItemsForEvent(
+            Users user,
+            Events event,
+            ActionItemSaveRequest request
+    ) {
+        // C104에서는 선택 항목이 없어도 피드백 로그는 저장될 수 있다.
+        List<ActionItems> savedActionItems = List.of();
 
-        // 7. 준비/실행 항목 일괄 저장
-        List<ActionItems> savedActionItems =
-                actionItemsRepository.saveAll(actionItems);
+        if (request != null && request.items() != null && !request.items().isEmpty()) {
+            validateActionItems(request.items());
+
+            // 6. 요청 항목을 ActionItems 엔티티로 변환
+            List<ActionItems> actionItems = request.items().stream()
+                    .map(item -> ActionItems.create(
+                            event,
+                            item.title(),
+                            item.itemType(),
+                            item.displayDate(),
+                            item.displayTime(),
+                            item.offsetDays(),
+                            item.createdBy(),
+                            item.sourceTemplateId()
+                    ))
+                    .toList();
+
+            // 7. 준비/실행 항목 일괄 저장
+            savedActionItems = actionItemsRepository.saveAll(actionItems);
+        }
 
         // 8. 피드백 로그를 RecommendationFeedbacks 엔티티로 변환
         List<RecommendationFeedbacks> feedbacks =
-                request.feedbackLogs().stream()
+                safeFeedbackLogs(request).stream()
                         .map(feedback -> RecommendationFeedbacks.create(
                                 user,
                                 event,
@@ -135,9 +148,18 @@ public class ActionItemService {
 
         // 10. 저장된 준비/실행 항목을 응답 DTO로 변환하여 반환
         return ActionItemSaveResponse.from(
-                eventId,
+                event.getEventId(),
                 savedActionItems
         );
+    }
+
+    private List<ActionItemSaveRequest.Feedback> safeFeedbackLogs(
+            ActionItemSaveRequest request
+    ) {
+        if (request == null || request.feedbackLogs() == null) {
+            return List.of();
+        }
+        return request.feedbackLogs();
     }
 
     /**

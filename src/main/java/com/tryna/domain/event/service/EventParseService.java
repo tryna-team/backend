@@ -5,6 +5,7 @@ import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.EventErrorCode;
 import com.tryna.infra.brain.BrainClient;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -26,7 +27,7 @@ public class EventParseService {
     private final BrainClient brainClient;
 
     public EventParseResponse parseEvent(EventParseRequest request) {
-        validateSourceText(request);
+        validateEventTitle(request);
 
         try {
             ResponseEntity<EventParseResponse> response = brainClient.exchange(
@@ -41,15 +42,32 @@ public class EventParseService {
                 throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
             }
 
-            return body;
+            return withTempEventId(body);
         } catch (RestClientException e) {
             log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
     }
 
-    private void validateSourceText(EventParseRequest request) {
-        if (request == null || !StringUtils.hasText(request.sourceText())) {
+    private EventParseResponse withTempEventId(EventParseResponse response) {
+        return new EventParseResponse(
+                "tmp_" + UUID.randomUUID(),
+                response.eventTitle(),
+                response.startDate(),
+                response.dateSource(),
+                response.endDate(),
+                response.startTime(),
+                response.endTime(),
+                response.placeCandidate(),
+                response.toEmbedding(),
+                response.isAllDayCandidate(),
+                response.needsConfirmation(),
+                response.warnings()
+        );
+    }
+
+    private void validateEventTitle(EventParseRequest request) {
+        if (request == null || !StringUtils.hasText(request.eventTitle())) {
             throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
         }
     }
