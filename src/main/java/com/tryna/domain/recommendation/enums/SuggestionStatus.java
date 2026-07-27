@@ -1,11 +1,11 @@
-package com.tryna.domain.event.enums;
+package com.tryna.domain.recommendation.enums;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-public enum DateSource {
-    EXPLICIT,
-    RELATIVE_EXPRESSION,
-    DEFAULT_TODAY;
+public enum SuggestionStatus {
+    READY,
+    EMPTY,
+    ERROR;
 
     @JsonValue
     public String toValue() {

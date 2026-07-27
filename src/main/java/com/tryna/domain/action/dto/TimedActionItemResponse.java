@@ -58,7 +58,7 @@ public record TimedActionItemResponse(
             @Schema(description = "준비/실행 항목 제목", example = "꽃다발 준비하기")
             String title,
 
-            @Schema(description = "항목 유형", example = "TIMED_ACTION")
+            @Schema(description = "항목 유형", example = "timed_action")
             ItemType itemType,
 
             @Schema(description = "캘린더 표시 날짜", example = "2026-07-03")
