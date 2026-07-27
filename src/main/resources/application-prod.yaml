@@ -22,7 +22,7 @@ spring:
       host: ${VALKEY_HOST}
       port: ${VALKEY_PORT}
       password: ${VALKEY_PASSWORD}
-      timeout: 2s
+      timeout: 5s
       ssl:
         enabled: true
 
