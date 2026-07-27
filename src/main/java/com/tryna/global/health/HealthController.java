@@ -31,7 +31,7 @@ import java.util.concurrent.TimeoutException;
 public class HealthController {
 
     private static final int DB_VALIDATION_TIMEOUT_SECONDS = 2;
-    private static final int REDIS_PING_TIMEOUT_SECONDS = 2;
+    private static final int REDIS_PING_TIMEOUT_SECONDS = 5;
     private static final String REDIS_PING_RESPONSE = "PONG";
     private static final String DB_DOWN_MESSAGE = "Database connectivity check failed";
     private static final String REDIS_DOWN_MESSAGE = "Redis connectivity check failed";
