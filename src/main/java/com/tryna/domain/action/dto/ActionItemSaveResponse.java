@@ -69,7 +69,7 @@ public record ActionItemSaveResponse(
 
             @Schema(
                     description = "항목 유형",
-                    example = "TIMED_ACTION"
+                    example = "timed_action"
             )
             ItemType itemType,
 

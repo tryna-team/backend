@@ -39,7 +39,7 @@ public record ActionItemSaveRequest(
             @Size(max = 255, message = "준비/실행 항목 제목은 255자 이하여야 합니다.")
             String title,
 
-            @Schema(description = "항목 유형", example = "TIMED_ACTION")
+            @Schema(description = "항목 유형", example = "timed_action")
             @NotNull(message = "항목 유형은 필수입니다.")
             ItemType itemType,
 

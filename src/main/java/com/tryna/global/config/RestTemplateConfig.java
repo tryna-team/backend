@@ -19,4 +19,15 @@ public class RestTemplateConfig {
 
         return new RestTemplate(factory);
     }
+
+    @Bean("brainRestTemplate")
+    public RestTemplate brainRestTemplate() {
+        SimpleClientHttpRequestFactory factory =
+                new SimpleClientHttpRequestFactory();
+
+        factory.setConnectTimeout(3000);
+        factory.setReadTimeout(15000);
+
+        return new RestTemplate(factory);
+    }
 }

@@ -1,7 +1,7 @@
 package com.tryna.infra.brain;
 
 import com.tryna.global.config.BrainClientProperties;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -10,13 +10,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 @Component
-@RequiredArgsConstructor
 public class BrainClient {
 
     public static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
     private final RestTemplate restTemplate;
     private final BrainClientProperties properties;
+
+    public BrainClient(
+            @Qualifier("brainRestTemplate") RestTemplate restTemplate,
+            BrainClientProperties properties
+    ) {
+        this.restTemplate = restTemplate;
+        this.properties = properties;
+    }
 
     public String getBaseUrl() {
         return properties.getBaseUrl();
