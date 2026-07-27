@@ -1,14 +1,7 @@
 package com.tryna.domain.event.enums;
 
-import com.fasterxml.jackson.annotation.JsonValue;
-
 public enum DateSource {
     EXPLICIT,
     RELATIVE_EXPRESSION,
-    DEFAULT_TODAY;
-
-    @JsonValue
-    public String toValue() {
-        return name().toLowerCase();
-    }
+    DEFAULT_TODAY
 }
