@@ -174,8 +174,13 @@ public class EventCommandService {
 
     private RecurrenceRule resolveRecurrenceRule(EventCreateRequest request, LocalDate startDate) {
         RecurrenceType requestedType = request.recurrenceType();
-        boolean isRecurring = Boolean.TRUE.equals(request.isRecurring())
-                || (requestedType != null && requestedType != RecurrenceType.NONE);
+        boolean hasRecurrenceType = requestedType != null && requestedType != RecurrenceType.NONE;
+
+        if (Boolean.FALSE.equals(request.isRecurring()) && hasRecurrenceType) {
+            throw new BusinessException(EventErrorCode.C104_EVENT_SAVE_400);
+        }
+
+        boolean isRecurring = Boolean.TRUE.equals(request.isRecurring()) || hasRecurrenceType;
 
         if (!isRecurring) {
             return new RecurrenceRule(
