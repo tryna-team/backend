@@ -4,6 +4,7 @@ import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.entity.mapping.UserEvents;
 import com.tryna.domain.event.enums.EventStatus;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -58,6 +59,27 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     List<Events> findEventsByDate(
             @Param("userId") Long userId,
             @Param("date") LocalDate date,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
+    );
+
+    @Query("""
+            SELECT e
+              FROM UserEvents ue
+              JOIN ue.event e
+             WHERE ue.user.userId = :userId
+               AND e.isRecurring = true
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND (
+                    e.recurrenceEndDate IS NULL
+                    OR e.recurrenceEndDate >= :startDateTime
+               )
+               AND e.eventStatus IN :eventStatuses
+            """)
+    List<Events> findRecurringEventsInRange(
+            @Param("userId") Long userId,
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDate") LocalDate endDate,
             @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
