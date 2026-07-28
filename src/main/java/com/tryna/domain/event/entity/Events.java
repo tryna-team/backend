@@ -146,6 +146,12 @@ public class Events extends BaseEntity {
             LocalDate endDate,
             LocalDateTime endDatetime,
             Boolean isAllDay,
+            Boolean isRecurring,
+            RecurrenceType recurrenceType,
+            Integer recurrenceInterval,
+            RecurrenceDayOfWeek recurrenceDayOfWeek,
+            Integer recurrenceDayOfMonth,
+            LocalDateTime recurrenceEndDate,
             String location,
             String eventType,
             EventStatus eventStatus
@@ -159,9 +165,12 @@ public class Events extends BaseEntity {
         event.endDate = endDate;
         event.endDatetime = endDatetime;
         event.isAllDay = isAllDay;
-        event.isRecurring = false;
-        event.recurrenceType = RecurrenceType.NONE;
-        event.recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
+        event.isRecurring = isRecurring;
+        event.recurrenceType = recurrenceType;
+        event.recurrenceInterval = recurrenceInterval;
+        event.recurrenceDayOfWeek = recurrenceDayOfWeek;
+        event.recurrenceDayOfMonth = recurrenceDayOfMonth;
+        event.recurrenceEndDate = recurrenceEndDate;
         event.location = location;
         event.eventType = eventType;
         event.sourceType = SourceType.USER_NATURAL_LANGUAGE;

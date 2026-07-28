@@ -1,6 +1,7 @@
 package com.tryna.domain.event.dto;
 
 import com.tryna.domain.action.dto.ActionItemSaveRequest;
+import com.tryna.domain.event.enums.RecurrenceType;
 
 public record EventCreateRequest(
         String eventTitle,
@@ -12,6 +13,10 @@ public record EventCreateRequest(
         Boolean isAllDay,
         String location,
         String eventType,
+        Boolean isRecurring,
+        RecurrenceType recurrenceType,
+        Integer recurrenceInterval,
+        String recurrenceEndDate,
         ActionItemSaveRequest actionItems
 ) {
 }
