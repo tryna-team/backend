@@ -5,6 +5,8 @@ import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
+import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
@@ -123,13 +125,31 @@ public class EventQueryService {
     }
 
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
-        List<CalendarDateEventsResponse.EventSummary> events = userEventsRepository.findEventsByDate(
+        List<EventOccurrence> occurrences = new ArrayList<>(userEventsRepository.findEventsByDate(
                         userId,
                         date,
                         VISIBLE_EVENT_STATUSES
                 )
                 .stream()
-                .map(this::toEventSummary)
+                .map(event -> new EventOccurrence(event, event.getStartDate()))
+                .toList());
+
+        List<EventOccurrence> recurringOccurrences = userEventsRepository.findRecurringEventsInRange(
+                        userId,
+                        date.atStartOfDay(),
+                        date,
+                        VISIBLE_EVENT_STATUSES
+                )
+                .stream()
+                .filter(event -> isAdditionalRecurringOccurrenceOn(event, date))
+                .map(event -> new EventOccurrence(event, date))
+                .toList();
+
+        occurrences.addAll(recurringOccurrences);
+        occurrences.sort(eventOccurrenceComparator());
+
+        List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
+                .map(occurrence -> toEventSummary(occurrence.event(), occurrence.occurrenceDate()))
                 .toList();
 
         return new CalendarDateEventsResponse(
@@ -299,7 +319,118 @@ public class EventQueryService {
             Long count = (Long) row[1];
             countsByDate.put(date, count);
         }
+
+        List<Events> recurringEvents = userEventsRepository.findRecurringEventsInRange(
+                userId,
+                startDate.atStartOfDay(),
+                endDate,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        for (Events event : recurringEvents) {
+            for (LocalDate occurrenceDate : resolveRecurringOccurrenceDates(event, startDate, endDate)) {
+                if (occurrenceDate.equals(event.getStartDate())) {
+                    continue;
+                }
+                countsByDate.merge(occurrenceDate, 1L, Long::sum);
+            }
+        }
+
         return countsByDate;
+    }
+
+    private List<LocalDate> resolveRecurringOccurrenceDates(Events event, LocalDate rangeStart, LocalDate rangeEnd) {
+        List<LocalDate> dates = new ArrayList<>();
+        LocalDate current = rangeStart.isAfter(event.getStartDate()) ? rangeStart : event.getStartDate();
+
+        while (!current.isAfter(rangeEnd)) {
+            if (isRecurringOccurrenceOn(event, current)) {
+                dates.add(current);
+            }
+            current = current.plusDays(1);
+        }
+
+        return dates;
+    }
+
+    private boolean isAdditionalRecurringOccurrenceOn(Events event, LocalDate date) {
+        return !date.equals(event.getStartDate()) && isRecurringOccurrenceOn(event, date);
+    }
+
+    private boolean isRecurringOccurrenceOn(Events event, LocalDate date) {
+        if (!Boolean.TRUE.equals(event.getIsRecurring())
+                || event.getStartDate() == null
+                || date.isBefore(event.getStartDate())
+                || event.getRecurrenceType() == null
+                || event.getRecurrenceType() == RecurrenceType.NONE
+                || event.getRecurrenceType() == RecurrenceType.CUSTOM) {
+            return false;
+        }
+
+        if (event.getRecurrenceEndDate() != null
+                && date.isAfter(event.getRecurrenceEndDate().toLocalDate())) {
+            return false;
+        }
+
+        int interval = event.getRecurrenceInterval() == null ? 1 : event.getRecurrenceInterval();
+        if (interval < 1) {
+            return false;
+        }
+
+        return switch (event.getRecurrenceType()) {
+            case DAILY -> ChronoUnit.DAYS.between(event.getStartDate(), date) % interval == 0;
+            case WEEKLY -> isWeeklyOccurrence(event, date, interval);
+            case MONTHLY -> isMonthlyOccurrence(event, date, interval);
+            case YEARLY -> isYearlyOccurrence(event, date, interval);
+            case NONE, CUSTOM -> false;
+        };
+    }
+
+    private boolean isWeeklyOccurrence(Events event, LocalDate date, int interval) {
+        RecurrenceDayOfWeek expectedDayOfWeek = event.getRecurrenceDayOfWeek();
+        if (expectedDayOfWeek == null || expectedDayOfWeek == RecurrenceDayOfWeek.NONE) {
+            expectedDayOfWeek = toRecurrenceDayOfWeek(event.getStartDate());
+        }
+
+        return expectedDayOfWeek == toRecurrenceDayOfWeek(date)
+                && ChronoUnit.WEEKS.between(event.getStartDate(), date) % interval == 0;
+    }
+
+    private boolean isMonthlyOccurrence(Events event, LocalDate date, int interval) {
+        Integer expectedDayOfMonth = event.getRecurrenceDayOfMonth();
+        if (expectedDayOfMonth == null || date.getDayOfMonth() != expectedDayOfMonth) {
+            return false;
+        }
+
+        long months = ChronoUnit.MONTHS.between(
+                YearMonth.from(event.getStartDate()),
+                YearMonth.from(date)
+        );
+        return months % interval == 0;
+    }
+
+    private boolean isYearlyOccurrence(Events event, LocalDate date, int interval) {
+        Integer expectedDayOfMonth = event.getRecurrenceDayOfMonth();
+        if (expectedDayOfMonth == null
+                || date.getMonthValue() != event.getStartDate().getMonthValue()
+                || date.getDayOfMonth() != expectedDayOfMonth) {
+            return false;
+        }
+
+        long years = ChronoUnit.YEARS.between(event.getStartDate(), date);
+        return years % interval == 0;
+    }
+
+    private RecurrenceDayOfWeek toRecurrenceDayOfWeek(LocalDate date) {
+        return switch (date.getDayOfWeek()) {
+            case MONDAY -> RecurrenceDayOfWeek.MON;
+            case TUESDAY -> RecurrenceDayOfWeek.TUE;
+            case WEDNESDAY -> RecurrenceDayOfWeek.WED;
+            case THURSDAY -> RecurrenceDayOfWeek.THU;
+            case FRIDAY -> RecurrenceDayOfWeek.FRI;
+            case SATURDAY -> RecurrenceDayOfWeek.SAT;
+            case SUNDAY -> RecurrenceDayOfWeek.SUN;
+        };
     }
 
     /**
@@ -396,18 +527,51 @@ public class EventQueryService {
     }
 
     private CalendarDateEventsResponse.EventSummary toEventSummary(Events event) {
+        return toEventSummary(event, event.getStartDate());
+    }
+
+    private CalendarDateEventsResponse.EventSummary toEventSummary(Events event, LocalDate occurrenceDate) {
         return new CalendarDateEventsResponse.EventSummary(
                 event.getEventId(),
                 event.getTitle(),
-                event.getStartDate(),
+                occurrenceDate,
                 formatTime(event.getStartDatetime()),
-                event.getEndDate(),
+                resolveOccurrenceEndDate(event, occurrenceDate),
                 formatTime(event.getEndDatetime()),
                 event.getIsAllDay(),
                 event.getLocation(),
                 event.getSourceType(),
                 event.getEventStatus()
         );
+    }
+
+    private LocalDate resolveOccurrenceEndDate(Events event, LocalDate occurrenceDate) {
+        if (event.getStartDate() == null || event.getEndDate() == null || occurrenceDate == null) {
+            return event.getEndDate();
+        }
+
+        long durationDays = ChronoUnit.DAYS.between(event.getStartDate(), event.getEndDate());
+        return occurrenceDate.plusDays(durationDays);
+    }
+
+    private Comparator<EventOccurrence> eventOccurrenceComparator() {
+        return Comparator
+                .comparing((EventOccurrence occurrence) -> occurrence.event().getStartDatetime() == null)
+                .thenComparing(
+                        occurrence -> occurrence.event().getStartDatetime(),
+                        Comparator.nullsLast(LocalDateTime::compareTo)
+                )
+                .thenComparing(
+                        occurrence -> occurrence.event().getCreatedAt(),
+                        Comparator.nullsLast(LocalDateTime::compareTo)
+                )
+                .thenComparing(occurrence -> occurrence.event().getEventId());
+    }
+
+    private record EventOccurrence(
+            Events event,
+            LocalDate occurrenceDate
+    ) {
     }
 
     private EventDetailResponse toEventDetailResponse(Events event) {
