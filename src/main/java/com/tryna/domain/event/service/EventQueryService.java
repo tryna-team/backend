@@ -125,16 +125,16 @@ public class EventQueryService {
     }
 
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
-        List<CalendarDateEventsResponse.EventSummary> events = new ArrayList<>(userEventsRepository.findEventsByDate(
+        List<EventOccurrence> occurrences = new ArrayList<>(userEventsRepository.findEventsByDate(
                         userId,
                         date,
                         VISIBLE_EVENT_STATUSES
                 )
                 .stream()
-                .map(this::toEventSummary)
+                .map(event -> new EventOccurrence(event, event.getStartDate()))
                 .toList());
 
-        List<CalendarDateEventsResponse.EventSummary> recurringEvents = userEventsRepository.findRecurringEventsInRange(
+        List<EventOccurrence> recurringOccurrences = userEventsRepository.findRecurringEventsInRange(
                         userId,
                         date.atStartOfDay(),
                         date,
@@ -142,11 +142,15 @@ public class EventQueryService {
                 )
                 .stream()
                 .filter(event -> isAdditionalRecurringOccurrenceOn(event, date))
-                .map(event -> toEventSummary(event, date))
+                .map(event -> new EventOccurrence(event, date))
                 .toList();
 
-        events.addAll(recurringEvents);
-        events.sort(eventSummaryComparator());
+        occurrences.addAll(recurringOccurrences);
+        occurrences.sort(eventOccurrenceComparator());
+
+        List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
+                .map(occurrence -> toEventSummary(occurrence.event(), occurrence.occurrenceDate()))
+                .toList();
 
         return new CalendarDateEventsResponse(
                 date,
@@ -550,14 +554,24 @@ public class EventQueryService {
         return occurrenceDate.plusDays(durationDays);
     }
 
-    private Comparator<CalendarDateEventsResponse.EventSummary> eventSummaryComparator() {
+    private Comparator<EventOccurrence> eventOccurrenceComparator() {
         return Comparator
-                .comparing((CalendarDateEventsResponse.EventSummary event) -> event.startTime() == null)
+                .comparing((EventOccurrence occurrence) -> occurrence.event().getStartDatetime() == null)
                 .thenComparing(
-                        CalendarDateEventsResponse.EventSummary::startTime,
-                        Comparator.nullsLast(String::compareTo)
+                        occurrence -> occurrence.event().getStartDatetime(),
+                        Comparator.nullsLast(LocalDateTime::compareTo)
                 )
-                .thenComparing(CalendarDateEventsResponse.EventSummary::eventId);
+                .thenComparing(
+                        occurrence -> occurrence.event().getCreatedAt(),
+                        Comparator.nullsLast(LocalDateTime::compareTo)
+                )
+                .thenComparing(occurrence -> occurrence.event().getEventId());
+    }
+
+    private record EventOccurrence(
+            Events event,
+            LocalDate occurrenceDate
+    ) {
     }
 
     private EventDetailResponse toEventDetailResponse(Events event) {
