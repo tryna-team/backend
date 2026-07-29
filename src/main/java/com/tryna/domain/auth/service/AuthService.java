@@ -68,6 +68,7 @@ public class AuthService {
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         String email = profile.email();
+        String grantedScopes = profile.grantedScopes();
 
         // 2. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
@@ -77,7 +78,13 @@ public class AuthService {
 
         if (existingAuth.isPresent()) {
             // [A. 기존 회원 로그인]
-            user = existingAuth.get().getUser();
+            Auths auth = existingAuth.get();
+            user = auth.getUser();
+
+            // 프론트가 새로운 리프레시 토큰이나 스코프를 줬다면 최신 상태로 갱신 (더티 체킹)
+            if (request.oauthRefreshToken() != null || grantedScopes != null) {
+                auth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
+            }
         } else {
             // [B. 신규 회원 가입]
             isNewUser = true;
@@ -94,7 +101,7 @@ public class AuthService {
             userSettingsRepository.save(defaultSettings);
 
             //B-4. Auths 인증 정보 저장
-            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
             try {
                 authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
             } catch (DataIntegrityViolationException e) {
@@ -136,6 +143,7 @@ public class AuthService {
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         String email = profile.email();
+        String grantedScopes = profile.grantedScopes();
 
         // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
@@ -150,7 +158,7 @@ public class AuthService {
         user.upgradeToUser();
 
         // 6. Auths 정보 생성 및 약관 매핑 저장
-        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
         try {
             authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
         } catch (DataIntegrityViolationException e) {

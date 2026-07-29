@@ -57,16 +57,33 @@ public class Auths extends BaseEntity {
     @Column(name = "email", length = 255)
     private String email;
 
+    @Column(name = "oauth_refresh_token", length = 512)
+    private String oauthRefreshToken;
+
+    @Column(name = "granted_scopes", length = 1000)
+    private String grantedScopes;
+
     // 명세서 삭제 정책: Soft Delete
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    public static Auths createAuth(Users user, Provider provider, String socialId, String email) {
-        Auths auth = new Auths();
+    public static Auths createAuth(Users user, Provider provider, String socialId, String email, String oauthRefreshToken, String grantedScopes) {        Auths auth = new Auths();
         auth.user = user;
         auth.provider = provider;
         auth.socialId = socialId;
         auth.email = email;
+        auth.oauthRefreshToken = oauthRefreshToken;
+        auth.grantedScopes = grantedScopes;
         return auth;
+    }
+
+    // 기존 회원 로그인 시 최신 토큰/권한으로 갱신하는 메서드 (더티 체킹)
+    public void updateOAuthInfo(String oauthRefreshToken, String grantedScopes) {
+        if (oauthRefreshToken != null && !oauthRefreshToken.isBlank()) {
+            this.oauthRefreshToken = oauthRefreshToken;
+        }
+        if (grantedScopes != null && !grantedScopes.isBlank()) {
+            this.grantedScopes = grantedScopes;
+        }
     }
 }

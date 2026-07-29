@@ -13,5 +13,5 @@ public interface OAuthClient {
     SocialUserProfile getProfile(String oauthAccessToken);
 
     // 검증 결과 레코드
-    record SocialUserProfile(String socialId, String email) {}
+    record SocialUserProfile(String socialId, String email, String grantedScopes) {}
 }

@@ -18,6 +18,9 @@ public record AuthSessionCreateRequest(
         @NotBlank(message = "OAuth 액세스 토큰은 필수입니다.")
         String oauthAccessToken,
 
+        @Schema(description = "소셜 서버에서 발급받은 리프레시 토큰 (최초 로그인/권한 재동의 시에만 프론트가 전달)", example = "1//0eA...")
+        String oauthRefreshToken,
+
         @Schema(description = "신규 가입 시 동의한 약관 유형 목록 (기존 회원은 빈 배열 가능)", example = "[\"SERVICE\", \"PRIVACY\", \"LOCATION\"]")
         @NotNull(message = "약관 동의 목록은 Null일 수 없습니다.")
         List<TermType> agreedTermTypes,
