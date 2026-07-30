@@ -40,6 +40,11 @@ jwt:
 oauth2:
   google:
     client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+
+app:
+  crypto:
+    secret-key: ${CRYPTO_SECRET_KEY}
 
 brain:
   base-url: ${FASTAPI_BASE_URL}

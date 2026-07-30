@@ -36,8 +36,8 @@ public class GoogleOAuthClient implements OAuthClient {
 
     @Override
     public SocialUserProfile getProfile(String oauthAccessToken) {
-        // 1. 토큰 유효성 및 발급처(Audience) 교차 검증
-        verifyTokenAudience(oauthAccessToken);
+        // 1. 토큰 유효성 및 발급처(Audience) 검증 후, 구글이 인증한 실제 scope 반환 받음
+        String verifiedScopes = verifyTokenAndExtractScopes(oauthAccessToken);
 
         // 2. 유저 정보 조회
         HttpHeaders headers = new HttpHeaders();
@@ -61,34 +61,40 @@ public class GoogleOAuthClient implements OAuthClient {
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
         }
 
-        return new SocialUserProfile(userInfo.id(), userInfo.email());
+        return new SocialUserProfile(userInfo.id(), userInfo.email(), verifiedScopes);
     }
 
-    //  해커의 토큰 탈취 및 우회 공격 방어 로직
-    private void verifyTokenAudience(String accessToken) {
+    /**
+     * 구글 tokeninfo 호출을 통해
+     * 1) 토큰의 위변조 및 audience(client-id) 검증
+     * 2) 구글이 보증하는 실제 granted scope 추출
+     */
+    private String verifyTokenAndExtractScopes(String accessToken) {
         ResponseEntity<Map> response;
 
         // [통신 영역]: 외부 구글 서버와의 통신만 예외 처리
         try {
             response = restTemplate.getForEntity(TOKEN_INFO_URL + accessToken, Map.class);
         } catch (HttpClientErrorException e) {
-            // 4xx 에러 (구글이 토큰을 거절함)
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
         } catch (Exception e) {
-            // 5xx 타임아웃, DNS 등 네트워크 통신 장애
-            throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400); // (서버 에러용 코드가 있다면 그걸로 변경 권장)
+            throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400);
         }
 
         // [비즈니스 검증 영역]: 통신 완료 후 응답값 검증
-        if (response.getBody() == null) {
+        Map<String, Object> body = response.getBody();
+        if (body == null) {
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
         }
 
-        String aud = (String) response.getBody().get("aud");
+        String aud = (String) body.get("aud");
 
-        // 구글이 발급한 토큰의 도착지(aud)가 우리 프로젝트의 Client ID와 다르면 예외 처리
+        // Client ID 교차 검증
         if (!googleClientId.equals(aud)) {
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
         }
+
+        // [Zero-Trust] 프론트 입력값 대신 구글 응답의 'scope' 값을 직접 추출
+        return (String) body.get("scope");
     }
 }
