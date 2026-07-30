@@ -1,0 +1,1 @@
+ALTER TABLE auths ALTER COLUMN oauth_refresh_token TYPE VARCHAR(1024);

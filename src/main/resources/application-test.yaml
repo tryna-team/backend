@@ -28,6 +28,10 @@ oauth2:
     client-id: ${GOOGLE_CLIENT_ID:dummy-client-id-for-ci}
     client-secret: ${GOOGLE_CLIENT_SECRET:dummy-client-secret-for-ci}
 
+app:
+  crypto:
+    secret-key: ${CRYPTO_SECRET_KEY:dummy-secret-key}
+
 brain:
   base-url: http://localhost:8000
   api-key: test-internal-api-key

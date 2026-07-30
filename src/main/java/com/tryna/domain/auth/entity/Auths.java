@@ -48,7 +48,7 @@ public class Auths extends BaseEntity {
     private String email;
 
     @Convert(converter = StringCryptoConverter.class)
-    @Column(name = "oauth_refresh_token", length = 512)
+    @Column(name = "oauth_refresh_token", length = 1024)
     private String oauthRefreshToken;
 
     @Column(name = "granted_scopes", length = 1000)
