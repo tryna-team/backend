@@ -105,6 +105,7 @@ jobs:
             INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            CRYPTO_SECRET_KEY=${{ secrets.CRYPTO_SECRET_KEY }}
 
       # ECS 배포 (새 리비전 등록 + 서비스 업데이트 + 안정화 대기)
       - name: Deploy to Amazon ECS
