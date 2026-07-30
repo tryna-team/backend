@@ -18,9 +18,9 @@ public class DummyOAuthClient implements OAuthClient {
     public SocialUserProfile getProfile(String oauthAccessToken) {
         // TODO: 실제 카카오/애플/구글 API 연동 전까지 통과시키기 위한 더미 데이터 반환
         return new SocialUserProfile(
-                "dummy-social-id-" + oauthAccessToken,
+                "dummy_social_id_1234",
                 "dummy_email@example.com",
-                "https://www.googleapis.com/auth/calendar"
+                null
         );
     }
 }
