@@ -42,6 +42,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final UserSettingsRepository userSettingsRepository;
     private final OAuthClientProvider oAuthClientProvider;
+    private final GoogleTokenProvider googleTokenProvider;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -68,6 +69,7 @@ public class AuthService {
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         String email = profile.email();
+        String grantedScopes = profile.grantedScopes();
 
         // 2. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
@@ -77,7 +79,18 @@ public class AuthService {
 
         if (existingAuth.isPresent()) {
             // [A. 기존 회원 로그인]
-            user = existingAuth.get().getUser();
+            Auths auth = existingAuth.get();
+            user = auth.getUser();
+
+            // 더티 체킹으로 갱신하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
+            if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+                validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
+            }
+
+            // 프론트가 새로운 리프레시 토큰이나 스코프를 줬다면 최신 상태로 갱신 (더티 체킹)
+            if (request.oauthRefreshToken() != null || grantedScopes != null) {
+                auth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
+            }
         } else {
             // [B. 신규 회원 가입]
             isNewUser = true;
@@ -93,8 +106,13 @@ public class AuthService {
             UserSettings defaultSettings = UserSettings.createDefault(user);
             userSettingsRepository.save(defaultSettings);
 
+            // DB에 저장하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
+            if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+                validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
+            }
+
             //B-4. Auths 인증 정보 저장
-            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
             try {
                 authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
             } catch (DataIntegrityViolationException e) {
@@ -136,6 +154,7 @@ public class AuthService {
         OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
         String socialId = profile.socialId();
         String email = profile.email();
+        String grantedScopes = profile.grantedScopes();
 
         // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
@@ -149,8 +168,13 @@ public class AuthService {
         // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
+        // DB에 저장하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
+        if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+            validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
+        }
+
         // 6. Auths 정보 생성 및 약관 매핑 저장
-        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email);
+        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
         try {
             authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
         } catch (DataIntegrityViolationException e) {
@@ -329,6 +353,32 @@ public class AuthService {
                     .map(term -> UserAgreedTerms.create(user, term))
                     .toList();
             userAgreedTermsRepository.saveAll(agreedTermsList);
+        }
+    }
+
+    // 프론트엔드가 보낸 Refresh Token이 Access Token의 주인과 일치하는지 교차 검증
+    private void validateRefreshTokenOwnership(String refreshToken, String expectedSocialId, com.tryna.domain.auth.enums.Provider provider) {
+        // 우선, 구글일 때만 이 방어 로직 수행
+        if (provider != com.tryna.domain.auth.enums.Provider.GOOGLE) {
+            return;
+        }
+
+        try {
+            // 1. 프론트가 준 Refresh Token을 이용해 구글에서 1회용 새 Access Token 발급
+            String tempAccessToken = googleTokenProvider.getFreshAccessToken(refreshToken);
+
+            // 2. 주입된 OAuthClientProvider를 통해 클라이언트 구현체를 가져와 유저 정보 조회
+            OAuthClient client = oAuthClientProvider.getClient(provider);
+            OAuthClient.SocialUserProfile tempProfile = client.getProfile(tempAccessToken);
+
+            // 3. 처음에 Access Token으로 검증했던 유저 ID(expectedSocialId)와,
+            //    Refresh Token으로 검증한 유저 ID가 다르면 해킹 시도!
+            if (!expectedSocialId.equals(tempProfile.socialId())) {
+                throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+            }
+        } catch (Exception e) {
+            // 리프레시 토큰이 만료되었거나 조작되어 검증에 실패한 경우
+            throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
         }
     }
 }
