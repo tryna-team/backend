@@ -4,6 +4,7 @@ import com.tryna.domain.label.controller.docs.LabelControllerDocs;
 import com.tryna.domain.label.dto.LabelCreateRequest;
 import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
+import com.tryna.domain.label.dto.LabelUpdateRequest;
 import com.tryna.domain.label.service.LabelService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -84,6 +85,42 @@ public class LabelController implements LabelControllerDocs {
                                 response
                         )
                 );
+    }
+
+    /**
+     * B108-3: 라벨 수정
+     */
+    @PatchMapping("/{labelId}")
+    @Override
+    public ResponseEntity<ApiResponse<LabelResponse>> updateLabel(
+            @PathVariable("labelId") Long labelId,
+            @RequestBody LabelUpdateRequest request
+    ) {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 라벨 수정
+        LabelResponse response = labelService.updateLabel(
+                userId,
+                labelId,
+                request
+        );
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "B108_LABEL_UPDATE_200",
+                        "라벨이 수정되었습니다.",
+                        response
+                )
+        );
     }
 
     /**

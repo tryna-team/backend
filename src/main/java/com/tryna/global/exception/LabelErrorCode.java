@@ -17,6 +17,33 @@ public enum LabelErrorCode implements ErrorCode {
             HttpStatus.CONFLICT,
             "B108_LABEL_CREATE_409",
             "같은 이름의 라벨이 이미 존재합니다."
+    ),
+
+    /**
+     * B108-3: 라벨 수정
+     */
+    B108_LABEL_UPDATE_400(
+            HttpStatus.BAD_REQUEST,
+        "B108_LABEL_UPDATE_400",
+                "라벨 수정 요청값이 올바르지 않습니다."
+    ),
+
+    B108_LABEL_UPDATE_403(
+            HttpStatus.FORBIDDEN,
+        "B108_LABEL_UPDATE_403",
+                "해당 라벨을 수정할 권한이 없습니다."
+    ),
+
+    B108_LABEL_UPDATE_404(
+            HttpStatus.NOT_FOUND,
+        "B108_LABEL_UPDATE_404",
+                "라벨을 찾을 수 없습니다."
+    ),
+
+    B108_LABEL_UPDATE_409(
+            HttpStatus.CONFLICT,
+        "B108_LABEL_UPDATE_409",
+                "같은 이름의 라벨이 이미 존재합니다."
     );
 
     private final HttpStatus httpStatus;

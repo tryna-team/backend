@@ -3,11 +3,14 @@ package com.tryna.domain.label.controller.docs;
 import com.tryna.domain.label.dto.LabelCreateRequest;
 import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
+import com.tryna.domain.label.dto.LabelUpdateRequest;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(
@@ -45,5 +48,30 @@ public interface LabelControllerDocs {
     @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<LabelResponse>> createLabel(
             @RequestBody LabelCreateRequest request
+    );
+
+    @Operation(
+            summary = "B108-3 라벨 수정",
+            description = """
+                현재 사용자가 소유한 라벨의 이름, 색상,
+                표시 여부와 정렬 순서를 수정합니다.
+
+                기본 라벨과 외부 캘린더 라벨도 이름과 색상을
+                수정할 수 있습니다.
+
+                외부 캘린더 라벨을 수정해도 외부 제공자의
+                원본 캘린더 정보는 변경하지 않습니다.
+                """,
+            operationId = "updateLabel"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<LabelResponse>> updateLabel(
+            @Parameter(
+                    description = "수정할 라벨 ID",
+                    required = true
+            )
+            @PathVariable("labelId") Long labelId,
+
+            @RequestBody LabelUpdateRequest request
     );
 }

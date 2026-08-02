@@ -3,6 +3,7 @@ package com.tryna.domain.label.service;
 import com.tryna.domain.label.dto.LabelCreateRequest;
 import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
+import com.tryna.domain.label.dto.LabelUpdateRequest;
 import com.tryna.domain.label.entity.Labels;
 import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.user.entity.Users;
@@ -175,6 +176,122 @@ public class LabelService {
     }
 
     /**
+     * B108-3: 라벨 수정
+     *
+     * 현재 사용자가 소유한 활성 라벨의 이름, 색상, 표시 여부,
+     * 정렬 순서를 수정합니다.
+     *
+     * 기본 라벨과 외부 캘린더 라벨도 이름과 색상을 수정할 수 있지만,
+     * labelType, isDefault, externalCalendarId는 변경하지 않습니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param labelId 수정할 라벨 ID
+     * @param request 라벨 수정 요청
+     * @return 수정된 라벨 정보
+     */
+    @Transactional
+    public LabelResponse updateLabel(
+            Long userId,
+            Long labelId,
+            LabelUpdateRequest request
+    ) {
+        // 1. 수정할 값이 하나 이상 있는지 확인
+        if (request == null || request.hasNoChanges()) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_UPDATE_400
+            );
+        }
+
+        // 2. 삭제되지 않은 라벨 조회
+        Labels label = labelsRepository.findById(labelId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                LabelErrorCode.B108_LABEL_UPDATE_404
+                        )
+                );
+
+        // 3. 현재 사용자가 소유한 라벨인지 확인
+        if (!label.getUser().getUserId().equals(userId)) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_UPDATE_403
+            );
+        }
+
+        // 4. 이름 수정값 검증
+        String name = null;
+        String normalizedName = null;
+
+        if (request.name() != null) {
+            name = request.name().trim();
+
+            if (name.isBlank()
+                    || name.length() > MAX_LABEL_NAME_LENGTH
+                    || URL_PATTERN.matcher(name).matches()) {
+                throw new BusinessException(
+                        LabelErrorCode.B108_LABEL_UPDATE_400
+                );
+            }
+
+            normalizedName = normalizeName(name);
+
+            boolean duplicated = labelsRepository
+                    .existsByUser_UserIdAndNormalizedNameAndLabelIdNot(
+                            userId,
+                            normalizedName,
+                            labelId
+                    );
+
+            if (duplicated) {
+                throw new BusinessException(
+                        LabelErrorCode.B108_LABEL_UPDATE_409
+                );
+            }
+        }
+
+        // 5. 색상 수정값 검증
+        String color = null;
+
+        if (request.color() != null) {
+            if (request.color().isBlank()) {
+                throw new BusinessException(
+                        LabelErrorCode.B108_LABEL_UPDATE_400
+                );
+            }
+
+            color = request.color()
+                    .trim()
+                    .toUpperCase(Locale.ROOT);
+
+            if (!HEX_COLOR_PATTERN.matcher(color).matches()) {
+                throw new BusinessException(
+                        LabelErrorCode.B108_LABEL_UPDATE_400
+                );
+            }
+        }
+
+        // 6. 정렬 순서 변경
+        if (request.sortOrder() != null) {
+            reorderLabels(
+                    userId,
+                    label,
+                    request.sortOrder()
+            );
+        }
+
+        // 7. 요청에 포함된 값만 수정
+        label.update(
+                name,
+                normalizedName,
+                color,
+                request.isVisible(),
+                null
+        );
+
+        // 8. 더티 체킹으로 저장 후 반환
+        return LabelResponse.from(label);
+    }
+
+    /**
      * 라벨 이름을 중복 비교용 값으로 정규화합니다.
      *
      * 정책에 따라 앞뒤 공백을 제거하고,
@@ -209,5 +326,78 @@ public class LabelService {
         }
 
         return normalizedColor;
+    }
+
+    /**
+     * 라벨의 정렬 순서를 변경하고 영향을 받는 다른 라벨의 순서를 조정합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param targetLabel 순서를 변경할 라벨
+     * @param requestedSortOrder 변경할 정렬 순서
+     */
+    private void reorderLabels(
+            Long userId,
+            Labels targetLabel,
+            Integer requestedSortOrder
+    ) {
+        // 1. 현재 사용자의 활성 라벨 목록 조회
+        List<Labels> labels = labelsRepository
+                .findAllByUser_UserIdOrderBySortOrderAsc(userId);
+
+        // 2. 요청한 정렬 순서의 유효 범위 확인
+        int labelCount = labels.size();
+
+        if (requestedSortOrder < 1
+                || requestedSortOrder > labelCount) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_UPDATE_400
+            );
+        }
+
+        // 3. 현재 정렬 순서 확인
+        int currentSortOrder = targetLabel.getSortOrder();
+
+        if (currentSortOrder == requestedSortOrder) {
+            return;
+        }
+
+        // 4. 앞으로 이동하는 경우 중간 라벨들의 순서를 1씩 증가
+        if (requestedSortOrder < currentSortOrder) {
+            labels.stream()
+                    .filter(label ->
+                            !label.getLabelId().equals(targetLabel.getLabelId())
+                    )
+                    .filter(label ->
+                            label.getSortOrder() >= requestedSortOrder
+                    )
+                    .filter(label ->
+                            label.getSortOrder() < currentSortOrder
+                    )
+                    .forEach(label ->
+                            label.updateSortOrder(
+                                    label.getSortOrder() + 1
+                            )
+                    );
+        } else {
+            // 5. 뒤로 이동하는 경우 중간 라벨들의 순서를 1씩 감소
+            labels.stream()
+                    .filter(label ->
+                            !label.getLabelId().equals(targetLabel.getLabelId())
+                    )
+                    .filter(label ->
+                            label.getSortOrder() > currentSortOrder
+                    )
+                    .filter(label ->
+                            label.getSortOrder() <= requestedSortOrder
+                    )
+                    .forEach(label ->
+                            label.updateSortOrder(
+                                    label.getSortOrder() - 1
+                            )
+                    );
+        }
+
+        // 6. 대상 라벨의 정렬 순서 변경
+        targetLabel.updateSortOrder(requestedSortOrder);
     }
 }
