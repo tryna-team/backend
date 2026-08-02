@@ -44,6 +44,33 @@ public enum LabelErrorCode implements ErrorCode {
             HttpStatus.CONFLICT,
         "B108_LABEL_UPDATE_409",
                 "같은 이름의 라벨이 이미 존재합니다."
+    ),
+
+    /**
+     * B108-4: 라벨 삭제
+     */
+    B108_LABEL_DELETE_400(
+            HttpStatus.BAD_REQUEST,
+            "B108_LABEL_DELETE_400",
+            "삭제할 수 없는 라벨입니다."
+    ),
+
+    B108_LABEL_DELETE_403(
+            HttpStatus.FORBIDDEN,
+            "B108_LABEL_DELETE_403",
+            "해당 라벨을 삭제할 권한이 없습니다."
+    ),
+
+    B108_LABEL_DELETE_404(
+            HttpStatus.NOT_FOUND,
+            "B108_LABEL_DELETE_404",
+            "라벨을 찾을 수 없습니다."
+    ),
+
+    B108_LABEL_DELETE_409(
+            HttpStatus.CONFLICT,
+            "B108_LABEL_DELETE_409",
+            "라벨 삭제 처리 중 충돌이 발생했습니다."
     );
 
     private final HttpStatus httpStatus;

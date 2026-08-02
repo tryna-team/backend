@@ -1,9 +1,6 @@
 package com.tryna.domain.label.controller.docs;
 
-import com.tryna.domain.label.dto.LabelCreateRequest;
-import com.tryna.domain.label.dto.LabelListResponse;
-import com.tryna.domain.label.dto.LabelResponse;
-import com.tryna.domain.label.dto.LabelUpdateRequest;
+import com.tryna.domain.label.dto.*;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -73,5 +70,27 @@ public interface LabelControllerDocs {
             @PathVariable("labelId") Long labelId,
 
             @RequestBody LabelUpdateRequest request
+    );
+
+    @Operation(
+            summary = "B108-4 라벨 삭제",
+            description = """
+                현재 사용자가 소유한 사용자 라벨을 삭제합니다.
+
+                삭제된 라벨에 연결된 일정은 삭제하지 않고
+                사용자의 기본 라벨로 이동합니다.
+
+                기본 라벨과 외부 캘린더 라벨은
+                이 API로 삭제할 수 없습니다.
+                """,
+            operationId = "deleteLabel"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<LabelDeleteResponse>> deleteLabel(
+            @Parameter(
+                    description = "삭제할 라벨 ID",
+                    required = true
+            )
+            @PathVariable("labelId") Long labelId
     );
 }

@@ -1,10 +1,7 @@
 package com.tryna.domain.label.controller;
 
 import com.tryna.domain.label.controller.docs.LabelControllerDocs;
-import com.tryna.domain.label.dto.LabelCreateRequest;
-import com.tryna.domain.label.dto.LabelListResponse;
-import com.tryna.domain.label.dto.LabelResponse;
-import com.tryna.domain.label.dto.LabelUpdateRequest;
+import com.tryna.domain.label.dto.*;
 import com.tryna.domain.label.service.LabelService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -118,6 +115,40 @@ public class LabelController implements LabelControllerDocs {
                 ApiResponse.success(
                         "B108_LABEL_UPDATE_200",
                         "라벨이 수정되었습니다.",
+                        response
+                )
+        );
+    }
+
+    /**
+     * B108-4: 라벨 삭제
+     */
+    @DeleteMapping("/{labelId}")
+    @Override
+    public ResponseEntity<ApiResponse<LabelDeleteResponse>> deleteLabel(
+            @PathVariable("labelId") Long labelId
+    ) {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 라벨 삭제 및 연결 일정 이동
+        LabelDeleteResponse response = labelService.deleteLabel(
+                userId,
+                labelId
+        );
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "B108_LABEL_DELETE_200",
+                        "라벨이 삭제되었습니다.",
                         response
                 )
         );

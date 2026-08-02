@@ -1,10 +1,9 @@
 package com.tryna.domain.label.service;
 
-import com.tryna.domain.label.dto.LabelCreateRequest;
-import com.tryna.domain.label.dto.LabelListResponse;
-import com.tryna.domain.label.dto.LabelResponse;
-import com.tryna.domain.label.dto.LabelUpdateRequest;
+import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.label.dto.*;
 import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelType;
 import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
@@ -20,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -41,6 +41,7 @@ public class LabelService {
 
     private final LabelsRepository labelsRepository;
     private final UserRepository userRepository;
+    private final UserEventsRepository userEventsRepository;
 
     /**
      * B108-1: 라벨 목록 조회
@@ -399,5 +400,124 @@ public class LabelService {
 
         // 6. 대상 라벨의 정렬 순서 변경
         targetLabel.updateSortOrder(requestedSortOrder);
+    }
+
+    /**
+     * B108-4: 라벨 삭제
+     *
+     * 현재 사용자가 소유한 USER 유형의 활성 라벨을 삭제합니다.
+     *
+     * 삭제 대상 라벨에 연결된 일정은 삭제하지 않고 현재 사용자의
+     * 기본 라벨로 이동하며, 일정 이동과 라벨 Soft Delete는
+     * 하나의 트랜잭션으로 처리합니다.
+     *
+     * 기본 라벨과 외부 캘린더 라벨은 이 API로 삭제할 수 없습니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param labelId 삭제할 라벨 ID
+     * @return 라벨 삭제 및 일정 이동 결과
+     */
+    @Transactional
+    public LabelDeleteResponse deleteLabel(
+            Long userId,
+            Long labelId
+    ) {
+        // 1. 삭제되지 않은 라벨 조회
+        Labels label = labelsRepository.findById(labelId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                LabelErrorCode.B108_LABEL_DELETE_404
+                        )
+                );
+
+        // 2. 현재 사용자가 소유한 라벨인지 확인
+        if (!label.getUser().getUserId().equals(userId)) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_DELETE_403
+            );
+        }
+
+        // 3. 기본 라벨 삭제 방지
+        if (Boolean.TRUE.equals(label.getIsDefault())
+                || label.getLabelType() == LabelType.DEFAULT) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_DELETE_400
+            );
+        }
+
+        // 4. 외부 캘린더 라벨 삭제 방지
+        if (label.getLabelType() == LabelType.EXTERNAL_CALENDAR) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_DELETE_400
+            );
+        }
+
+        // 5. 현재 사용자의 활성 기본 라벨 조회
+        Labels defaultLabel = labelsRepository
+                .findByUser_UserIdAndIsDefaultTrue(userId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                LabelErrorCode.B108_LABEL_DELETE_409
+                        )
+                );
+
+        // 6. 삭제 대상 라벨에 연결된 일정을 기본 라벨로 이동
+        int movedEventCount = userEventsRepository.moveLabelAssignments(
+                userId,
+                labelId,
+                defaultLabel
+        );
+
+        // 7. 삭제 전 정렬 순서 저장
+        Integer deletedSortOrder = label.getSortOrder();
+
+        // 8. 라벨 Soft Delete
+        label.softDelete(LocalDateTime.now());
+
+        // 9. 삭제된 라벨 뒤에 있던 라벨들의 정렬 순서를 1씩 감소
+        closeSortOrderGap(
+                userId,
+                labelId,
+                deletedSortOrder
+        );
+
+        // 10. 삭제 결과 반환
+        return LabelDeleteResponse.of(
+                labelId,
+                movedEventCount,
+                defaultLabel.getLabelId()
+        );
+    }
+
+    /**
+     * 라벨 삭제 후 비어 있는 정렬 순서를 제거합니다.
+     *
+     * 삭제된 라벨보다 뒤에 있던 활성 라벨의 sortOrder를
+     * 각각 1씩 감소시켜 연속된 순서를 유지합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param deletedLabelId 삭제한 라벨 ID
+     * @param deletedSortOrder 삭제한 라벨의 기존 정렬 순서
+     */
+    private void closeSortOrderGap(
+            Long userId,
+            Long deletedLabelId,
+            Integer deletedSortOrder
+    ) {
+        List<Labels> labels = labelsRepository
+                .findAllByUser_UserIdOrderBySortOrderAsc(userId);
+
+        labels.stream()
+                .filter(label ->
+                        !label.getLabelId().equals(deletedLabelId)
+                )
+                .filter(label ->
+                        label.getSortOrder() > deletedSortOrder
+                )
+                .forEach(label ->
+                        label.updateSortOrder(
+                                label.getSortOrder() - 1
+                        )
+                );
     }
 }
