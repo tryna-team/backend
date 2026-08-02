@@ -194,8 +194,7 @@ public class Labels extends BaseEntity {
             String name,
             String normalizedName,
             LabelColor color,
-            Boolean isVisible,
-            Integer sortOrder
+            Boolean isVisible
     ) {
         if (name != null) {
             this.name = name;
@@ -208,10 +207,6 @@ public class Labels extends BaseEntity {
 
         if (isVisible != null) {
             this.isVisible = isVisible;
-        }
-
-        if (sortOrder != null) {
-            this.sortOrder = sortOrder;
         }
     }
 

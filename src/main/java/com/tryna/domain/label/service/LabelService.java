@@ -257,11 +257,10 @@ public class LabelService {
                 name,
                 normalizedName,
                 color,
-                request.isVisible(),
-                null
+                request.isVisible()
         );
 
-        // 8. 더티 체킹으로 저장 후 반환
+        // 7. 더티 체킹으로 저장 후 반환
         return LabelResponse.from(label);
     }
 
