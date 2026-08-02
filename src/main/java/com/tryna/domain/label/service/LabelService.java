@@ -178,8 +178,7 @@ public class LabelService {
     /**
      * B108-3: 라벨 수정
      *
-     * 현재 사용자가 소유한 활성 라벨의 이름, 색상, 표시 여부,
-     * 정렬 순서를 수정합니다.
+     * 현재 사용자가 소유한 활성 라벨의 이름, 색상, 표시 여부를 수정합니다.
      *
      * 기본 라벨과 외부 캘린더 라벨도 이름과 색상을 수정할 수 있지만,
      * labelType, isDefault, externalCalendarId는 변경하지 않습니다.
@@ -292,88 +291,16 @@ public class LabelService {
     }
 
     /**
-     * 라벨의 정렬 순서를 변경하고 영향을 받는 다른 라벨의 순서를 조정합니다.
-     *
-     * @param userId 현재 사용자 ID
-     * @param targetLabel 순서를 변경할 라벨
-     * @param requestedSortOrder 변경할 정렬 순서
-     */
-    private void reorderLabels(
-            Long userId,
-            Labels targetLabel,
-            Integer requestedSortOrder
-    ) {
-        // 1. 현재 사용자의 활성 라벨 목록 조회
-        List<Labels> labels = labelsRepository
-                .findAllByUser_UserIdOrderBySortOrderAsc(userId);
-
-        // 2. 요청한 정렬 순서의 유효 범위 확인
-        int labelCount = labels.size();
-
-        if (requestedSortOrder < 1
-                || requestedSortOrder > labelCount) {
-            throw new BusinessException(
-                    LabelErrorCode.B108_LABEL_UPDATE_400
-            );
-        }
-
-        // 3. 현재 정렬 순서 확인
-        int currentSortOrder = targetLabel.getSortOrder();
-
-        if (currentSortOrder == requestedSortOrder) {
-            return;
-        }
-
-        // 4. 앞으로 이동하는 경우 중간 라벨들의 순서를 1씩 증가
-        if (requestedSortOrder < currentSortOrder) {
-            labels.stream()
-                    .filter(label ->
-                            !label.getLabelId().equals(targetLabel.getLabelId())
-                    )
-                    .filter(label ->
-                            label.getSortOrder() >= requestedSortOrder
-                    )
-                    .filter(label ->
-                            label.getSortOrder() < currentSortOrder
-                    )
-                    .forEach(label ->
-                            label.updateSortOrder(
-                                    label.getSortOrder() + 1
-                            )
-                    );
-        } else {
-            // 5. 뒤로 이동하는 경우 중간 라벨들의 순서를 1씩 감소
-            labels.stream()
-                    .filter(label ->
-                            !label.getLabelId().equals(targetLabel.getLabelId())
-                    )
-                    .filter(label ->
-                            label.getSortOrder() > currentSortOrder
-                    )
-                    .filter(label ->
-                            label.getSortOrder() <= requestedSortOrder
-                    )
-                    .forEach(label ->
-                            label.updateSortOrder(
-                                    label.getSortOrder() - 1
-                            )
-                    );
-        }
-
-        // 6. 대상 라벨의 정렬 순서 변경
-        targetLabel.updateSortOrder(requestedSortOrder);
-    }
-
-    /**
      * B108-4: 라벨 삭제
      *
-     * 현재 사용자가 소유한 USER 유형의 활성 라벨을 삭제합니다.
+     * 현재 사용자가 소유한 활성 라벨을 삭제합니다.
      *
-     * 삭제 대상 라벨에 연결된 일정은 삭제하지 않고 현재 사용자의
-     * 기본 라벨로 이동하며, 일정 이동과 라벨 Soft Delete는
+     * 마지막 활성 라벨은 삭제할 수 없습니다.
+     * 기본 라벨을 삭제하는 경우 남은 활성 라벨 중 정렬 순서가 가장 앞선
+     * 라벨을 새 기본 라벨로 지정하고, 삭제 대상 일정도 해당 라벨로 이동합니다.
+     *
+     * 기본 라벨 변경, 일정 이동, Soft Delete 및 정렬 순서 정규화는
      * 하나의 트랜잭션으로 처리합니다.
-     *
-     * 기본 라벨과 외부 캘린더 라벨은 이 API로 삭제할 수 없습니다.
      *
      * @param userId 현재 인증된 사용자 ID
      * @param labelId 삭제할 라벨 ID
@@ -399,55 +326,90 @@ public class LabelService {
             );
         }
 
-        // 3. 기본 라벨 삭제 방지
-        if (Boolean.TRUE.equals(label.getIsDefault())
-                || label.getLabelType() == LabelType.DEFAULT) {
-            throw new BusinessException(
-                    LabelErrorCode.B108_LABEL_DELETE_400
-            );
-        }
+        boolean defaultLabelChanged =
+                Boolean.TRUE.equals(label.getIsDefault());
 
-        // 4. 외부 캘린더 라벨 삭제 방지
+        // 3. 외부 캘린더 라벨 삭제 방지
         if (label.getLabelType() == LabelType.EXTERNAL_CALENDAR) {
             throw new BusinessException(
                     LabelErrorCode.B108_LABEL_DELETE_400
             );
         }
 
-        // 5. 현재 사용자의 활성 기본 라벨 조회
-        Labels defaultLabel = labelsRepository
-                .findByUser_UserIdAndIsDefaultTrue(userId)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                LabelErrorCode.B108_LABEL_DELETE_409
-                        )
-                );
+        // 4. 현재 사용자의 활성 Tryna 라벨 조회
+        List<Labels> activeLabels = labelsRepository
+                .findAllByUser_UserIdOrderBySortOrderAsc(userId)
+                .stream()
+                .filter(activeLabel ->
+                        activeLabel.getLabelType() != LabelType.EXTERNAL_CALENDAR
+                )
+                .toList();
 
-        // 6. 삭제 대상 라벨에 연결된 일정을 기본 라벨로 이동
-        int movedEventCount = userEventsRepository.moveLabelAssignments(
-                userId,
-                labelId,
-                defaultLabel
-        );
+        // 5. 마지막 활성 라벨 삭제 방지
+        if (activeLabels.size() <= 1) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_DELETE_400
+            );
+        }
+
+        // 6. 삭제 후 기본 라벨 결정
+        Labels destinationLabel;
+
+        if (Boolean.TRUE.equals(label.getIsDefault())) {
+            destinationLabel = activeLabels.stream()
+                    .filter(activeLabel ->
+                            !activeLabel.getLabelId().equals(labelId)
+                    )
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new BusinessException(
+                                    LabelErrorCode.B108_LABEL_DELETE_409
+                            )
+                    );
+
+            // 삭제할 기존 기본 라벨 해제
+            label.updateDefault(false);
+            labelsRepository.flush();
+
+            // 남은 라벨 중 가장 앞선 라벨을 새 기본 라벨로 지정
+            destinationLabel.updateDefault(true);
+        } else {
+            destinationLabel = activeLabels.stream()
+                    .filter(Labels::getIsDefault)
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new BusinessException(
+                                    LabelErrorCode.B108_LABEL_DELETE_409
+                            )
+                    );
+        }
 
         // 7. 삭제 전 정렬 순서 저장
         Integer deletedSortOrder = label.getSortOrder();
 
-        // 8. 라벨 Soft Delete
+        // 8. 삭제 대상 라벨에 연결된 일정을 기본 라벨로 이동
+        int movedEventCount = userEventsRepository.moveLabelAssignments(
+                userId,
+                labelId,
+                destinationLabel
+        );
+
+        // 9. 라벨 Soft Delete
         label.softDelete(LocalDateTime.now());
 
-        // 9. 삭제된 라벨 뒤에 있던 라벨들의 정렬 순서를 1씩 감소
+        // 10. 남은 라벨의 정렬 순서 정규화
         closeSortOrderGap(
                 userId,
                 labelId,
                 deletedSortOrder
         );
 
-        // 10. 삭제 결과 반환
+        // 11. 삭제 결과 반환
         return LabelDeleteResponse.of(
                 labelId,
                 movedEventCount,
-                defaultLabel.getLabelId()
+                destinationLabel.getLabelId(),
+                defaultLabelChanged
         );
     }
 

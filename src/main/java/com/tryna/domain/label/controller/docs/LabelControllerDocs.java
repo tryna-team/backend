@@ -83,7 +83,7 @@ public interface LabelControllerDocs {
                 삭제된 라벨에 연결된 일정은 삭제하지 않고
                 사용자의 기본 라벨로 이동합니다.
 
-                기본 라벨과 외부 캘린더 라벨은
+                외부 캘린더 라벨은
                 이 API로 삭제할 수 없습니다.
                 """,
             operationId = "deleteLabel"

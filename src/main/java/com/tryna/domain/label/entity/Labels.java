@@ -210,6 +210,15 @@ public class Labels extends BaseEntity {
         }
     }
 
+    /**
+     * 라벨의 기본 라벨 여부를 변경합니다.
+     *
+     * @param isDefault 기본 라벨 여부
+     */
+    public void updateDefault(Boolean isDefault) {
+        this.isDefault = isDefault;
+    }
+
     public void updateSortOrder(Integer sortOrder) {
         this.sortOrder = sortOrder;
     }
