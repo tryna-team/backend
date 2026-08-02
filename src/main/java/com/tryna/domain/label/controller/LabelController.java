@@ -2,6 +2,7 @@ package com.tryna.domain.label.controller;
 
 import com.tryna.domain.label.controller.docs.LabelControllerDocs;
 import com.tryna.domain.label.dto.LabelCreateRequest;
+import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
 import com.tryna.domain.label.service.LabelService;
 import com.tryna.global.exception.AuthErrorCode;
@@ -12,10 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/labels")
@@ -23,6 +21,36 @@ import org.springframework.web.bind.annotation.RestController;
 public class LabelController implements LabelControllerDocs {
 
     private final LabelService labelService;
+
+    /**
+     * B108-1: 라벨 목록 조회
+     */
+    @GetMapping
+    @Override
+    public ResponseEntity<ApiResponse<LabelListResponse>> getLabels() {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 현재 사용자의 라벨 목록 조회
+        LabelListResponse response =
+                labelService.getLabels(userId);
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "B108_LABEL_LIST_200",
+                        "라벨 목록 조회에 성공했습니다.",
+                        response
+                )
+        );
+    }
 
     /**
      * B108-2: 라벨 생성

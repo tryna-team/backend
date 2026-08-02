@@ -1,6 +1,7 @@
 package com.tryna.domain.label.service;
 
 import com.tryna.domain.label.dto.LabelCreateRequest;
+import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
 import com.tryna.domain.label.entity.Labels;
 import com.tryna.domain.label.repository.LabelsRepository;
@@ -15,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -38,6 +40,38 @@ public class LabelService {
 
     private final LabelsRepository labelsRepository;
     private final UserRepository userRepository;
+
+    /**
+     * B108-1: 라벨 목록 조회
+     *
+     * 현재 사용자가 소유한 활성 라벨을 정렬 순서대로 조회합니다.
+     *
+     * 기본 라벨, 사용자 라벨, 외부 캘린더 라벨을 모두 반환하며,
+     * Labels 엔티티의 Soft Delete 조건에 따라 삭제된 라벨은 제외됩니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @return 현재 사용자의 라벨 목록
+     */
+    public LabelListResponse getLabels(
+            Long userId
+    ) {
+        // 1. 현재 사용자가 존재하는지 확인
+        userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                CommonErrorCode.COMMON_403
+                        )
+                );
+
+        // 2. 현재 사용자의 활성 라벨을 정렬 순서대로 조회
+        List<Labels> labels =
+                labelsRepository.findAllByUser_UserIdOrderBySortOrderAsc(
+                        userId
+                );
+
+        // 3. 조회 결과를 응답 DTO로 변환
+        return LabelListResponse.from(labels);
+    }
 
     /**
      * B108-2: 라벨 생성

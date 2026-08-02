@@ -1,6 +1,7 @@
 package com.tryna.domain.label.controller.docs;
 
 import com.tryna.domain.label.dto.LabelCreateRequest;
+import com.tryna.domain.label.dto.LabelListResponse;
 import com.tryna.domain.label.dto.LabelResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,20 @@ import org.springframework.web.bind.annotation.RequestBody;
         description = "라벨 관리 API"
 )
 public interface LabelControllerDocs {
+    @Operation(
+            summary = "B108-1 라벨 목록 조회",
+            description = """
+                현재 사용자의 활성 라벨 목록을 조회합니다.
+
+                기본 라벨, 사용자 라벨, 외부 캘린더 라벨을 모두 반환하며,
+                라벨은 sortOrder 오름차순으로 정렬됩니다.
+
+                삭제된 라벨은 조회 결과에서 제외됩니다.
+                """,
+            operationId = "getLabels"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<LabelListResponse>> getLabels();
 
     @Operation(
             summary = "B108-2 라벨 생성",
