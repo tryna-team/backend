@@ -1,6 +1,7 @@
 package com.tryna.domain.label.dto;
 
 import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.domain.label.enums.LabelType;
 
 public record LabelResponse(
@@ -8,7 +9,7 @@ public record LabelResponse(
         Long externalCalendarId,
         String name,
         LabelType labelType,
-        String color,
+        LabelColor color,
         Boolean isDefault,
         Boolean isVisible,
         Integer sortOrder

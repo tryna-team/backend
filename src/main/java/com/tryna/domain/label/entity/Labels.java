@@ -1,6 +1,7 @@
 package com.tryna.domain.label.entity;
 
 import com.tryna.domain.external.entity.ExternalCalendars;
+import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.domain.label.enums.LabelType;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.global.entity.BaseEntity;
@@ -104,8 +105,9 @@ public class Labels extends BaseEntity {
     @ColumnDefault("'USER'")
     private LabelType labelType = LabelType.USER;
 
-    @Column(name = "color", nullable = false, length = 7)
-    private String color;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "color", nullable = false, length = 20)
+    private LabelColor color;
 
     @Column(name = "is_default", nullable = false)
     @ColumnDefault("false")
@@ -125,7 +127,7 @@ public class Labels extends BaseEntity {
             Users user,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -147,7 +149,7 @@ public class Labels extends BaseEntity {
             Users user,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -170,7 +172,7 @@ public class Labels extends BaseEntity {
             ExternalCalendars externalCalendar,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -191,7 +193,7 @@ public class Labels extends BaseEntity {
     public void update(
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Boolean isVisible,
             Integer sortOrder
     ) {

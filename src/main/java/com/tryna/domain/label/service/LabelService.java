@@ -3,6 +3,7 @@ package com.tryna.domain.label.service;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.label.dto.*;
 import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.domain.label.enums.LabelType;
 import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.user.entity.Users;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.time.LocalDateTime;
 
@@ -27,11 +29,8 @@ import java.time.LocalDateTime;
 @Transactional(readOnly = true)
 public class LabelService {
 
-    private static final String DEFAULT_LABEL_COLOR = "#FF9500";
+    private static final LabelColor DEFAULT_LABEL_COLOR = LabelColor.GREEN;
     private static final int MAX_LABEL_NAME_LENGTH = 100;
-
-    private static final Pattern HEX_COLOR_PATTERN =
-            Pattern.compile("^#[0-9A-Fa-f]{6}$");
 
     private static final Pattern URL_PATTERN =
             Pattern.compile(
@@ -122,7 +121,7 @@ public class LabelService {
         }
 
         // 5. 라벨 색상 검증 및 기본값 적용
-        String color = normalizeColor(request.color());
+        LabelColor color = resolveCreateColor(request.color());
 
         // 6. 중복 검사용 라벨 이름 정규화
         String normalizedName = normalizeName(name);
@@ -249,37 +248,11 @@ public class LabelService {
             }
         }
 
-        // 5. 색상 수정값 검증
-        String color = null;
+        // 5. 색상 수정값 확인
+        // null이면 기존 색상을 유지하고, 값이 있으면 요청 색상으로 변경
+        LabelColor color = request.color();
 
-        if (request.color() != null) {
-            if (request.color().isBlank()) {
-                throw new BusinessException(
-                        LabelErrorCode.B108_LABEL_UPDATE_400
-                );
-            }
-
-            color = request.color()
-                    .trim()
-                    .toUpperCase(Locale.ROOT);
-
-            if (!HEX_COLOR_PATTERN.matcher(color).matches()) {
-                throw new BusinessException(
-                        LabelErrorCode.B108_LABEL_UPDATE_400
-                );
-            }
-        }
-
-        // 6. 정렬 순서 변경
-        if (request.sortOrder() != null) {
-            reorderLabels(
-                    userId,
-                    label,
-                    request.sortOrder()
-            );
-        }
-
-        // 7. 요청에 포함된 값만 수정
+        // 6. 요청에 포함된 값만 수정
         label.update(
                 name,
                 normalizedName,
@@ -311,22 +284,12 @@ public class LabelService {
      * 색상이 누락되거나 빈 문자열이면 서버 기본 색상을 사용합니다.
      *
      * @param color 요청 색상
-     * @return 저장할 HEX 색상
+     * @return 저장할 색상
      */
-    private String normalizeColor(String color) {
-        if (color == null || color.isBlank()) {
-            return DEFAULT_LABEL_COLOR;
-        }
-
-        String normalizedColor = color.trim().toUpperCase(Locale.ROOT);
-
-        if (!HEX_COLOR_PATTERN.matcher(normalizedColor).matches()) {
-            throw new BusinessException(
-                    LabelErrorCode.B108_LABEL_CREATE_400
-            );
-        }
-
-        return normalizedColor;
+    private LabelColor resolveCreateColor(LabelColor color) {
+        return color == null
+                ? DEFAULT_LABEL_COLOR
+                : color;
     }
 
     /**
