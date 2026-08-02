@@ -1,34 +1,66 @@
--- V5: external_calendar_connections 중복 제거 전 종속 캘린더 및 이벤트 데이터 정합성(이관) 보장
+-- V5: 결정론적(Deterministic) 방식의 중복 커넥션 정리 및 데이터 정합성 보장 마이그레이션
 
--- 1. 중복 커넥션 중 구형('a')에 속한 캘린더의 일정(events)들을
---    신형('b')의 동일한 캘린더(provider_external_calendar_id)로 이관하여 역사적 데이터 유실 방지
-UPDATE events e
-SET external_calendar_id = target_cal.external_calendar_id
-    FROM external_calendars source_cal
-JOIN external_calendars target_cal ON target_cal.provider_external_calendar_id = source_cal.provider_external_calendar_id
-    JOIN external_calendar_connections b ON target_cal.external_calendar_connection_id = b.external_calendar_connection_id
-    JOIN external_calendar_connections a ON source_cal.external_calendar_connection_id = a.external_calendar_connection_id
-WHERE e.external_calendar_id = source_cal.external_calendar_id
-  AND a.external_calendar_connection_id < b.external_calendar_connection_id
-  AND a.user_id = b.user_id
-  AND a.provider = b.provider;
+DO $$
+    DECLARE
+    r RECORD;
+cal_rec RECORD;
+target_cal_id BIGINT;
+BEGIN
+    -- 1. 유저 및 프로바이더별로 중복이 존재하는 경우에만 순회 (가장 ID가 큰 최신 커넥션을 생존 대상으로 지정)
+    FOR r IN
+SELECT user_id, provider, MAX(external_calendar_connection_id) AS target_conn_id
+FROM external_calendar_connections
+GROUP BY user_id, provider
+HAVING COUNT(*) > 1
+    LOOP
+        -- 2. 생존 커넥션(target_conn_id)이 아닌 구형(중복) 커넥션들에 속한 캘린더들을 순회
+        FOR cal_rec IN
+SELECT ec.external_calendar_id, ec.provider_external_calendar_id
+FROM external_calendars ec
+         JOIN external_calendar_connections ecc ON ec.external_calendar_connection_id = ecc.external_calendar_connection_id
+WHERE ecc.user_id = r.user_id
+  AND ecc.provider = r.provider
+  AND ecc.external_calendar_connection_id <> r.target_conn_id
+    LOOP
+-- 3. 생존 커넥션 아래에 동일한 external_calendar_id를 가진 캘린더가 이미 존재하는지 확인
+SELECT external_calendar_id INTO target_cal_id
+FROM external_calendars
+WHERE external_calendar_connection_id = r.target_conn_id
+  AND provider_external_calendar_id = cal_rec.provider_external_calendar_id;
 
--- 2. 구형 커넥션('a')에 종속되어 있던 캘린더 레코드 안전 삭제 (이벤트가 'b'쪽으로 모두 이관되었으므로 충돌 없음)
-DELETE FROM external_calendars source_cal
-    USING external_calendar_connections a, external_calendar_connections b
-WHERE source_cal.external_calendar_connection_id = a.external_calendar_connection_id
-  AND a.external_calendar_connection_id < b.external_calendar_connection_id
-  AND a.user_id = b.user_id
-  AND a.provider = b.provider;
+IF target_cal_id IS NOT NULL THEN
+                -- [케이스 A] 이미 생존 커넥션쪽에 동일 캘린더가 존재함 -> 이벤트 중복 충돌 방지를 위해 구형 캘린더의 이벤트 중 겹치는 것 먼저 정리
+DELETE FROM events src_e
+    USING events tgt_e
+WHERE src_e.external_calendar_id = cal_rec.external_calendar_id
+  AND tgt_e.external_calendar_id = target_cal_id
+  AND src_e.external_event_id = tgt_e.external_event_id;
 
--- 3. 이제 하위 종속 데이터가 모두 안전하게 정리된 중복 커넥션 'a' 삭제
-DELETE FROM external_calendar_connections a
-    USING external_calendar_connections b
-WHERE a.external_calendar_connection_id < b.external_calendar_connection_id
-  AND a.user_id = b.user_id
-  AND a.provider = b.provider;
+-- 남은 이벤트들을 생존 캘린더 쪽으로 안전하게 이관
+UPDATE events
+SET external_calendar_id = target_cal_id
+WHERE external_calendar_id = cal_rec.external_calendar_id;
 
--- 4. 유니크 제약 조건 추가
+-- 이벤트가 모두 비워진 구형 캘린더 삭제
+DELETE FROM external_calendars
+WHERE external_calendar_id = cal_rec.external_calendar_id;
+ELSE
+                -- [케이스 B] 생존 커넥션쪽에 해당 캘린더가 없음 -> 캘린더를 지우지 않고 소속만 생존 커넥션으로 안전하게 이전 (데이터 유실 원천 차단)
+UPDATE external_calendars
+SET external_calendar_connection_id = r.target_conn_id
+WHERE external_calendar_id = cal_rec.external_calendar_id;
+END IF;
+END LOOP;
+
+        -- 4. 하위 캘린더 및 이벤트가 모두 안전하게 정리·이관된 구형 중복 커넥션 삭제
+DELETE FROM external_calendar_connections
+WHERE user_id = r.user_id
+  AND provider = r.provider
+  AND external_calendar_connection_id <> r.target_conn_id;
+END LOOP;
+END $$;
+
+-- 5. 유니크 제약 조건 안전하게 추가
 ALTER TABLE external_calendar_connections
     DROP CONSTRAINT IF EXISTS uq_external_calendar_connections_user_provider;
 

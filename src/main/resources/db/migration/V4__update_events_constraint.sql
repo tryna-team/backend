@@ -34,8 +34,3 @@ ALTER TABLE events
                 OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)
             )
     NOT VALID;
-
--- 4. 제약조건 검증 실행 (배타적 락 유지 시간을 최소화하며 기존 데이터 무결성 검증)
-ALTER TABLE events VALIDATE CONSTRAINT fk_events_external_calendar;
-ALTER TABLE user_events VALIDATE CONSTRAINT fk_user_events_event;
-ALTER TABLE events VALIDATE CONSTRAINT ck_events_external_required;
