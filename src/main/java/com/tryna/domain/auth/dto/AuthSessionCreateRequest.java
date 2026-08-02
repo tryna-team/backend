@@ -21,7 +21,7 @@ public record AuthSessionCreateRequest(
         String oauthAccessToken,
 
         @Schema(description = "소셜 서버에서 발급받은 리프레시 토큰 (최초 로그인/권한 재동의 시에만 프론트가 전달)", example = "1//0eA...")
-        @Size(max = 512, message = "OAuth 리프레시 토큰은 512자를 초과할 수 없습니다.") //
+        @Size(max = 512, message = "OAuth 리프레시 토큰은 512자를 초과할 수 없습니다.")
         String oauthRefreshToken,
 
         @Schema(description = "신규 가입 시 동의한 약관 유형 목록 (기존 회원은 빈 배열 가능)", example = "[\"SERVICE\", \"PRIVACY\", \"LOCATION\"]")

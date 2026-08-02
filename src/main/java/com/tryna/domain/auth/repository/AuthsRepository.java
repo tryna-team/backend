@@ -30,4 +30,7 @@ public interface AuthsRepository extends JpaRepository<Auths, Long> {
             @Param("userId") Long userId,
             @Param("deletedAt") LocalDateTime deletedAt
     );
+
+    // B105: 활성 상태인 특정 소셜(Provider) 연동 정보 단건 조회 (캘린더 동기화 등)
+    Optional<Auths> findByUser_UserIdAndProviderAndDeletedAtIsNull(Long userId, Provider provider);
 }

@@ -11,3 +11,8 @@ spring:
     # 이미 테이블이 존재하면 V1을 baseline으로만 기록하고 V2부터 적용한다.
     baseline-on-migrate: true
     baseline-version: 1
+
+oauth2:
+  google:
+    token-url: https://oauth2.googleapis.com/token
+    calendar-url: https://www.googleapis.com/calendar/v3/calendars/primary/events

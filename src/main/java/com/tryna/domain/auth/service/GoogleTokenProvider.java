@@ -2,6 +2,7 @@ package com.tryna.domain.auth.service;
 
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +31,8 @@ public class GoogleTokenProvider {
     @Value("${oauth2.google.client-secret}")
     private String googleClientSecret;
 
-    private static final String GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+    @Value("${oauth2.google.token-url:https://oauth2.googleapis.com/token}")
+    private String googleTokenUrl;
 
     /**
      * DB에 저장된 구글 Refresh Token을 사용해 새로운 Access Token을 발급받습니다.
@@ -41,7 +43,7 @@ public class GoogleTokenProvider {
         }
 
         HttpHeaders headers = new HttpHeaders();
-        // 구글이 요구하는 form-urlencoded 방식 설정
+        // 구글 요구 form-urlencoded 방식 설정
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -53,7 +55,7 @@ public class GoogleTokenProvider {
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(GOOGLE_TOKEN_URL, request, Map.class);
+            ResponseEntity<Map> response = restTemplate.postForEntity(googleTokenUrl, request, Map.class);
             Map<String, Object> body = response.getBody();
 
             if (body == null) {
@@ -77,20 +79,18 @@ public class GoogleTokenProvider {
                 if ("invalid_grant".equals(googleError)) {
                     // 2-A. 유저의 토큰이 만료/취소된 경우 (401 에러)
                     log.warn("구글 리프레시 토큰 만료/취소됨 (invalid_grant): {}", e.getResponseBodyAsString());
-
-                    // TODO: 여기서 DB의 oauthRefreshToken을 null로 만들거나 처리 필요
                     throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
                 } else {
                     // 2-B. invalid_client 등 백엔드 환경변수/설정 오류 (서버 에러)
                     log.error("구글 서버 연동/설정 오류 (관리자 즉시 확인 필요): {}", e.getResponseBodyAsString());
-                    throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400);
+                    throw new BusinessException(CommonErrorCode.COMMON_500);
                 }
             } catch (BusinessException be) {
                 throw be;
             } catch (Exception parseEx) {
                 // JSON 파싱 자체가 실패한 경우
                 log.error("구글 에러 응답 JSON 파싱 실패", parseEx);
-                throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400);
+                throw new BusinessException(CommonErrorCode.COMMON_500);
             }
 
         } catch (BusinessException e) {
@@ -99,7 +99,7 @@ public class GoogleTokenProvider {
 
         } catch (Exception e) {
             log.error("구글 서버 통신 중 알 수 없는 오류 발생", e);
-            throw new BusinessException(AuthErrorCode.A105_AUTH_SESSION_400);
+            throw new BusinessException(CommonErrorCode.COMMON_500);
         }
     }
 }

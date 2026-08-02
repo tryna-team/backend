@@ -31,15 +31,28 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleBadRequestException(Exception e, HttpServletRequest request) {
         String requestUri = request.getRequestURI();
-        if ("/api/v1/auth-sessions".equals(requestUri)) {
-            return ResponseEntity
-                    .status(AuthErrorCode.A105_AUTH_SESSION_400.getHttpStatus())
-                    .body(ApiResponse.fail(AuthErrorCode.A105_AUTH_SESSION_400));
+        String method = request.getMethod();
+
+        ErrorCode errorCode = CommonErrorCode.COMMON_400;
+
+        // API 명세서 기준 400 에러 코드 세분화
+        if ("/api/v1/auth-sessions".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
+            errorCode = AuthErrorCode.A105_AUTH_SESSION_400;
+        } else if ("/api/v1/auth-sessions/permissions".equals(requestUri)) {
+            errorCode = AuthErrorCode.A104_PERMISSION_CHECK_400;
+        } else if ("/api/v1/users/conversions".equals(requestUri)) {
+            errorCode = AuthErrorCode.A106_USER_CONVERSION_400;
+        } else if ("/api/v1/auth-sessions/refresh".equals(requestUri)) {
+            errorCode = AuthErrorCode.A108_AUTH_REFRESH_400;
+        } else if ("/api/v1/auth-sessions/me".equals(requestUri) && "DELETE".equalsIgnoreCase(method)) {
+            errorCode = AuthErrorCode.A109_AUTH_LOGOUT_400;
+        } else if ("/api/v1/guests".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
+            errorCode = UserErrorCode.A102_GUEST_CREATE_400;
         }
 
         return ResponseEntity
-                .status(CommonErrorCode.COMMON_400.getHttpStatus())
-                .body(ApiResponse.fail(CommonErrorCode.COMMON_400));
+                .status(errorCode.getHttpStatus())
+                .body(ApiResponse.fail(errorCode));
     }
 
     @ExceptionHandler(Exception.class)

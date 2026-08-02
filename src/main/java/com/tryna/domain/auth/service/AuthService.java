@@ -1,34 +1,51 @@
 package com.tryna.domain.auth.service;
 
+import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.auth.dto.*;
 import com.tryna.domain.auth.entity.Auths;
 import com.tryna.domain.auth.enums.PermissionAction;
+import com.tryna.domain.auth.enums.Provider;
 import com.tryna.domain.auth.repository.AuthsRepository;
 import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
 import com.tryna.domain.auth.repository.SessionRedisRepository;
+import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
+import com.tryna.domain.event.repository.EventsRepository;
+import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
+import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
+import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.term.entity.Terms;
+import com.tryna.domain.term.enums.TermType;
 import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
 import com.tryna.domain.term.repository.TermsRepository;
 import com.tryna.domain.term.repository.UserAgreedTermsRepository;
 import com.tryna.domain.user.dto.UserConversionResponse;
 import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.entity.Users;
+import com.tryna.domain.user.enums.UserRole;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.domain.user.repository.UserSettingsRepository;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.UserErrorCode;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
+import com.tryna.global.security.jwt.TokenType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -41,8 +58,16 @@ public class AuthService {
     private final UserAgreedTermsRepository userAgreedTermsRepository;
     private final UserRepository userRepository;
     private final UserSettingsRepository userSettingsRepository;
+    private final RemindersRepository remindersRepository;
+    private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
+    private final ActionItemsRepository actionItemsRepository;
+    private final EventsRepository eventsRepository;
+    private final UserEventsRepository userEventsRepository;
+    private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
+    private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
     private final OAuthClientProvider oAuthClientProvider;
     private final GoogleTokenProvider googleTokenProvider;
+    private final SocialSignupService socialSignupService;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -74,54 +99,49 @@ public class AuthService {
         // 2. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
 
-        Users user = null;
-        boolean isNewUser = false;
+        Users user;
+        boolean isNewUser = existingAuth.isEmpty();
 
         if (existingAuth.isPresent()) {
             // [A. 기존 회원 로그인]
             Auths auth = existingAuth.get();
             user = auth.getUser();
 
-            // 더티 체킹으로 갱신하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
-            if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
-                validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-            }
+            validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
 
-            // 프론트가 새로운 리프레시 토큰이나 스코프를 줬다면 최신 상태로 갱신 (더티 체킹)
             if (request.oauthRefreshToken() != null || grantedScopes != null) {
                 auth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
             }
         } else {
             // [B. 신규 회원 가입]
-            isNewUser = true;
+            validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
 
-            // B-1. 필수 약관 검증
-            validateRequiredTerms(request.agreedTermTypes());
-
-            // B-2. Users 엔티티 생성 및 저장
-            Users newUser = Users.createUser();
-            user = userRepository.save(newUser);
-
-            // B-3. UserSettings 기본 설정 생성 및 저장
-            UserSettings defaultSettings = UserSettings.createDefault(user);
-            userSettingsRepository.save(defaultSettings);
-
-            // DB에 저장하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
-            if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
-                validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-            }
-
-            //B-4. Auths 인증 정보 저장
-            Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
             try {
-                authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
+                // 독립된 트랜잭션(REQUIRES_NEW)으로 신규 가입 시도
+                user = socialSignupService.registerNewUser(
+                        request.provider(),
+                        socialId,
+                        email,
+                        request.oauthRefreshToken(),
+                        grantedScopes,
+                        request.agreedTermTypes()
+                );
             } catch (DataIntegrityViolationException e) {
-                // DB 유니크 제약조건 위반 시 409 비즈니스 에러로 래핑하여 던짐
-                throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
-            }
+                // 소셜 유니크 제약조건(uq_auths_provider_social_id_active) 위반인지 정밀 검사
+                String rootMessage = e.getMostSpecificCause().getMessage();
+                if (rootMessage != null && rootMessage.contains("uq_auths_provider_social_id_active")) {
+                    // 동시 요청으로 인해 다른 트랜잭션이 먼저 가입시킨 경우 -> 기존 계정 로그인 흐름으로 안전하게 흡수
+                    Auths concurrentAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId)
+                            .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_409));
 
-            // B-5. 최신 약관 매핑 및 동의 이력 저장
-            saveUserAgreedTerms(user, request.agreedTermTypes());
+                    user = concurrentAuth.getUser();
+                    concurrentAuth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
+                    isNewUser = false;
+                } else {
+                    // 그 외의 데이터 무결성 위반(예: 기타 제약조건 에러 등)은 그대로 예외 전파
+                    throw e;
+                }
+            }
         }
 
         // 3. 토큰 발급 및 Redis 세션/FCM 저장
@@ -142,11 +162,11 @@ public class AuthService {
     public UserConversionResponse convertGuestToUser(Long userId, AuthSessionCreateRequest request) {
         // 1. 기존 비회원 유저 조회 및 권한 검증
         Users user = userRepository.findById(userId)
-                .orElseThrow(() -> new com.tryna.global.exception.BusinessException(com.tryna.global.exception.UserErrorCode.USER_404));
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
 
-        if (user.getUserRole() != com.tryna.domain.user.enums.UserRole.GUEST) {
+        if (user.getUserRole() != UserRole.GUEST) {
             // 이미 정식 회원이거나 권한이 없는 경우
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A106_USER_CONVERSION_403);
+            throw new BusinessException(AuthErrorCode.A106_USER_CONVERSION_403);
         }
 
         // 2. 소셜 프로필 조회
@@ -159,7 +179,7 @@ public class AuthService {
         // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
         if (existingAuth.isPresent()) {
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
+            throw new BusinessException(AuthErrorCode.AUTH_409);
         }
 
         // 4. 필수 약관 검증
@@ -168,18 +188,14 @@ public class AuthService {
         // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
-        // DB에 저장하기 전에 리프레시 토큰 주인이 맞는지 교차 검증
-        if (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
-            validateRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-        }
+        validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
 
         // 6. Auths 정보 생성 및 약관 매핑 저장
         Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
         try {
-            authsRepository.saveAndFlush(newAuth); // 즉시 쿼리를 날려 유니크 제약조건 위반을 확인
+            authsRepository.saveAndFlush(newAuth);
         } catch (DataIntegrityViolationException e) {
-            // DB 유니크 제약조건 위반 시 409 비즈니스 에러로 래핑하여 던짐
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_409);
+            throw new BusinessException(AuthErrorCode.AUTH_409);
         }
 
         saveUserAgreedTerms(user, request.agreedTermTypes());
@@ -212,18 +228,15 @@ public class AuthService {
         TokenPair tokenPair = jwtTokenProvider.generateTokenPair(userId);
 
         // 2. 만료 시간(TTL) 계산
-        long refreshExpirationSeconds = jwtTokenProvider.getRefreshExpirationSeconds();
-        Duration ttl = Duration.ofSeconds(refreshExpirationSeconds);
+        Duration ttl = Duration.ofSeconds(jwtTokenProvider.getRefreshExpirationSeconds());
 
         // 3. 기존 FCM 토큰 조회
         String existingFcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
 
         // 4. 최종 FCM 토큰 결정 (값이 없으면 기존 것 유지)
-        String finalFcmToken = (fcmToken != null && !fcmToken.isBlank())
-                ? fcmToken
-                : existingFcmToken;
+        String finalFcmToken = (fcmToken != null && !fcmToken.isBlank()) ? fcmToken : existingFcmToken;
 
-        // 5. [핵심] 기존 토큰과 새로운 토큰이 다를 경우, 기존 토큰을 Set에서 확실하게 제거
+        // 5. 기존 토큰과 새로운 토큰이 다를 경우, 기존 토큰을 Set에서 확실하게 제거
         if (existingFcmToken != null && !existingFcmToken.isBlank()
                 && finalFcmToken != null && !finalFcmToken.equals(existingFcmToken)) {
             fcmTokenRedisRepository.remove(userId, existingFcmToken);
@@ -231,13 +244,7 @@ public class AuthService {
 
         // 6. Redis 세션 Hash 저장
         sessionRedisRepository.save(
-                userId,
-                deviceId,
-                tokenPair.refreshToken(),
-                finalFcmToken,
-                scopes,
-                Instant.now(),
-                ttl
+                userId, deviceId, tokenPair.refreshToken(), finalFcmToken, scopes, Instant.now(), ttl
         );
 
         // 7. 새로운 토큰을 Set에 추가
@@ -258,9 +265,9 @@ public class AuthService {
 
         // 1. 리프레시 토큰 자체의 유효성(만료, 위변조) 1차 검증
         try {
-            jwtTokenProvider.validateToken(providedRefreshToken, com.tryna.global.security.jwt.TokenType.REFRESH);
-        } catch (com.tryna.global.exception.BusinessException e) {
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401);
+            jwtTokenProvider.validateToken(providedRefreshToken, TokenType.REFRESH);
+        } catch (BusinessException e) {
+            throw new BusinessException(AuthErrorCode.A108_AUTH_REFRESH_401);
         }
 
         // 2. 토큰에서 userId 추출
@@ -271,14 +278,14 @@ public class AuthService {
 
         // 저장된 토큰이 없거나, 보낸 토큰과 다르면 -> 토큰 탈취(RTR 위반) 또는 이미 로그아웃된 상태
         if (storedRefreshToken.isEmpty() || !storedRefreshToken.get().equals(providedRefreshToken)) {
-            // 보안을 위해 해당 기기의 세션을 즉시 파기합니다.
+            // 보안을 위해 해당 기기의 세션을 즉시 파기
             sessionRedisRepository.delete(userId, deviceId);
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401);
+            throw new BusinessException(AuthErrorCode.A108_AUTH_REFRESH_401);
         }
 
         // 4. 유저 상태 확인 (그 사이 탈퇴했거나 상태가 변경되었는지 검증)
         Users user = userRepository.findById(userId)
-                .orElseThrow(() -> new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.A108_AUTH_REFRESH_401));
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.A108_AUTH_REFRESH_401));
 
         // 5. 기존 FCM 토큰 유지 (Redis 세션을 덮어씌울 때 기존 FCM 토큰이 날아가지 않도록 조회)
         String existingFcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
@@ -306,19 +313,80 @@ public class AuthService {
         sessionRedisRepository.delete(userId, deviceId);
     }
 
-    // TODO: 앱 실행 시 FCM 토큰만 갱신 (session Hash + fcm Set 동기화)
-    public void updateFcmToken(Long userId, String deviceId, String fcmToken) {
-        throw new UnsupportedOperationException("Not implemented");
+    /**
+     * 앱 실행 시 FCM 토큰만 갱신 (session Hash + fcm Set 동기화)
+     */
+    @Transactional
+    public void updateFcmToken(Long userId, String deviceId, String newFcmToken) {
+        if (newFcmToken == null || newFcmToken.isBlank()) {
+            return;
+        }
+
+        // 1. 기존 세션의 FCM 토큰 조회
+        String existingFcmToken = sessionRedisRepository.findFcmToken(userId, deviceId).orElse(null);
+
+        // 2. 토큰이 변경되지 않았다면 무시 (불필요한 Redis 통신 방지)
+        if (newFcmToken.equals(existingFcmToken)) {
+            return;
+        }
+
+        // 3. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거 (알림 중복 방지)
+        if (existingFcmToken != null && !existingFcmToken.isBlank()) {
+            fcmTokenRedisRepository.remove(userId, existingFcmToken);
+        }
+
+        // 4. Redis 세션 Hash의 FCM 필드만 업데이트
+        sessionRedisRepository.updateFcmToken(userId, deviceId, newFcmToken);
+
+        // 5. 새로운 토큰을 FCM Set에 추가 (리프레시 토큰의 만료 시간과 동일하게 연장)
+        Duration ttl = Duration.ofSeconds(jwtTokenProvider.getRefreshExpirationSeconds());
+        fcmTokenRedisRepository.add(userId, newFcmToken, ttl);
     }
 
-    // TODO: 회원 탈퇴 — userId 기준 session/fcm Redis 데이터 전체 삭제 후 DB 정리
+    /**
+     * G104: 회원 탈퇴 — userId 기준 session/fcm Redis 데이터 전체 삭제 후 DB 정리
+     */
+    @Transactional
     public void withdraw(Long userId) {
-        throw new UnsupportedOperationException("Not implemented");
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 1. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
+        eventAnalysisLogsRepository.deleteByUserId(userId);
+        actionItemsRepository.softDeleteByUserId(userId, now);
+        eventsRepository.softDeleteByUserId(userId, now);
+
+        // 2. Hard Delete 대상 물리 삭제
+        remindersRepository.deleteByUserId(userId);
+        recommendationFeedbacksRepository.deleteByUserId(userId);
+        userEventsRepository.deleteByUserId(userId);
+        userAgreedTermsRepository.deleteByUserId(userId);
+        externalCalendarConnectionsRepository.deleteByUserId(userId);
+
+        // 3. 나머지 Soft Delete 대상 논리 삭제
+        userSettingsRepository.softDeleteByUserId(userId, now);
+        authsRepository.softDeleteByUserId(userId, now);
+
+        // 4. 유저 Soft Delete
+        user.deleteSoft();
+
+        // 5. DB 트랜잭션이 완벽히 커밋된 직후에만 Redis 세션 및 FCM 토큰 파기 수행
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sessionRedisRepository.deleteAllByUserId(userId);
+                fcmTokenRedisRepository.deleteAllByUserId(userId);
+                log.info("유저 ID {}의 회원 탈퇴 완료 및 Redis 세션/FCM 토큰이 안전하게 파기되었습니다.", userId);
+            }
+        });
     }
 
     // --- Helper Method ---
+
     private AuthTokenResponse createAuthTokenResponse(TokenPair tokenPair) {
-        String refreshTokenExpiresAt = java.time.Instant.now()
+        String refreshTokenExpiresAt = Instant.now()
                 .plusSeconds(jwtTokenProvider.getRefreshExpirationSeconds())
                 .toString();
 
@@ -333,19 +401,19 @@ public class AuthService {
 
     // --- Terms Helper Methods ---
 
-    // 1. 필수 약관 검증 공통 메서드
-    private void validateRequiredTerms(List<com.tryna.domain.term.enums.TermType> agreedTypes) {
-        List<com.tryna.domain.term.enums.TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
-        List<com.tryna.domain.term.enums.TermType> requiredTypes = termsRepository.findRequiredTermTypes();
+    // 필수 약관 검증 공통 메서드
+    private void validateRequiredTerms(List<TermType> agreedTypes) {
+        List<TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
+        List<TermType> requiredTypes = termsRepository.findRequiredTermTypes();
 
         if (!types.containsAll(requiredTypes)) {
-            throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.TERMS_400);
+            throw new BusinessException(AuthErrorCode.TERMS_400);
         }
     }
 
-    // 2. 약관 동의 이력 저장 공통 메서드
-    private void saveUserAgreedTerms(Users user, List<com.tryna.domain.term.enums.TermType> agreedTypes) {
-        List<com.tryna.domain.term.enums.TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
+    // 약관 동의 이력 저장 공통 메서드
+    private void saveUserAgreedTerms(Users user, List<TermType> agreedTypes) {
+        List<TermType> types = (agreedTypes != null) ? agreedTypes : List.of();
 
         if (!types.isEmpty()) {
             List<Terms> latestTerms = termsRepository.findLatestTermsByTypes(types);
@@ -357,28 +425,33 @@ public class AuthService {
     }
 
     // 프론트엔드가 보낸 Refresh Token이 Access Token의 주인과 일치하는지 교차 검증
-    private void validateRefreshTokenOwnership(String refreshToken, String expectedSocialId, com.tryna.domain.auth.enums.Provider provider) {
-        // 우선, 구글일 때만 이 방어 로직 수행
-        if (provider != com.tryna.domain.auth.enums.Provider.GOOGLE) {
+    private void validateOAuthRefreshTokenOwnership(String refreshToken, String expectedSocialId, Provider provider) {
+        if (refreshToken == null || refreshToken.isBlank() || provider != Provider.GOOGLE) {
             return;
         }
 
         try {
-            // 1. 프론트가 준 Refresh Token을 이용해 구글에서 1회용 새 Access Token 발급
+            // 프론트가 준 Refresh Token을 이용해 구글에서 1회용 새 Access Token 발급
             String tempAccessToken = googleTokenProvider.getFreshAccessToken(refreshToken);
 
-            // 2. 주입된 OAuthClientProvider를 통해 클라이언트 구현체를 가져와 유저 정보 조회
+            // 주입된 OAuthClientProvider를 통해 클라이언트 구현체를 가져와 유저 정보 조회
             OAuthClient client = oAuthClientProvider.getClient(provider);
             OAuthClient.SocialUserProfile tempProfile = client.getProfile(tempAccessToken);
 
-            // 3. 처음에 Access Token으로 검증했던 유저 ID(expectedSocialId)와,
-            //    Refresh Token으로 검증한 유저 ID가 다르면 해킹 시도!
             if (!expectedSocialId.equals(tempProfile.socialId())) {
                 throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
             }
-        } catch (Exception e) {
-            // 리프레시 토큰이 만료되었거나 조작되어 검증에 실패한 경우
+        } catch (BusinessException e) {
+            // 구글 서버 설정 오류, 인프라 장애 등 500 에러는 401로 왜곡시키지 않고 그대로 전파
+            if (e.getErrorCode() == com.tryna.global.exception.CommonErrorCode.COMMON_500) {
+                throw e;
+            }
+            // 그 외 토큰 만료/유효하지 않음 등의 비즈니스 예외는 401로 처리
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+        } catch (Exception e) {
+            // 예상치 못한 시스템/네트워크 예외는 500 에러로 안전하게 처리
+            log.error("구글 리프레시 토큰 교차 검증 중 시스템 오류 발생: {}", e.getMessage(), e);
+            throw new BusinessException(com.tryna.global.exception.CommonErrorCode.COMMON_500);
         }
     }
 }
