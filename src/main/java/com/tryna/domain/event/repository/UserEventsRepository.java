@@ -152,7 +152,6 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
      * @param destinationLabel 이동할 기본 라벨
      * @return 라벨이 변경된 사용자-일정 매핑 개수
      */
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE UserEvents ue
            SET ue.label = :destinationLabel
