@@ -10,6 +10,7 @@ import java.util.List;
 
 import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.external.entity.ExternalCalendars;
+import com.tryna.domain.label.entity.Labels;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -141,5 +142,28 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             @Param("keyword") String keyword,
             @Param("eventStatuses") Collection<EventStatus> eventStatuses,
             @Param("excludedSourceType") SourceType excludedSourceType
+    );
+
+    /**
+     * 삭제 대상 라벨에 연결된 사용자-일정 매핑을 기본 라벨로 일괄 변경합니다.
+     *
+     * B108-4 라벨 삭제 시 일정 자체는 삭제하지 않고,
+     * 해당 사용자의 기본 라벨로 이동하기 위해 사용합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param sourceLabelId 삭제 대상 라벨 ID
+     * @param destinationLabel 이동할 기본 라벨
+     * @return 라벨이 변경된 사용자-일정 매핑 개수
+     */
+    @Query("""
+        UPDATE UserEvents ue
+           SET ue.label = :destinationLabel
+         WHERE ue.user.userId = :userId
+           AND ue.label.labelId = :sourceLabelId
+        """)
+    int moveLabelAssignments(
+            @Param("userId") Long userId,
+            @Param("sourceLabelId") Long sourceLabelId,
+            @Param("destinationLabel") Labels destinationLabel
     );
 }
