@@ -48,7 +48,13 @@ public class GoogleCalendarClient {
                     formattedTimeMax  // 두 번째 {timeMax} 에 들어갈 값
             );
             return response.getBody();
+        } catch (org.springframework.web.client.HttpClientErrorException.Unauthorized
+                 | org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            // 구글 캘린더 API 인증/권한 거부(401/403)는 500이 아닌 B105_EXTERNAL_EVENT_401로 정확히 분리 전파
+            log.warn("구글 캘린더 API 인증 또는 권한 오류 발생 (401/403): {}", e.getMessage());
+            throw new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_401);
         } catch (Exception e) {
+            // 그 외 네트워크 타임아웃, 구글 서버 장애 등은 500 에러 처리
             log.error("구글 캘린더 API 통신 실패: {}", e.getMessage(), e);
             throw new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
         }

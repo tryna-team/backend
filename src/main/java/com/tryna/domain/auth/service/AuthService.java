@@ -32,9 +32,12 @@ import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import com.tryna.global.security.jwt.TokenType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -42,6 +45,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -347,31 +351,36 @@ public class AuthService {
         Users user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_404));
 
-        // 1. Redis 파기 (완전 삭제)
-        sessionRedisRepository.deleteAllByUserId(userId);
-        fcmTokenRedisRepository.deleteAllByUserId(userId);
-
         LocalDateTime now = LocalDateTime.now();
 
-        // 2. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
-        // UserEvents 테이블을 참조하여 지우는 테이블들을 먼저 처리해야 함
+        // 1. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
         eventAnalysisLogsRepository.deleteByUserId(userId);
         actionItemsRepository.softDeleteByUserId(userId, now);
         eventsRepository.softDeleteByUserId(userId, now);
 
-        // 3. Hard Delete 대상 물리 삭제
+        // 2. Hard Delete 대상 물리 삭제
         remindersRepository.deleteByUserId(userId);
         recommendationFeedbacksRepository.deleteByUserId(userId);
         userEventsRepository.deleteByUserId(userId);
         userAgreedTermsRepository.deleteByUserId(userId);
         externalCalendarConnectionsRepository.deleteByUserId(userId);
 
-        // 4. 나머지 Soft Delete 대상 논리 삭제
+        // 3. 나머지 Soft Delete 대상 논리 삭제
         userSettingsRepository.softDeleteByUserId(userId, now);
         authsRepository.softDeleteByUserId(userId, now);
 
-        // 5. 유저 Soft Delete
+        // 4. 유저 Soft Delete
         user.deleteSoft();
+
+        // 5. DB 트랜잭션이 완벽히 커밋된 직후에만 Redis 세션 및 FCM 토큰 파기 수행
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sessionRedisRepository.deleteAllByUserId(userId);
+                fcmTokenRedisRepository.deleteAllByUserId(userId);
+                log.info("유저 ID {}의 회원 탈퇴 완료 및 Redis 세션/FCM 토큰이 안전하게 파기되었습니다.", userId);
+            }
+        });
     }
 
     // --- Helper Method ---
@@ -432,9 +441,17 @@ public class AuthService {
             if (!expectedSocialId.equals(tempProfile.socialId())) {
                 throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
             }
-        } catch (Exception e) {
-            // 리프레시 토큰이 만료되었거나 조작되어 검증에 실패한 경우
+        } catch (BusinessException e) {
+            // 구글 서버 설정 오류, 인프라 장애 등 500 에러는 401로 왜곡시키지 않고 그대로 전파
+            if (e.getErrorCode() == com.tryna.global.exception.CommonErrorCode.COMMON_500) {
+                throw e;
+            }
+            // 그 외 토큰 만료/유효하지 않음 등의 비즈니스 예외는 401로 처리
             throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+        } catch (Exception e) {
+            // 예상치 못한 시스템/네트워크 예외는 500 에러로 안전하게 처리
+            log.error("구글 리프레시 토큰 교차 검증 중 시스템 오류 발생: {}", e.getMessage(), e);
+            throw new BusinessException(com.tryna.global.exception.CommonErrorCode.COMMON_500);
         }
     }
 }

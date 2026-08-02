@@ -22,6 +22,7 @@ import com.tryna.global.exception.UserErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -49,7 +50,7 @@ public class CalendarSyncService {
     private final ExternalCalendarsRepository externalCalendarsRepository;
     private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
 
-    private final TransactionTemplate transactionTemplate;
+    private final PlatformTransactionManager transactionManager;
 
     /**
      * B105: 외부 캘린더 일정 조회 및 표시 (대량 데이터 일괄 동기화 최적화 버전)
@@ -75,8 +76,10 @@ public class CalendarSyncService {
         } catch (BusinessException e) {
             boolean isTokenError = e.getErrorCode() == AuthErrorCode.AUTH_401_INVALID_TOKEN;
             if (isTokenError) {
-                transactionTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-                transactionTemplate.execute(status -> {
+                TransactionTemplate requiresNewTemplate = new TransactionTemplate(transactionManager);
+                requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+                requiresNewTemplate.execute(status -> {
                     auth.clearOAuthInfo();
                     authsRepository.save(auth);
                     return null;
@@ -114,7 +117,7 @@ public class CalendarSyncService {
                 });
 
         ExternalCalendars externalCalendar = externalCalendarsRepository
-                .findByConnection_User_UserIdAndConnection_Provider(userId, Provider.GOOGLE)
+                .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
                 .orElseGet(() -> {
                     try {
                         ExternalCalendars newCal = ExternalCalendars.createDefault(
@@ -126,7 +129,7 @@ public class CalendarSyncService {
                         // 캘린더 테이블의 유니크 제약조건명(uq_external_calendars_connection_calendar) 기준 검사
                         if (rootMessage != null && rootMessage.contains("uq_external_calendars_connection_calendar")) {
                             return externalCalendarsRepository
-                                    .findByConnection_User_UserIdAndConnection_Provider(userId, Provider.GOOGLE)
+                                    .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
                                     .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
                         } else {
                             throw e;
@@ -250,7 +253,7 @@ public class CalendarSyncService {
         }
 
         ExternalCalendars calendar = externalCalendarsRepository
-                .findByConnection_User_UserIdAndConnection_Provider(userId, Provider.GOOGLE)
+                .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
                 .orElse(null);
 
         String calendarName = (calendar != null) ? calendar.getName() : "내 캘린더";
