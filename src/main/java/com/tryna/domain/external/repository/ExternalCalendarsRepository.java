@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface ExternalCalendarsRepository extends JpaRepository<ExternalCalendars, Long> {
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -18,4 +20,6 @@ public interface ExternalCalendarsRepository extends JpaRepository<ExternalCalen
              )
             """)
     int deleteByUserId(@Param("userId") Long userId);
+
+    Optional<ExternalCalendars> findByConnection_User_UserIdAndConnection_Provider(Long userId, com.tryna.domain.auth.enums.Provider provider);
 }

@@ -2,9 +2,11 @@ package com.tryna.domain.event.repository;
 
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
+import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +14,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
+
+    Optional<Events> findByExternalCalendarAndExternalEventId(com.tryna.domain.external.entity.ExternalCalendars externalCalendar, String externalEventId);
+
+    List<Events> findByExternalCalendarAndExternalEventIdIn(ExternalCalendars externalCalendar, Collection<String> externalEventIds);
+
+    void deleteAllByExternalCalendar(ExternalCalendars externalCalendar);
 
     @Query("""
             SELECT COUNT(e) > 0

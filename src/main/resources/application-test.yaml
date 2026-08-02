@@ -27,6 +27,8 @@ oauth2:
   google:
     client-id: ${GOOGLE_CLIENT_ID:dummy-client-id-for-ci}
     client-secret: ${GOOGLE_CLIENT_SECRET:dummy-client-secret-for-ci}
+    token-url: http://localhost:8080/mock/google/token
+    calendar-url: http://localhost:8080/mock/google/calendar/events
 
 app:
   crypto:

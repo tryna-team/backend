@@ -3,19 +3,9 @@ package com.tryna.domain.external.entity;
 import com.tryna.domain.auth.enums.Provider;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.domain.user.entity.Users;
+import com.tryna.global.converter.StringCryptoConverter;
 import com.tryna.global.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,6 +14,12 @@ import org.hibernate.annotations.ColumnDefault;
 @Entity
 @Table(
         name = "external_calendar_connections",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uq_external_calendar_connections_user_provider",
+                        columnNames = {"user_id", "provider"}
+                )
+        },
         indexes = {
                 @Index(name = "idx_external_calendar_connections_user_id", columnList = "user_id")
         }
@@ -45,6 +41,7 @@ public class ExternalCalendarConnections extends BaseEntity {
     @Column(name = "provider", nullable = false, length = 50)
     private Provider provider;
 
+    @Convert(converter = StringCryptoConverter.class)
     @Column(name = "refresh_token", length = 512)
     private String refreshToken;
 
@@ -53,4 +50,12 @@ public class ExternalCalendarConnections extends BaseEntity {
     @ColumnDefault("'ACTIVE'")
     private ConnectionStatus connectionStatus = ConnectionStatus.ACTIVE;
 
+    public static ExternalCalendarConnections create(Users user, Provider provider, String refreshToken) {
+        ExternalCalendarConnections connection = new ExternalCalendarConnections();
+        connection.user = user;
+        connection.provider = provider;
+        connection.refreshToken = refreshToken;
+        connection.connectionStatus = ConnectionStatus.ACTIVE;
+        return connection;
+    }
 }

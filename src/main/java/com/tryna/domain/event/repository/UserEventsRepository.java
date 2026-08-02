@@ -9,12 +9,15 @@ import java.util.Collection;
 import java.util.List;
 
 import com.tryna.domain.event.enums.SourceType;
+import com.tryna.domain.external.entity.ExternalCalendars;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
+
+    void deleteAllByEvent_ExternalCalendar(ExternalCalendars externalCalendar);
 
     @Query("""
             SELECT COUNT(ue.userEventId)
