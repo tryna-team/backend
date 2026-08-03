@@ -12,18 +12,15 @@ import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.CommonErrorCode;
 import com.tryna.global.exception.LabelErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Pattern;
 import java.time.LocalDateTime;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -358,7 +355,7 @@ public class LabelService {
         if (Boolean.TRUE.equals(label.getIsDefault())) {
             destinationLabel = activeLabels.stream()
                     .filter(activeLabel ->
-                            !activeLabel.getLabelId().equals(labelId)
+                            Boolean.TRUE.equals(activeLabel.getIsDefault())
                     )
                     .findFirst()
                     .orElseThrow(() ->

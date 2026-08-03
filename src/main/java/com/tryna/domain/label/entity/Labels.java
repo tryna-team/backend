@@ -65,7 +65,7 @@ import java.time.LocalDateTime;
 @Check(
         constraints = """
                 (
-                    label_type IN ('DEFAULT', 'USER')
+                    label_type = 'USER'
                     AND external_calendar_id IS NULL
                 )
                 OR
@@ -136,7 +136,7 @@ public class Labels extends BaseEntity {
         label.externalCalendar = null;
         label.name = name;
         label.normalizedName = normalizedName;
-        label.labelType = LabelType.DEFAULT;
+        label.labelType = LabelType.USER;
         label.color = color;
         label.isDefault = true;
         label.isVisible = true;
