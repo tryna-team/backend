@@ -1,6 +1,7 @@
 package com.tryna.domain.label.entity;
 
 import com.tryna.domain.external.entity.ExternalCalendars;
+import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.domain.label.enums.LabelType;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.global.entity.BaseEntity;
@@ -64,7 +65,7 @@ import java.time.LocalDateTime;
 @Check(
         constraints = """
                 (
-                    label_type IN ('DEFAULT', 'USER')
+                    label_type = 'USER'
                     AND external_calendar_id IS NULL
                 )
                 OR
@@ -104,8 +105,9 @@ public class Labels extends BaseEntity {
     @ColumnDefault("'USER'")
     private LabelType labelType = LabelType.USER;
 
-    @Column(name = "color", nullable = false, length = 7)
-    private String color;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "color", nullable = false, length = 20)
+    private LabelColor color;
 
     @Column(name = "is_default", nullable = false)
     @ColumnDefault("false")
@@ -125,7 +127,7 @@ public class Labels extends BaseEntity {
             Users user,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -134,7 +136,7 @@ public class Labels extends BaseEntity {
         label.externalCalendar = null;
         label.name = name;
         label.normalizedName = normalizedName;
-        label.labelType = LabelType.DEFAULT;
+        label.labelType = LabelType.USER;
         label.color = color;
         label.isDefault = true;
         label.isVisible = true;
@@ -147,7 +149,7 @@ public class Labels extends BaseEntity {
             Users user,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -170,7 +172,7 @@ public class Labels extends BaseEntity {
             ExternalCalendars externalCalendar,
             String name,
             String normalizedName,
-            String color,
+            LabelColor color,
             Integer sortOrder
     ) {
         Labels label = new Labels();
@@ -191,9 +193,8 @@ public class Labels extends BaseEntity {
     public void update(
             String name,
             String normalizedName,
-            String color,
-            Boolean isVisible,
-            Integer sortOrder
+            LabelColor color,
+            Boolean isVisible
     ) {
         if (name != null) {
             this.name = name;
@@ -207,11 +208,9 @@ public class Labels extends BaseEntity {
         if (isVisible != null) {
             this.isVisible = isVisible;
         }
-
-        if (sortOrder != null) {
-            this.sortOrder = sortOrder;
-        }
     }
+
+    public void updateDefault(Boolean isDefault) { this.isDefault = isDefault; }
 
     public void updateSortOrder(Integer sortOrder) {
         this.sortOrder = sortOrder;

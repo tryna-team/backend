@@ -38,7 +38,8 @@ public interface LabelControllerDocs {
                     라벨 이름은 필수이며 동일 사용자 안에서
                     정규화한 이름이 같은 활성 라벨은 중복 생성할 수 없습니다.
                     
-                    색상을 생략하면 서버 기본 색상을 적용합니다.
+                    color는 서버에서 허용한 6개 라벨 색상 중 하나만 사용할 수 있으며,
+                    생략하면 기본 연두색을 적용합니다.
                     """,
             operationId = "createLabel"
     )
@@ -56,6 +57,8 @@ public interface LabelControllerDocs {
                 기본 라벨과 외부 캘린더 라벨도 이름과 색상을
                 수정할 수 있습니다.
 
+                color는 서버에서 허용한 6개 라벨 색상 중 하나만 사용할 수 있습니다
+            
                 외부 캘린더 라벨을 수정해도 외부 제공자의
                 원본 캘린더 정보는 변경하지 않습니다.
                 """,
@@ -80,7 +83,7 @@ public interface LabelControllerDocs {
                 삭제된 라벨에 연결된 일정은 삭제하지 않고
                 사용자의 기본 라벨로 이동합니다.
 
-                기본 라벨과 외부 캘린더 라벨은
+                외부 캘린더 라벨은
                 이 API로 삭제할 수 없습니다.
                 """,
             operationId = "deleteLabel"
@@ -92,5 +95,23 @@ public interface LabelControllerDocs {
                     required = true
             )
             @PathVariable("labelId") Long labelId
+    );
+
+    @Operation(
+            summary = "B108-5 라벨 순서 변경",
+            description = """
+                현재 사용자가 소유한 활성 사용자 라벨의 표시 순서를 변경합니다.
+
+                변경 후 최종 순서대로 정렬한 전체 사용자 라벨 ID를 전달합니다.
+                요청 배열 순서대로 sortOrder를 1부터 저장하고,
+                첫 번째 라벨을 새로운 기본 라벨로 지정합니다.
+
+                외부 캘린더 라벨은 순서 변경 대상에 포함하지 않습니다.
+                """,
+            operationId = "updateLabelOrder"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<LabelListResponse>> updateLabelOrder(
+            @RequestBody LabelOrderUpdateRequest request
     );
 }

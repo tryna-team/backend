@@ -155,6 +155,41 @@ public class LabelController implements LabelControllerDocs {
     }
 
     /**
+     * B108-5: 라벨 순서 변경
+     */
+    @PatchMapping("/order")
+    @Override
+    public ResponseEntity<ApiResponse<LabelListResponse>> updateLabelOrder(
+            @RequestBody LabelOrderUpdateRequest request
+    ) {
+        // 1. SecurityContext에서 현재 사용자 ID 추출
+        Long userId = extractUserIdFromSecurityContext();
+
+        // 2. 인증 정보가 없는 경우 인증 예외 처리
+        if (userId == null) {
+            throw new BusinessException(
+                    AuthErrorCode.AUTH_401
+            );
+        }
+
+        // 3. 라벨 순서 및 기본 라벨 변경
+        LabelListResponse response =
+                labelService.updateLabelOrder(
+                        userId,
+                        request
+                );
+
+        // 4. 공통 응답 형식으로 반환
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "B108_LABEL_ORDER_UPDATE_200",
+                        "라벨 순서가 변경되었습니다.",
+                        response
+                )
+        );
+    }
+
+    /**
      * SecurityContext에서 현재 인증된 사용자의 ID를 추출합니다.
      *
      * 회원과 비회원 모두 인증 토큰의 principal에 userId가
