@@ -29,6 +29,12 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+
+        if (requestUri.startsWith(contextPath)) {
+            requestUri = requestUri.substring(contextPath.length());
+        }
+        
         String requestMethod = request.getMethod();
 
         if ("POST".equalsIgnoreCase(requestMethod)
