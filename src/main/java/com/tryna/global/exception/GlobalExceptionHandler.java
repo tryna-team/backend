@@ -4,6 +4,7 @@ import com.tryna.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -20,6 +21,30 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ApiResponse.fail(errorCode));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(
+            HttpMessageNotReadableException e,
+            HttpServletRequest request
+    ) {
+        String requestUri = request.getRequestURI();
+        String requestMethod = request.getMethod();
+
+        if ("POST".equalsIgnoreCase(requestMethod)
+                && "/api/v1/labels".equals(requestUri)) {
+            return ResponseEntity
+                    .status(LabelErrorCode.B108_LABEL_CREATE_400.getHttpStatus())
+                    .body(ApiResponse.fail(
+                            LabelErrorCode.B108_LABEL_CREATE_400
+                    ));
+        }
+
+        return ResponseEntity
+                .status(CommonErrorCode.COMMON_400.getHttpStatus())
+                .body(ApiResponse.fail(
+                        CommonErrorCode.COMMON_400
+                ));
     }
 
     @ExceptionHandler({

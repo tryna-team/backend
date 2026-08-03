@@ -51,6 +51,10 @@ public interface LabelsRepository extends JpaRepository<Labels, Long> {
             LabelType labelType
     );
 
+    List<Labels> findAllByUser_UserIdOrderBySortOrderAscLabelIdAsc(
+            Long userId
+    );
+
     List<Labels> findAllByUser_UserIdAndLabelTypeOrderBySortOrderAsc(
             Long userId,
             LabelType labelType

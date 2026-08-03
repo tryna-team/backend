@@ -64,7 +64,7 @@ public class LabelService {
 
         // 2. 현재 사용자의 활성 라벨을 정렬 순서대로 조회
         List<Labels> labels =
-                labelsRepository.findAllByUser_UserIdOrderBySortOrderAsc(
+                labelsRepository.findAllByUser_UserIdOrderBySortOrderAscLabelIdAsc(
                         userId
                 );
 
@@ -308,7 +308,14 @@ public class LabelService {
             );
         }
 
-        // 4. 현재 사용자의 활성 USER 라벨 전체 조회
+        // 4. 현재 사용자가 존재하는지 확인
+        userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                CommonErrorCode.COMMON_403
+                        )
+                );
+
         List<Labels> userLabels = labelsRepository
                 .findAllByUser_UserIdAndLabelTypeOrderBySortOrderAsc(
                         userId,
@@ -489,7 +496,7 @@ public class LabelService {
         if (Boolean.TRUE.equals(label.getIsDefault())) {
             destinationLabel = activeLabels.stream()
                     .filter(activeLabel ->
-                            Boolean.TRUE.equals(activeLabel.getIsDefault())
+                            !activeLabel.getLabelId().equals(labelId)
                     )
                     .findFirst()
                     .orElseThrow(() ->
@@ -506,7 +513,9 @@ public class LabelService {
             destinationLabel.updateDefault(true);
         } else {
             destinationLabel = activeLabels.stream()
-                    .filter(Labels::getIsDefault)
+                    .filter(activeLabel ->
+                            Boolean.TRUE.equals(activeLabel.getIsDefault())
+                    )
                     .findFirst()
                     .orElseThrow(() ->
                             new BusinessException(
@@ -560,7 +569,7 @@ public class LabelService {
             Integer deletedSortOrder
     ) {
         List<Labels> labels = labelsRepository
-                .findAllByUser_UserIdOrderBySortOrderAsc(userId);
+                .findAllByUser_UserIdOrderBySortOrderAscLabelIdAsc(userId);
 
         labels.stream()
                 .filter(label ->
