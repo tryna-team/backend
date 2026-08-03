@@ -71,6 +71,33 @@ public enum LabelErrorCode implements ErrorCode {
             HttpStatus.CONFLICT,
             "B108_LABEL_DELETE_409",
             "라벨 삭제 처리 중 충돌이 발생했습니다."
+    ),
+
+    /**
+     * B108-5: 라벨 순서 변경
+     */
+    B108_LABEL_ORDER_UPDATE_400(
+            HttpStatus.BAD_REQUEST,
+        "B108_LABEL_ORDER_UPDATE_400",
+                "라벨 순서 변경 요청값이 올바르지 않습니다."
+    ),
+
+    B108_LABEL_ORDER_UPDATE_403(
+            HttpStatus.FORBIDDEN,
+        "B108_LABEL_ORDER_UPDATE_403",
+                "라벨 순서를 변경할 권한이 없습니다."
+    ),
+
+    B108_LABEL_ORDER_UPDATE_404(
+            HttpStatus.NOT_FOUND,
+        "B108_LABEL_ORDER_UPDATE_404",
+                "라벨을 찾을 수 없습니다."
+    ),
+
+    B108_LABEL_ORDER_UPDATE_409(
+            HttpStatus.CONFLICT,
+        "B108_LABEL_ORDER_UPDATE_409",
+                "라벨 순서 변경 중 충돌이 발생했습니다."
     );
 
     private final HttpStatus httpStatus;

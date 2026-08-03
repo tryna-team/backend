@@ -96,4 +96,22 @@ public interface LabelControllerDocs {
             )
             @PathVariable("labelId") Long labelId
     );
+
+    @Operation(
+            summary = "B108-5 라벨 순서 변경",
+            description = """
+                현재 사용자가 소유한 활성 사용자 라벨의 표시 순서를 변경합니다.
+
+                변경 후 최종 순서대로 정렬한 전체 사용자 라벨 ID를 전달합니다.
+                요청 배열 순서대로 sortOrder를 1부터 저장하고,
+                첫 번째 라벨을 새로운 기본 라벨로 지정합니다.
+
+                외부 캘린더 라벨은 순서 변경 대상에 포함하지 않습니다.
+                """,
+            operationId = "updateLabelOrder"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<LabelListResponse>> updateLabelOrder(
+            @RequestBody LabelOrderUpdateRequest request
+    );
 }

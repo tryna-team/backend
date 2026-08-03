@@ -16,10 +16,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.time.LocalDateTime;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -261,6 +262,139 @@ public class LabelService {
     }
 
     /**
+     * B108-5: 라벨 순서 변경
+     *
+     * 현재 사용자가 소유한 활성 USER 라벨의 최종 정렬 순서를
+     * 요청 배열 순서대로 저장합니다.
+     *
+     * 요청 배열의 첫 번째 라벨을 새로운 기본 라벨로 지정하며,
+     * 기존 기본 라벨의 기본 여부는 해제합니다.
+     *
+     * 외부 캘린더 라벨은 순서 변경 대상에 포함하지 않습니다.
+     *
+     * @param userId 현재 인증된 사용자 ID
+     * @param request 변경 후 최종 라벨 순서
+     * @return 변경된 라벨 목록
+     */
+    @Transactional
+    public LabelListResponse updateLabelOrder(
+            Long userId,
+            LabelOrderUpdateRequest request
+    ) {
+        // 1. 요청 본문과 labelIds 존재 여부 확인
+        if (request == null
+                || request.labelIds() == null
+                || request.labelIds().isEmpty()) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
+        List<Long> requestedLabelIds = request.labelIds();
+
+        // 2. null ID 포함 여부 확인
+        if (requestedLabelIds.stream().anyMatch(labelId -> labelId == null)) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
+        // 3. 중복 ID 확인
+        Set<Long> uniqueLabelIds = new HashSet<>(requestedLabelIds);
+
+        if (uniqueLabelIds.size() != requestedLabelIds.size()) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
+        // 4. 현재 사용자의 활성 USER 라벨 전체 조회
+        List<Labels> userLabels = labelsRepository
+                .findAllByUser_UserIdAndLabelTypeOrderBySortOrderAsc(
+                        userId,
+                        LabelType.USER
+                );
+
+        // 5. 사용자가 보유한 활성 USER 라벨이 없는 비정상 상태 확인
+        if (userLabels.isEmpty()) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_409
+            );
+        }
+
+        // 6. 요청 개수가 현재 활성 USER 라벨 전체 개수와 같은지 확인
+        if (requestedLabelIds.size() != userLabels.size()) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
+        // 7. 현재 사용자 라벨을 ID 기준으로 매핑
+        Map<Long, Labels> labelMap = userLabels.stream()
+                .collect(Collectors.toMap(
+                        Labels::getLabelId,
+                        Function.identity()
+                ));
+
+        // 8. 요청 ID가 현재 사용자의 활성 USER 라벨 전체와 정확히 일치하는지 확인
+        boolean containsUnknownLabel = requestedLabelIds.stream()
+                .anyMatch(labelId -> !labelMap.containsKey(labelId));
+
+        if (containsUnknownLabel) {
+            /*
+             * 현재 사용자 라벨 목록에 없는 ID는
+             * 존재하지 않음, 삭제됨, 다른 사용자 소유,
+             * 외부 캘린더 라벨 중 하나일 수 있습니다.
+             *
+             * 이를 403/404로 정확히 구분하려면 별도 전역 조회가 필요합니다.
+             * 현재 명세대로 구분하려면 아래 보조 검증 메서드를 사용합니다.
+             */
+            validateUnavailableLabelIds(
+                    userId,
+                    requestedLabelIds
+            );
+        }
+
+        // 9. 기존 기본 라벨의 기본 여부 해제
+        userLabels.stream()
+                .filter(label ->
+                        Boolean.TRUE.equals(label.getIsDefault())
+                )
+                .forEach(label -> label.updateDefault(false));
+
+        /*
+         * 사용자별 활성 기본 라벨 최대 1개 유니크 인덱스가 있으므로,
+         * 기존 기본 라벨 해제를 DB에 먼저 반영합니다.
+         */
+        labelsRepository.flush();
+
+        // 10. 요청 배열 순서대로 sortOrder를 1부터 다시 지정
+        for (int index = 0; index < requestedLabelIds.size(); index++) {
+            Long labelId = requestedLabelIds.get(index);
+            Labels label = labelMap.get(labelId);
+
+            label.updateSortOrder(index + 1);
+            label.updateDefault(index == 0);
+        }
+
+        // 11. 변경사항을 DB에 반영하여 충돌을 현재 트랜잭션 안에서 확인
+        try {
+            labelsRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_409
+            );
+        }
+
+        // 12. 요청 순서대로 응답 반환
+        List<Labels> orderedLabels = requestedLabelIds.stream()
+                .map(labelMap::get)
+                .toList();
+
+        return LabelListResponse.from(orderedLabels);
+    }
+
+    /**
      * 라벨 이름을 중복 비교용 값으로 정규화합니다.
      *
      * 정책에 따라 앞뒤 공백을 제거하고,
@@ -440,5 +574,64 @@ public class LabelService {
                                 label.getSortOrder() - 1
                         )
                 );
+    }
+
+    /**
+     * 현재 사용자의 순서 변경 대상에 포함되지 않은 라벨 ID의
+     * 실패 사유를 구분합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param requestedLabelIds 요청 라벨 ID 목록
+     */
+    private void validateUnavailableLabelIds(
+            Long userId,
+            List<Long> requestedLabelIds
+    ) {
+        List<Labels> foundLabels =
+                labelsRepository.findAllById(requestedLabelIds);
+
+        Set<Long> foundLabelIds = foundLabels.stream()
+                .map(Labels::getLabelId)
+                .collect(Collectors.toSet());
+
+        // 존재하지 않거나 Soft Delete된 라벨이 포함된 경우
+        boolean hasMissingLabel = requestedLabelIds.stream()
+                .anyMatch(labelId -> !foundLabelIds.contains(labelId));
+
+        if (hasMissingLabel) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_404
+            );
+        }
+
+        // 다른 사용자 소유 라벨이 포함된 경우
+        boolean hasOtherUserLabel = foundLabels.stream()
+                .anyMatch(label ->
+                        !label.getUser().getUserId().equals(userId)
+                );
+
+        if (hasOtherUserLabel) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_403
+            );
+        }
+
+        // 외부 캘린더 라벨이 포함된 경우
+        boolean hasExternalCalendarLabel = foundLabels.stream()
+                .anyMatch(label ->
+                        label.getLabelType()
+                                == LabelType.EXTERNAL_CALENDAR
+                );
+
+        if (hasExternalCalendarLabel) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
+        // 그 외 전체 목록 불일치
+        throw new BusinessException(
+                LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+        );
     }
 }
