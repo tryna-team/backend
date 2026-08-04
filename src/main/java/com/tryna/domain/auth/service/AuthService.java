@@ -12,6 +12,9 @@ import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
+import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelColor;
+import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
 import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.term.entity.Terms;
@@ -43,6 +46,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Slf4j
@@ -65,6 +69,7 @@ public class AuthService {
     private final UserEventsRepository userEventsRepository;
     private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
     private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
+    private final LabelsRepository labelsRepository;
     private final OAuthClientProvider oAuthClientProvider;
     private final GoogleTokenProvider googleTokenProvider;
     private final SocialSignupService socialSignupService;
@@ -185,12 +190,50 @@ public class AuthService {
         // 4. 필수 약관 검증
         validateRequiredTerms(request.agreedTermTypes());
 
-        // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
+        // 5. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장
+        boolean hasDefaultLabel = labelsRepository.findByUser_UserIdAndIsDefaultTrue(user.getUserId()).isPresent();
+
+        if (!hasDefaultLabel) {
+            String rawNickname = (user.getNickname() != null && !user.getNickname().isBlank())
+                    ? user.getNickname().trim()
+                    : "사용자";
+
+            if (rawNickname.length() > 96) {
+                rawNickname = rawNickname.substring(0, 96);
+            }
+
+            String labelName = rawNickname + "의 라벨";
+            String normalizedName = labelName.toLowerCase(Locale.ROOT);
+
+            Labels defaultLabel = Labels.createDefault(
+                    user,
+                    labelName,
+                    normalizedName,
+                    LabelColor.GREEN,
+                    1
+            );
+
+            try {
+                // saveAndFlush를 사용하여 동시성 제약조건 충돌을 즉시 감지
+                labelsRepository.saveAndFlush(defaultLabel);
+            } catch (DataIntegrityViolationException e) {
+                // 기본 라벨 유니크 제약조건(uq_labels_user_default_active) 충돌인 경우에만 안전하게 흡수
+                String rootMessage = e.getMostSpecificCause().getMessage();
+                if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
+                    log.info("GUEST 회원 전환 중 기본 라벨 동시 생성 충돌 흡수 - userId: {}", user.getUserId());
+                } else {
+                    // 그 외 예상치 못한 무결성 예외는 상위로 그대로 전파
+                    throw e;
+                }
+            }
+        }
+
+        // 6. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
         validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
 
-        // 6. Auths 정보 생성 및 약관 매핑 저장
+        // 7. Auths 정보 생성 및 약관 매핑 저장
         Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
         try {
             authsRepository.saveAndFlush(newAuth);
@@ -200,17 +243,17 @@ public class AuthService {
 
         saveUserAgreedTerms(user, request.agreedTermTypes());
 
-        // 7. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
-        // 7-1. 기존 세션에서 FCM 토큰을 안전하게 조회
+        // 8. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
+        // 8-1. 기존 세션에서 FCM 토큰을 안전하게 조회
         Optional<String> existingFcmToken = sessionRedisRepository.findFcmToken(userId, request.deviceId());
 
-        // 7-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
+        // 8-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
         existingFcmToken.ifPresent(token -> fcmTokenRedisRepository.remove(userId, token));
 
-        // 7-3. 안전하게 세션 Hash를 삭제
+        // 8-3. 안전하게 세션 Hash를 삭제
         sessionRedisRepository.delete(userId, request.deviceId());
 
-        // 8. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
+        // 9. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
         return new UserConversionResponse(
@@ -366,6 +409,7 @@ public class AuthService {
         externalCalendarConnectionsRepository.deleteByUserId(userId);
 
         // 3. 나머지 Soft Delete 대상 논리 삭제
+        labelsRepository.softDeleteByUserId(userId, now);
         userSettingsRepository.softDeleteByUserId(userId, now);
         authsRepository.softDeleteByUserId(userId, now);
 
