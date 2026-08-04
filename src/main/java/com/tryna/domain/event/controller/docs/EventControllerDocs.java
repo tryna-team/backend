@@ -33,7 +33,14 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "C104 일정 최종 저장",
-            description = "사용자가 확인한 일정 정보와 선택한 준비/실행 항목을 최종 저장합니다.",
+            description = """
+                    사용자가 확인한 일정 정보, 라벨, 선택한 준비/실행 항목을 최종 저장합니다.
+                    
+                    labelId는 선택 입력값입니다.
+                    labelId가 전달되면 현재 사용자 소유의 삭제되지 않은 라벨인지 검증한 뒤 일정에 연결합니다.
+                    labelId가 null이거나 생략되면 현재 사용자의 기본 라벨(isDefault=true)을 일정에 연결합니다.
+                    응답의 labelId는 실제로 일정에 연결된 라벨 ID를 반환합니다.
+                    """,
             operationId = "createEvent"
     )
     @SecurityRequirement(name = "bearerAuth")
