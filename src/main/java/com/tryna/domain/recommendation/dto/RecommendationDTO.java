@@ -40,6 +40,7 @@ public class RecommendationDTO {
             Integer draftRevision,
             SuggestionStatus suggestionStatus,
             List<SuggestionItem> suggestions,
+            String errorCode,
             List<String> errors
     ) {}
 
