@@ -18,6 +18,7 @@ public record EventCreateResponse(
         RecurrenceDayOfWeek recurrenceDayOfWeek,
         Integer recurrenceDayOfMonth,
         LocalDateTime recurrenceEndDate,
+        Long labelId,
         LocalDateTime createdAt,
         List<ActionItemSaveResponse.Item> savedActionItems
 ) {

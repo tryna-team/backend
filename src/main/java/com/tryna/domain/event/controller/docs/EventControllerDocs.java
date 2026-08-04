@@ -33,7 +33,7 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "C104 일정 최종 저장",
-            description = "사용자가 확인한 일정 정보와 선택한 준비/실행 항목을 최종 저장합니다.",
+            description = "사용자가 확인한 일정 정보, 라벨, 선택한 준비/실행 항목을 최종 저장합니다.",
             operationId = "createEvent"
     )
     @SecurityRequirement(name = "bearerAuth")

@@ -11,6 +11,8 @@ import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.BusinessException;
@@ -35,6 +37,7 @@ public class EventCommandService {
     private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
     private final ActionItemService actionItemService;
+    private final LabelsRepository labelsRepository;
 
     @Transactional
     public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
@@ -55,6 +58,7 @@ public class EventCommandService {
         boolean isAllDay = resolveAllDay(request.isAllDay(), startTime);
         validateTimePolicy(startDate, startTime, endDate, endTime, isAllDay);
         RecurrenceRule recurrenceRule = resolveRecurrenceRule(request, startDate);
+        Labels label = resolveEventLabel(userId, request.labelId());
 
         EventStatus status = startDate == null ? EventStatus.NEEDS_CONFIRMATION : EventStatus.CONFIRMED;
         Events event = Events.createInternalEvent(
@@ -78,7 +82,7 @@ public class EventCommandService {
         );
 
         Events savedEvent = eventsRepository.save(event);
-        userEventsRepository.save(UserEvents.createOwner(user, savedEvent));
+        userEventsRepository.save(UserEvents.createOwner(user, savedEvent, label));
         ActionItemSaveResponse savedActionItems =
                 actionItemService.saveActionItemsForEvent(
                         user,
@@ -96,6 +100,7 @@ public class EventCommandService {
                 savedEvent.getRecurrenceDayOfWeek(),
                 savedEvent.getRecurrenceDayOfMonth(),
                 savedEvent.getRecurrenceEndDate(),
+                label.getLabelId(),
                 savedEvent.getCreatedAt(),
                 savedActionItems.items()
         );
@@ -253,6 +258,16 @@ public class EventCommandService {
             case SATURDAY -> RecurrenceDayOfWeek.SAT;
             case SUNDAY -> RecurrenceDayOfWeek.SUN;
         };
+    }
+
+    private Labels resolveEventLabel(Long userId, Long requestedLabelId) {
+        if (requestedLabelId != null) {
+            return labelsRepository.findByLabelIdAndUser_UserId(requestedLabelId, userId)
+                    .orElseThrow(() -> new BusinessException(EventErrorCode.C104_EVENT_SAVE_400));
+        }
+
+        return labelsRepository.findByUser_UserIdAndIsDefaultTrue(userId)
+                .orElseThrow(() -> new BusinessException(EventErrorCode.C104_EVENT_SAVE_400));
     }
 
     private LocalDateTime combine(LocalDate date, LocalTime time) {
