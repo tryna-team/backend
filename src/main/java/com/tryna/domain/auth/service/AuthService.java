@@ -12,9 +12,8 @@ import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
-import com.tryna.domain.label.entity.Labels;
-import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.domain.label.repository.LabelsRepository;
+import com.tryna.domain.label.service.DefaultLabelService;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
 import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.term.entity.Terms;
@@ -23,7 +22,6 @@ import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
 import com.tryna.domain.term.repository.TermsRepository;
 import com.tryna.domain.term.repository.UserAgreedTermsRepository;
 import com.tryna.domain.user.dto.UserConversionResponse;
-import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.enums.UserRole;
 import com.tryna.domain.user.repository.UserRepository;
@@ -73,6 +71,7 @@ public class AuthService {
     private final OAuthClientProvider oAuthClientProvider;
     private final GoogleTokenProvider googleTokenProvider;
     private final SocialSignupService socialSignupService;
+    private final DefaultLabelService defaultLabelService;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -190,41 +189,16 @@ public class AuthService {
         // 4. 필수 약관 검증
         validateRequiredTerms(request.agreedTermTypes());
 
-        // 5. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장
-        boolean hasDefaultLabel = labelsRepository.findByUser_UserIdAndIsDefaultTrue(user.getUserId()).isPresent();
-
-        if (!hasDefaultLabel) {
-            String rawNickname = (user.getNickname() != null && !user.getNickname().isBlank())
-                    ? user.getNickname().trim()
-                    : "사용자";
-
-            if (rawNickname.length() > 96) {
-                rawNickname = rawNickname.substring(0, 96);
-            }
-
-            String labelName = rawNickname + "의 라벨";
-            String normalizedName = labelName.toLowerCase(Locale.ROOT);
-
-            Labels defaultLabel = Labels.createDefault(
-                    user,
-                    labelName,
-                    normalizedName,
-                    LabelColor.GREEN,
-                    1
-            );
-
-            try {
-                // saveAndFlush를 사용하여 동시성 제약조건 충돌을 즉시 감지
-                labelsRepository.saveAndFlush(defaultLabel);
-            } catch (DataIntegrityViolationException e) {
-                // 기본 라벨 유니크 제약조건(uq_labels_user_default_active) 충돌인 경우에만 안전하게 흡수
-                String rootMessage = e.getMostSpecificCause().getMessage();
-                if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
-                    log.info("GUEST 회원 전환 중 기본 라벨 동시 생성 충돌 흡수 - userId: {}", user.getUserId());
-                } else {
-                    // 그 외 예상치 못한 무결성 예외는 상위로 그대로 전파
-                    throw e;
-                }
+        // 5. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장 (독립 트랜잭션 처리)
+        try {
+            defaultLabelService.createDefaultLabel(user);
+        } catch (DataIntegrityViolationException e) {
+            // REQUIRES_NEW 트랜잭션 내에서 발생한 충돌을 상위 트랜잭션(convertGuestToUser)에서 흡수
+            String rootMessage = e.getMostSpecificCause().getMessage();
+            if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
+                log.info("GUEST 회원 전환 중 기본 라벨 동시 생성 충돌 흡수 - userId: {}", user.getUserId());
+            } else {
+                throw e;
             }
         }
 
@@ -396,25 +370,27 @@ public class AuthService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
+        // 1. 유저 Soft Delete 상태 반영 (벌크 쿼리 실행 전 더티 체킹 반영)
+        // 뒤이어 실행되는 벌크 쿼리의 flushAutomatically = true에 의해 DB에 즉시 FLUSH되고,
+        // clearAutomatically = true에 의해 영속성 컨텍스트가 비워져도 DB에는 안전하게 반영됩니다.
+        user.deleteSoft();
+
+        // 2. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
         eventAnalysisLogsRepository.deleteByUserId(userId);
         actionItemsRepository.softDeleteByUserId(userId, now);
         eventsRepository.softDeleteByUserId(userId, now);
 
-        // 2. Hard Delete 대상 물리 삭제
+        // 3. Hard Delete 대상 물리 삭제
         remindersRepository.deleteByUserId(userId);
         recommendationFeedbacksRepository.deleteByUserId(userId);
         userEventsRepository.deleteByUserId(userId);
         userAgreedTermsRepository.deleteByUserId(userId);
         externalCalendarConnectionsRepository.deleteByUserId(userId);
 
-        // 3. 나머지 Soft Delete 대상 논리 삭제
+        // 4. 나머지 Soft Delete 대상 논리 삭제 (flush & clear 수행)
         labelsRepository.softDeleteByUserId(userId, now);
         userSettingsRepository.softDeleteByUserId(userId, now);
         authsRepository.softDeleteByUserId(userId, now);
-
-        // 4. 유저 Soft Delete
-        user.deleteSoft();
 
         // 5. DB 트랜잭션이 완벽히 커밋된 직후에만 Redis 세션 및 FCM 토큰 파기 수행
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
