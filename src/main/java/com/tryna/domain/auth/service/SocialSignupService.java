@@ -3,6 +3,9 @@ package com.tryna.domain.auth.service;
 import com.tryna.domain.auth.entity.Auths;
 import com.tryna.domain.auth.enums.Provider;
 import com.tryna.domain.auth.repository.AuthsRepository;
+import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelColor;
+import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.term.entity.Terms;
 import com.tryna.domain.term.enums.TermType;
 import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +34,7 @@ public class SocialSignupService {
     private final AuthsRepository authsRepository;
     private final TermsRepository termsRepository;
     private final UserAgreedTermsRepository userAgreedTermsRepository;
+    private final LabelsRepository labelsRepository;
 
     /**
      * 신규 회원 가입을 독립된 트랜잭션(REQUIRES_NEW)으로 처리합니다.
@@ -55,6 +60,29 @@ public class SocialSignupService {
         // 2. 유저 및 설정 생성
         Users user = userRepository.save(Users.createUser());
         userSettingsRepository.save(UserSettings.createDefault(user));
+
+        // 닉네임 추출 및 안전 길이 자르기
+        String rawNickname = (user.getNickname() != null && !user.getNickname().isBlank())
+                ? user.getNickname().trim()
+                : "사용자";
+
+        // "의 라벨"(4자)을 붙였을 때 100자를 넘지 않도록 닉네임은 최대 96자까지만 사용
+        if (rawNickname.length() > 96) {
+            rawNickname = rawNickname.substring(0, 96);
+        }
+
+        String labelName = rawNickname + "의 라벨";
+        String normalizedName = labelName.toLowerCase(Locale.ROOT);
+
+        // 2-1. 신규 회원 가입 시 기본 라벨 생성 (isDefault = true, color = LabelColor.GREEN)
+        Labels defaultLabel = Labels.createDefault( // 메서드명 수정
+                user,
+                labelName,         // 예: "사용자의 라벨"
+                normalizedName,
+                LabelColor.GREEN,  // String -> Enum 타입으로 수정
+                1                  // sortOrder = 1
+        );
+        labelsRepository.save(defaultLabel);
 
         // 3. 소셜 인증 정보 생성 (UQ 충돌 시 예외 발생 -> 이 트랜잭션 전체 롤백)
         Auths newAuth = Auths.createAuth(user, provider, socialId, email, oauthRefreshToken, grantedScopes);

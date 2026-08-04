@@ -3,7 +3,11 @@ package com.tryna.domain.label.repository;
 import com.tryna.domain.label.entity.Labels;
 import com.tryna.domain.label.enums.LabelType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,4 +63,8 @@ public interface LabelsRepository extends JpaRepository<Labels, Long> {
             Long userId,
             LabelType labelType
     );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Labels l SET l.deletedAt = :now WHERE l.user.userId = :userId AND l.deletedAt IS NULL")
+    void softDeleteByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 }

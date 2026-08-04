@@ -12,6 +12,8 @@ import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
+import com.tryna.domain.label.repository.LabelsRepository;
+import com.tryna.domain.label.service.DefaultLabelService;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
 import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.term.entity.Terms;
@@ -20,7 +22,6 @@ import com.tryna.domain.term.entity.mapping.UserAgreedTerms;
 import com.tryna.domain.term.repository.TermsRepository;
 import com.tryna.domain.term.repository.UserAgreedTermsRepository;
 import com.tryna.domain.user.dto.UserConversionResponse;
-import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.enums.UserRole;
 import com.tryna.domain.user.repository.UserRepository;
@@ -43,6 +44,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Slf4j
@@ -65,9 +67,11 @@ public class AuthService {
     private final UserEventsRepository userEventsRepository;
     private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
     private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
+    private final LabelsRepository labelsRepository;
     private final OAuthClientProvider oAuthClientProvider;
     private final GoogleTokenProvider googleTokenProvider;
     private final SocialSignupService socialSignupService;
+    private final DefaultLabelService defaultLabelService;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -185,12 +189,25 @@ public class AuthService {
         // 4. 필수 약관 검증
         validateRequiredTerms(request.agreedTermTypes());
 
-        // 5. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
+        // 5. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장 (독립 트랜잭션 처리)
+        try {
+            defaultLabelService.createDefaultLabel(user);
+        } catch (DataIntegrityViolationException e) {
+            // REQUIRES_NEW 트랜잭션 내에서 발생한 충돌을 상위 트랜잭션(convertGuestToUser)에서 흡수
+            String rootMessage = e.getMostSpecificCause().getMessage();
+            if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
+                log.info("GUEST 회원 전환 중 기본 라벨 동시 생성 충돌 흡수 - userId: {}", user.getUserId());
+            } else {
+                throw e;
+            }
+        }
+
+        // 6. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
         validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
 
-        // 6. Auths 정보 생성 및 약관 매핑 저장
+        // 7. Auths 정보 생성 및 약관 매핑 저장
         Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
         try {
             authsRepository.saveAndFlush(newAuth);
@@ -200,17 +217,17 @@ public class AuthService {
 
         saveUserAgreedTerms(user, request.agreedTermTypes());
 
-        // 7. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
-        // 7-1. 기존 세션에서 FCM 토큰을 안전하게 조회
+        // 8. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
+        // 8-1. 기존 세션에서 FCM 토큰을 안전하게 조회
         Optional<String> existingFcmToken = sessionRedisRepository.findFcmToken(userId, request.deviceId());
 
-        // 7-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
+        // 8-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
         existingFcmToken.ifPresent(token -> fcmTokenRedisRepository.remove(userId, token));
 
-        // 7-3. 안전하게 세션 Hash를 삭제
+        // 8-3. 안전하게 세션 Hash를 삭제
         sessionRedisRepository.delete(userId, request.deviceId());
 
-        // 8. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
+        // 9. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
         return new UserConversionResponse(
@@ -353,24 +370,27 @@ public class AuthService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
+        // 1. 유저 Soft Delete 상태 반영 (벌크 쿼리 실행 전 더티 체킹 반영)
+        // 뒤이어 실행되는 벌크 쿼리의 flushAutomatically = true에 의해 DB에 즉시 FLUSH되고,
+        // clearAutomatically = true에 의해 영속성 컨텍스트가 비워져도 DB에는 안전하게 반영됩니다.
+        user.deleteSoft();
+
+        // 2. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
         eventAnalysisLogsRepository.deleteByUserId(userId);
         actionItemsRepository.softDeleteByUserId(userId, now);
         eventsRepository.softDeleteByUserId(userId, now);
 
-        // 2. Hard Delete 대상 물리 삭제
+        // 3. Hard Delete 대상 물리 삭제
         remindersRepository.deleteByUserId(userId);
         recommendationFeedbacksRepository.deleteByUserId(userId);
         userEventsRepository.deleteByUserId(userId);
         userAgreedTermsRepository.deleteByUserId(userId);
         externalCalendarConnectionsRepository.deleteByUserId(userId);
 
-        // 3. 나머지 Soft Delete 대상 논리 삭제
+        // 4. 나머지 Soft Delete 대상 논리 삭제 (flush & clear 수행)
+        labelsRepository.softDeleteByUserId(userId, now);
         userSettingsRepository.softDeleteByUserId(userId, now);
         authsRepository.softDeleteByUserId(userId, now);
-
-        // 4. 유저 Soft Delete
-        user.deleteSoft();
 
         // 5. DB 트랜잭션이 완벽히 커밋된 직후에만 Redis 세션 및 FCM 토큰 파기 수행
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
