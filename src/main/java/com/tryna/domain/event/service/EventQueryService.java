@@ -141,24 +141,24 @@ public class EventQueryService {
                 VISIBLE_EVENT_STATUSES
         );
 
-        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(
-                recurringEvents.stream().map(Events::getEventId).toList(),
-                date,
-                date
-        );
-
         List<EventOccurrence> occurrences = new ArrayList<>(directEvents.stream()
-                .filter(event -> !isDeletedOccurrence(event, date, deletedOccurrences))
                 .map(event -> new EventOccurrence(event, event.getStartDate()))
                 .toList());
 
         List<EventOccurrence> recurringOccurrences = recurringEvents.stream()
-                .filter(event -> isAdditionalRecurringOccurrenceOn(event, date))
-                .filter(event -> !isDeletedOccurrence(event, date, deletedOccurrences))
-                .map(event -> new EventOccurrence(event, date))
+                .flatMap(event -> resolveAdditionalRecurringOccurrencesCoveringDate(event, date).stream())
                 .toList();
 
         occurrences.addAll(recurringOccurrences);
+
+        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
+        occurrences = occurrences.stream()
+                .filter(occurrence -> !isDeletedOccurrence(
+                        occurrence.event(),
+                        occurrence.occurrenceDate(),
+                        deletedOccurrences
+                ))
+                .toList();
         occurrences.sort(eventOccurrenceComparator());
 
         List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
@@ -319,7 +319,7 @@ public class EventQueryService {
     }
 
     private Map<LocalDate, Long> getCountsByDate(Long userId, LocalDate startDate, LocalDate endDate) {
-        List<Object[]> rows = userEventsRepository.countEventsByDate(
+        List<Events> directEvents = userEventsRepository.findEventsOverlappingRange(
                 userId,
                 startDate,
                 endDate,
@@ -327,11 +327,9 @@ public class EventQueryService {
         );
 
         Map<LocalDate, Long> countsByDate = new HashMap<>();
-        for (Object[] row : rows) {
-            LocalDate date = (LocalDate) row[0];
-            Long count = (Long) row[1];
-            countsByDate.put(date, count);
-        }
+        List<EventOccurrence> occurrences = new ArrayList<>(directEvents.stream()
+                .map(event -> new EventOccurrence(event, event.getStartDate()))
+                .toList());
 
         List<Events> recurringEvents = userEventsRepository.findRecurringEventsInRange(
                 userId,
@@ -339,22 +337,27 @@ public class EventQueryService {
                 endDate,
                 VISIBLE_EVENT_STATUSES
         );
-        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(
-                recurringEvents.stream().map(Events::getEventId).toList(),
-                startDate,
-                endDate
-        );
 
         for (Events event : recurringEvents) {
-            for (LocalDate occurrenceDate : resolveRecurringOccurrenceDates(event, startDate, endDate)) {
+            LocalDate occurrenceSearchStart = startDate.minusDays(eventDurationDays(event));
+            for (LocalDate occurrenceDate : resolveRecurringOccurrenceDates(event, occurrenceSearchStart, endDate)) {
                 if (occurrenceDate.equals(event.getStartDate())) {
                     continue;
                 }
-                if (isDeletedOccurrence(event, occurrenceDate, deletedOccurrences)) {
-                    continue;
-                }
-                countsByDate.merge(occurrenceDate, 1L, Long::sum);
+                occurrences.add(new EventOccurrence(event, occurrenceDate));
             }
+        }
+
+        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
+        for (EventOccurrence occurrence : occurrences) {
+            if (isDeletedOccurrence(
+                    occurrence.event(),
+                    occurrence.occurrenceDate(),
+                    deletedOccurrences
+            )) {
+                continue;
+            }
+            incrementOccurrenceCounts(countsByDate, occurrence, startDate, endDate);
         }
 
         return countsByDate;
@@ -374,8 +377,14 @@ public class EventQueryService {
         return dates;
     }
 
-    private boolean isAdditionalRecurringOccurrenceOn(Events event, LocalDate date) {
-        return !date.equals(event.getStartDate()) && isRecurringOccurrenceOn(event, date);
+    private List<EventOccurrence> resolveAdditionalRecurringOccurrencesCoveringDate(Events event, LocalDate date) {
+        LocalDate occurrenceSearchStart = date.minusDays(eventDurationDays(event));
+        return resolveRecurringOccurrenceDates(event, occurrenceSearchStart, date)
+                .stream()
+                .filter(occurrenceDate -> !occurrenceDate.equals(event.getStartDate()))
+                .filter(occurrenceDate -> occurrenceCoversDate(event, occurrenceDate, date))
+                .map(occurrenceDate -> new EventOccurrence(event, occurrenceDate))
+                .toList();
     }
 
     private boolean isRecurringOccurrenceOn(Events event, LocalDate date) {
@@ -473,6 +482,33 @@ public class EventQueryService {
             deletedOccurrences.add(new DeletedOccurrenceKey((Long) row[0], (LocalDate) row[1]));
         }
         return deletedOccurrences;
+    }
+
+    private Set<DeletedOccurrenceKey> findDeletedOccurrenceKeys(List<EventOccurrence> occurrences) {
+        if (occurrences.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> eventIds = occurrences.stream()
+                .map(occurrence -> occurrence.event().getEventId())
+                .distinct()
+                .toList();
+        LocalDate startDate = occurrences.stream()
+                .map(EventOccurrence::occurrenceDate)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate endDate = occurrences.stream()
+                .map(EventOccurrence::occurrenceDate)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+
+        if (startDate == null || endDate == null) {
+            return Set.of();
+        }
+
+        return findDeletedOccurrenceKeys(eventIds, startDate, endDate);
     }
 
     private boolean isDeletedOccurrence(
@@ -602,6 +638,40 @@ public class EventQueryService {
 
         long durationDays = ChronoUnit.DAYS.between(event.getStartDate(), event.getEndDate());
         return occurrenceDate.plusDays(durationDays);
+    }
+
+    private long eventDurationDays(Events event) {
+        if (event.getStartDate() == null || event.getEndDate() == null) {
+            return 0;
+        }
+        return Math.max(0, ChronoUnit.DAYS.between(event.getStartDate(), event.getEndDate()));
+    }
+
+    private boolean occurrenceCoversDate(Events event, LocalDate occurrenceDate, LocalDate date) {
+        LocalDate occurrenceEndDate = occurrenceDate.plusDays(eventDurationDays(event));
+        return !date.isBefore(occurrenceDate)
+                && !date.isAfter(occurrenceEndDate);
+    }
+
+    private void incrementOccurrenceCounts(
+            Map<LocalDate, Long> countsByDate,
+            EventOccurrence occurrence,
+            LocalDate rangeStart,
+            LocalDate rangeEnd
+    ) {
+        LocalDate occurrenceStartDate = occurrence.occurrenceDate();
+        LocalDate occurrenceEndDate = resolveOccurrenceEndDate(occurrence.event(), occurrenceStartDate);
+        if (occurrenceEndDate == null) {
+            occurrenceEndDate = occurrenceStartDate;
+        }
+
+        LocalDate current = occurrenceStartDate.isBefore(rangeStart) ? rangeStart : occurrenceStartDate;
+        LocalDate end = occurrenceEndDate.isAfter(rangeEnd) ? rangeEnd : occurrenceEndDate;
+
+        while (!current.isAfter(end)) {
+            countsByDate.merge(current, 1L, Long::sum);
+            current = current.plusDays(1);
+        }
     }
 
     private Comparator<EventOccurrence> eventOccurrenceComparator() {
