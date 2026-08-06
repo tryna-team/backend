@@ -12,7 +12,9 @@ public enum EventErrorCode implements ErrorCode {
     B107_EVENT_SEARCH_400(HttpStatus.BAD_REQUEST, "B107_EVENT_SEARCH_400", "검색어가 올바르지 않습니다."),
     C101_EVENT_INPUT_400(HttpStatus.BAD_REQUEST, "C101_EVENT_INPUT_400", "일정 문장을 입력해주세요."),
     C102_EVENT_PARSE_500(HttpStatus.INTERNAL_SERVER_ERROR, "C102_EVENT_PARSE_500", "일정 분석 중 오류가 발생했습니다."),
-    C104_EVENT_SAVE_400(HttpStatus.BAD_REQUEST, "C104_EVENT_SAVE_400", "잘못된 일정 저장 요청입니다.");
+    C104_EVENT_SAVE_400(HttpStatus.BAD_REQUEST, "C104_EVENT_SAVE_400", "잘못된 일정 저장 요청입니다."),
+    C106_EVENT_DELETE_400(HttpStatus.BAD_REQUEST, "C106_EVENT_DELETE_400", "잘못된 일정 삭제 요청입니다."),
+    C106_EVENT_DELETE_404(HttpStatus.NOT_FOUND, "C106_EVENT_DELETE_404", "삭제할 일정을 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

@@ -66,6 +66,7 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
     @Query("""
             UPDATE Events e
                SET e.deletedAt = :deletedAt
+                 , e.eventStatus = com.tryna.domain.event.enums.EventStatus.DELETED
              WHERE e.eventId = :eventId
                AND e.deletedAt IS NULL
             """)
@@ -79,6 +80,7 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
     @Query("""
             UPDATE Events e
                SET e.deletedAt = :deletedAt
+                 , e.eventStatus = com.tryna.domain.event.enums.EventStatus.DELETED
              WHERE e.eventId IN (
                    SELECT ue.event.eventId
                      FROM UserEvents ue

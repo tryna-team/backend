@@ -7,8 +7,10 @@ import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
+import com.tryna.domain.event.enums.RecurringEventExceptionType;
 import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
+import com.tryna.domain.event.repository.RecurringEventExceptionsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.global.exception.AuthErrorCode;
@@ -49,6 +51,7 @@ public class EventQueryService {
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
+    private final RecurringEventExceptionsRepository recurringEventExceptionsRepository;
 
     public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
         validateUserId(userId);
@@ -125,23 +128,33 @@ public class EventQueryService {
     }
 
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
-        List<EventOccurrence> occurrences = new ArrayList<>(userEventsRepository.findEventsByDate(
-                        userId,
-                        date,
-                        VISIBLE_EVENT_STATUSES
-                )
-                .stream()
+        List<Events> directEvents = userEventsRepository.findEventsByDate(
+                userId,
+                date,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        List<Events> recurringEvents = userEventsRepository.findRecurringEventsInRange(
+                userId,
+                date.atStartOfDay(),
+                date,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(
+                recurringEvents.stream().map(Events::getEventId).toList(),
+                date,
+                date
+        );
+
+        List<EventOccurrence> occurrences = new ArrayList<>(directEvents.stream()
+                .filter(event -> !isDeletedOccurrence(event, date, deletedOccurrences))
                 .map(event -> new EventOccurrence(event, event.getStartDate()))
                 .toList());
 
-        List<EventOccurrence> recurringOccurrences = userEventsRepository.findRecurringEventsInRange(
-                        userId,
-                        date.atStartOfDay(),
-                        date,
-                        VISIBLE_EVENT_STATUSES
-                )
-                .stream()
+        List<EventOccurrence> recurringOccurrences = recurringEvents.stream()
                 .filter(event -> isAdditionalRecurringOccurrenceOn(event, date))
+                .filter(event -> !isDeletedOccurrence(event, date, deletedOccurrences))
                 .map(event -> new EventOccurrence(event, date))
                 .toList();
 
@@ -326,10 +339,18 @@ public class EventQueryService {
                 endDate,
                 VISIBLE_EVENT_STATUSES
         );
+        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(
+                recurringEvents.stream().map(Events::getEventId).toList(),
+                startDate,
+                endDate
+        );
 
         for (Events event : recurringEvents) {
             for (LocalDate occurrenceDate : resolveRecurringOccurrenceDates(event, startDate, endDate)) {
                 if (occurrenceDate.equals(event.getStartDate())) {
+                    continue;
+                }
+                if (isDeletedOccurrence(event, occurrenceDate, deletedOccurrences)) {
                     continue;
                 }
                 countsByDate.merge(occurrenceDate, 1L, Long::sum);
@@ -431,6 +452,35 @@ public class EventQueryService {
             case SATURDAY -> RecurrenceDayOfWeek.SAT;
             case SUNDAY -> RecurrenceDayOfWeek.SUN;
         };
+    }
+
+    private Set<DeletedOccurrenceKey> findDeletedOccurrenceKeys(
+            Collection<Long> eventIds,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        if (eventIds.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<DeletedOccurrenceKey> deletedOccurrences = new HashSet<>();
+        for (Object[] row : recurringEventExceptionsRepository.findExceptionKeysInRange(
+                eventIds,
+                startDate,
+                endDate,
+                RecurringEventExceptionType.DELETED
+        )) {
+            deletedOccurrences.add(new DeletedOccurrenceKey((Long) row[0], (LocalDate) row[1]));
+        }
+        return deletedOccurrences;
+    }
+
+    private boolean isDeletedOccurrence(
+            Events event,
+            LocalDate occurrenceDate,
+            Set<DeletedOccurrenceKey> deletedOccurrences
+    ) {
+        return deletedOccurrences.contains(new DeletedOccurrenceKey(event.getEventId(), occurrenceDate));
     }
 
     /**
@@ -570,6 +620,12 @@ public class EventQueryService {
 
     private record EventOccurrence(
             Events event,
+            LocalDate occurrenceDate
+    ) {
+    }
+
+    private record DeletedOccurrenceKey(
+            Long eventId,
             LocalDate occurrenceDate
     ) {
     }
