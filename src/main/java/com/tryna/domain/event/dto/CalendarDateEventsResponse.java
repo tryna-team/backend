@@ -21,6 +21,7 @@ public record CalendarDateEventsResponse(
             String endTime,
             Boolean isAllDay,
             String location,
+            Long labelId,
             SourceType sourceType,
             EventStatus status
     ) {

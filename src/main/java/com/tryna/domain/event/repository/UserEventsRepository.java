@@ -33,9 +33,10 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     );
 
     @Query("""
-            SELECT e
+            SELECT ue
               FROM UserEvents ue
-              JOIN ue.event e
+              JOIN FETCH ue.event e
+              LEFT JOIN FETCH ue.label
              WHERE ue.user.userId = :userId
                AND e.startDate IS NOT NULL
                AND e.startDate <= :endDate
@@ -49,7 +50,7 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
                        AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
                )
             """)
-    List<Events> findEventsOverlappingRange(
+    List<UserEvents> findUserEventsOverlappingRange(
             @Param("userId") Long userId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
@@ -57,9 +58,10 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     );
 
     @Query("""
-            SELECT e
+            SELECT ue
              FROM UserEvents ue
-             JOIN ue.event e
+             JOIN FETCH ue.event e
+             LEFT JOIN FETCH ue.label
             WHERE ue.user.userId = :userId
               AND e.startDate IS NOT NULL
               AND e.startDate <= :date
@@ -77,16 +79,17 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
                e.startDatetime ASC,
                e.createdAt ASC
             """)
-    List<Events> findEventsByDate(
+    List<UserEvents> findUserEventsByDate(
             @Param("userId") Long userId,
             @Param("date") LocalDate date,
             @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     @Query("""
-            SELECT e
+            SELECT ue
               FROM UserEvents ue
-              JOIN ue.event e
+              JOIN FETCH ue.event e
+              LEFT JOIN FETCH ue.label
              WHERE ue.user.userId = :userId
                AND e.isRecurring = true
                AND e.startDate IS NOT NULL
@@ -101,7 +104,7 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
                )
                AND e.eventStatus IN :eventStatuses
             """)
-    List<Events> findRecurringEventsInRange(
+    List<UserEvents> findRecurringUserEventsInRange(
             @Param("userId") Long userId,
             @Param("startDateTime") LocalDateTime startDateTime,
             @Param("endDate") LocalDate endDate,
