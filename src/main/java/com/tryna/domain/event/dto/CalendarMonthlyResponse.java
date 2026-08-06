@@ -13,7 +13,8 @@ public record CalendarMonthlyResponse(
     public record DayEventCount(
             LocalDate date,
             Long eventCount,
-            Boolean hasEvent
+            Boolean hasEvent,
+            List<CalendarDateEventsResponse.EventSummary> previewEvents
     ) {
     }
 }
