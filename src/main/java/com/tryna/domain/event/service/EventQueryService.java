@@ -196,7 +196,7 @@ public class EventQueryService {
                         occurrence.occurrenceDate(),
                         deletedOccurrences
                 ))
-                .toList();
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         occurrences.sort(eventOccurrenceComparator());
 
         List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
