@@ -420,6 +420,9 @@ public class AuthService {
                     labelsRepository.flush();
                 });
 
+        // 외부 캘린더 커넥션(부모)을 삭제하기 전에, external_calendars(자식) 데이터를 먼저 벌크 삭제하여 외래키 제약조건 위반 방지
+        externalCalendarsRepository.deleteByUserId(userId);
+
         // 3. Hard Delete 대상 물리 삭제 (외부 캘린더 및 커넥션 삭제)
         remindersRepository.deleteByUserId(userId);
         recommendationFeedbacksRepository.deleteByUserId(userId);
