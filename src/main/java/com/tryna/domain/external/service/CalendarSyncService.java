@@ -169,36 +169,7 @@ public class CalendarSyncService {
                             }
                         });
 
-                labelsRepository.findByExternalCalendar(externalCal).orElseGet(() -> {
-                    try {
-                        Integer nextSort = labelsRepository
-                                .findTopByUser_UserIdOrderBySortOrderDesc(userId)
-                                .map(label -> label.getSortOrder() + 1)
-                                .orElse(1);
-
-                        String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
-                        String normalized = calName.trim().toLowerCase(Locale.ROOT);
-
-                        com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
-                                user,
-                                externalCal,
-                                calName,
-                                normalized,
-                                LabelColor.BLUE,
-                                nextSort
-                        );
-
-                        return labelsRepository.saveAndFlush(newLabel);
-                    } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                        String rootMessage = e.getMostSpecificCause().getMessage();
-                        if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
-                            return labelsRepository.findByExternalCalendar(externalCal)
-                                    .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
-                        } else {
-                            throw e;
-                        }
-                    }
-                });
+                com.tryna.domain.label.entity.Labels externalLabel = getOrCreateExternalLabel(user, externalCal, userId);
 
                 return externalCal;
             });
@@ -211,7 +182,7 @@ public class CalendarSyncService {
                 externalCalendar.getConnection().getExternalCalendarConnectionId() : null;
 
         com.tryna.domain.label.entity.Labels externalLabel = labelsRepository
-                .findByExternalCalendar(externalCalendar)
+                .findByExternalCalendarAndDeletedAtIsNull(externalCalendar)
                 .orElseThrow(() -> {
                     markSyncFailed(userId);
                     return new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
@@ -338,9 +309,14 @@ public class CalendarSyncService {
                     externalCalendarConnectionsRepository.save(conn);
                 });
             }
+        } catch (BusinessException e) {
+            markSyncFailed(userId);
+            log.error("구글 캘린더 동기화 비즈니스 예외 발생 for user {}: {}", userId, e.getMessage());
+            throw e;
         } catch (Exception e) {
             markSyncFailed(userId);
-            throw e;
+            log.error("구글 캘린더 동기화 처리 중 시스템 예외 발생 for user {}: {}", userId, e.getMessage(), e);
+            throw new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
         }
     }
 
@@ -414,7 +390,7 @@ public class CalendarSyncService {
             List<ExternalCalendars> calendars = externalCalendarsRepository.findAllByConnection(connection);
 
             for (ExternalCalendars cal : calendars) {
-                labelsRepository.findByExternalCalendar(cal).ifPresent(extLabel -> {
+                labelsRepository.findByExternalCalendarAndDeletedAtIsNull(cal).ifPresent(extLabel -> {
                     Long sourceLabelId = extLabel.getLabelId();
                     userEventsRepository.moveLabelAssignments(userId, sourceLabelId, defaultLabel);
                 });
@@ -430,5 +406,46 @@ public class CalendarSyncService {
         }
 
         log.info("유저 ID {}의 {} 캘린더 연동 정보 및 관련 일정/라벨 데이터 정리가 완료되었습니다.", userId, provider);
+    }
+
+    /**
+     * 동시성 충돌 발생 시에도 안전하게 외부 캘린더 라벨을 조회하거나 생성하는 독립 트랜잭션 메서드
+     */
+    private com.tryna.domain.label.entity.Labels getOrCreateExternalLabel(Users user, ExternalCalendars externalCal, Long userId) {
+        TransactionTemplate requiresNewTemplate = new TransactionTemplate(transactionManager);
+        requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        return requiresNewTemplate.execute(status -> {
+            return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal).orElseGet(() -> {
+                try {
+                    Integer nextSort = labelsRepository
+                            .findTopByUser_UserIdOrderBySortOrderDesc(userId)
+                            .map(label -> label.getSortOrder() + 1)
+                            .orElse(1);
+
+                    String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
+                    String normalized = calName.trim().toLowerCase(Locale.ROOT);
+
+                    com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
+                            user,
+                            externalCal,
+                            calName,
+                            normalized,
+                            LabelColor.BLUE,
+                            nextSort
+                    );
+
+                    return labelsRepository.saveAndFlush(newLabel);
+                } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                    String rootMessage = e.getMostSpecificCause().getMessage();
+                    if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
+                        return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal)
+                                .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+        });
     }
 }

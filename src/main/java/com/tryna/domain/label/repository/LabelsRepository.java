@@ -14,7 +14,7 @@ import java.util.Optional;
 
 public interface LabelsRepository extends JpaRepository<Labels, Long> {
 
-    Optional<Labels> findByExternalCalendar(ExternalCalendars externalCalendar);
+    Optional<Labels> findByExternalCalendarAndDeletedAtIsNull(ExternalCalendars externalCalendar);
 
     List<Labels> findAllByUser_UserIdOrderBySortOrderAsc(
             Long userId

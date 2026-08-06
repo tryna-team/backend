@@ -20,7 +20,6 @@ spring:
           batch_size: 100
         order_inserts: true
         order_updates: true
-        batch_versioned_data: true
     open-in-view: false
   data:
     redis:

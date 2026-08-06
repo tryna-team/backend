@@ -10,16 +10,20 @@ import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/calendars")
@@ -38,13 +42,8 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 연도 동기화를 수행하여 selectedDate의 일정이 DB에 존재하도록 보장
-        boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
-        if (!hasYearEvents) {
-            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
-        }
+        CalendarMainResponse response = eventQueryService.getCalendarMainWithSyncCheck(userId, year, month, selectedDate);
 
-        CalendarMainResponse response = eventQueryService.getCalendarMain(userId, year, month, selectedDate);
         return ApiResponse.success(
                 "B101_CALENDAR_MAIN_200",
                 "캘린더 메인 화면 조회에 성공했습니다.",
@@ -59,18 +58,8 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 날짜별 일정 조회 시에도 에러 유발하던 동기 호출을 비동기 이벤트 발행으로 변경
-        try {
-            LocalDate parsed = LocalDate.parse(date);
-            int year = parsed.getYear();
-            boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
-            if (!hasYearEvents) {
-                applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year)); // 🚀 [이벤트 발행]
-            }
-        } catch (Exception ignored) {
-        }
+        CalendarDateEventsResponse response = eventQueryService.getDateEventsWithSyncCheck(userId, date);
 
-        CalendarDateEventsResponse response = eventQueryService.getDateEvents(userId, date);
         return ApiResponse.success(
                 "B103_CALENDAR_DATE_EVENTS_200",
                 "날짜별 일정 목록 조회에 성공했습니다.",
