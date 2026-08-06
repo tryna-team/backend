@@ -33,11 +33,16 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     );
 
     @Query("""
-            SELECT e.startDate, COUNT(e.eventId)
+            SELECT e
               FROM UserEvents ue
               JOIN ue.event e
              WHERE ue.user.userId = :userId
-               AND e.startDate BETWEEN :startDate AND :endDate
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND (
+                    e.endDate IS NULL
+                    OR e.endDate >= :startDate
+               )
                AND e.eventStatus IN :eventStatuses
                AND NOT EXISTS (
                     SELECT 1
@@ -46,9 +51,8 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
                        AND ree.occurrenceDate = e.startDate
                        AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
                )
-             GROUP BY e.startDate
             """)
-    List<Object[]> countEventsByDate(
+    List<Events> findEventsOverlappingRange(
             @Param("userId") Long userId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
@@ -57,15 +61,20 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
 
     @Query("""
             SELECT e
-              FROM UserEvents ue
-              JOIN ue.event e
-             WHERE ue.user.userId = :userId
-               AND e.startDate = :date
-               AND e.eventStatus IN :eventStatuses
-               AND NOT EXISTS (
-                    SELECT 1
-                      FROM RecurringEventExceptions ree
-                     WHERE ree.event = e
+             FROM UserEvents ue
+             JOIN ue.event e
+            WHERE ue.user.userId = :userId
+              AND e.startDate IS NOT NULL
+              AND e.startDate <= :date
+              AND (
+                   e.endDate IS NULL
+                   OR e.endDate >= :date
+              )
+              AND e.eventStatus IN :eventStatuses
+              AND NOT EXISTS (
+                   SELECT 1
+                     FROM RecurringEventExceptions ree
+                    WHERE ree.event = e
                        AND ree.occurrenceDate = :date
                        AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
                )
