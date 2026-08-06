@@ -187,6 +187,14 @@ public class EventQueryService {
                 .map(Events::getEventId)
                 .collect(java.util.stream.Collectors.toSet());
 
+        // 5-1. 검색 결과에 포함될 일정들의 라벨 ID를 한 번에 조회
+        Set<Long> resultEventIds = new HashSet<>(titleMatchedEventIds);
+        matchedActionItems.stream()
+                .map(ActionItems::getParentEvent)
+                .map(Events::getEventId)
+                .forEach(resultEventIds::add);
+        Map<Long, Long> labelIdsByEventId = findLabelIdsByEventId(userId, resultEventIds);
+
         // 6. 매칭된 준비/실행 항목을 부모 일정 ID 기준으로 그룹화
         Map<Long, List<ActionItems>> actionItemsByEventId =
                 matchedActionItems.stream()
@@ -213,7 +221,10 @@ public class EventQueryService {
                 .sorted(eventComparator)
                 .forEach(event -> {
                     // 8-1. EVENT 결과 추가
-                    results.add(EventSearchResponse.Result.fromEvent(event));
+                    results.add(EventSearchResponse.Result.fromEvent(
+                            event,
+                            labelIdsByEventId.get(event.getEventId())
+                    ));
 
                     // 8-2. 동일 일정의 매칭된 ACTION_ITEM 결과를 바로 다음에 추가
                     actionItemsByEventId
@@ -222,7 +233,8 @@ public class EventQueryService {
                             .map(actionItem ->
                                     EventSearchResponse.Result.fromActionItem(
                                             event,
-                                            actionItem
+                                            actionItem,
+                                            labelIdsByEventId.get(event.getEventId())
                                     )
                             )
                             .forEach(results::add);
@@ -254,7 +266,8 @@ public class EventQueryService {
                         .map(actionItem ->
                                 EventSearchResponse.Result.fromActionItem(
                                         event,
-                                        actionItem
+                                        actionItem,
+                                        labelIdsByEventId.get(event.getEventId())
                                 )
                         )
                         .forEach(results::add)
@@ -280,7 +293,10 @@ public class EventQueryService {
                 )
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.COMMON_403));
 
-        return toEventDetailResponse(event);
+        Long labelId = userEventsRepository.findLabelIdByUserIdAndEventId(userId, eventId)
+                .orElse(null);
+
+        return toEventDetailResponse(event, labelId);
     }
 
     private Map<LocalDate, List<EventOccurrence>> getOccurrencesByDate(Long userId, LocalDate startDate, LocalDate endDate) {
@@ -617,6 +633,18 @@ public class EventQueryService {
         return userEvent.getLabel().getLabelId();
     }
 
+    private Map<Long, Long> findLabelIdsByEventId(Long userId, Set<Long> eventIds) {
+        if (eventIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Long> labelIdsByEventId = new HashMap<>();
+        for (Object[] row : userEventsRepository.findLabelIdsByUserIdAndEventIds(userId, eventIds)) {
+            labelIdsByEventId.put((Long) row[0], (Long) row[1]);
+        }
+        return labelIdsByEventId;
+    }
+
     private void addOccurrenceToDates(
             Map<LocalDate, List<EventOccurrence>> occurrencesByDate,
             EventOccurrence occurrence,
@@ -665,7 +693,7 @@ public class EventQueryService {
     ) {
     }
 
-    private EventDetailResponse toEventDetailResponse(Events event) {
+    private EventDetailResponse toEventDetailResponse(Events event, Long labelId) {
         return new EventDetailResponse(
                 event.getEventId(),
                 event.getTitle(),
@@ -682,6 +710,7 @@ public class EventQueryService {
                 event.getRecurrenceDayOfMonth(),
                 event.getRecurrenceEndDate(),
                 event.getLocation(),
+                labelId,
                 event.getEventTypeCandidate(),
                 event.getEventType(),
                 event.getSourceType(),

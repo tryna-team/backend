@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.external.entity.ExternalCalendars;
@@ -136,6 +137,28 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     boolean existsOwnerByUserIdAndEventId(
             @Param("userId") Long userId,
             @Param("eventId") Long eventId
+    );
+
+    @Query("""
+            SELECT ue.label.labelId
+              FROM UserEvents ue
+             WHERE ue.user.userId = :userId
+               AND ue.event.eventId = :eventId
+            """)
+    Optional<Long> findLabelIdByUserIdAndEventId(
+            @Param("userId") Long userId,
+            @Param("eventId") Long eventId
+    );
+
+    @Query("""
+            SELECT ue.event.eventId, ue.label.labelId
+              FROM UserEvents ue
+             WHERE ue.user.userId = :userId
+               AND ue.event.eventId IN :eventIds
+            """)
+    List<Object[]> findLabelIdsByUserIdAndEventIds(
+            @Param("userId") Long userId,
+            @Param("eventIds") Collection<Long> eventIds
     );
 
     /**
