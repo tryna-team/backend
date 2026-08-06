@@ -195,6 +195,10 @@ public class Events extends BaseEntity {
         this.endDatetime = endDatetime;
     }
 
+    public void truncateRecurrenceEndDate(LocalDateTime recurrenceEndDate) {
+        this.recurrenceEndDate = recurrenceEndDate;
+    }
+
     public static Events createExternalEvent(
             ExternalCalendars externalCalendar,
             String externalEventId,

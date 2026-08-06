@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public interface RemindersRepository extends JpaRepository<Reminders, Long> {
@@ -65,6 +66,40 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
             """)
     int updateStatusForActionItemsByParentEvent(
             @Param("eventId") Long eventId,
+            @Param("currentStatus") ReminderStatus currentStatus,
+            @Param("nextStatus") ReminderStatus nextStatus,
+            @Param("updatedAt") LocalDateTime updatedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Reminders r
+               SET r.reminderStatus = :nextStatus,
+                   r.updatedAt = :updatedAt
+             WHERE r.targetActionItem.parentEvent.eventId = :eventId
+               AND r.targetActionItem.displayDate = :displayDate
+               AND r.reminderStatus = :currentStatus
+            """)
+    int updateStatusForActionItemsByParentEventAndDisplayDate(
+            @Param("eventId") Long eventId,
+            @Param("displayDate") LocalDate displayDate,
+            @Param("currentStatus") ReminderStatus currentStatus,
+            @Param("nextStatus") ReminderStatus nextStatus,
+            @Param("updatedAt") LocalDateTime updatedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Reminders r
+               SET r.reminderStatus = :nextStatus,
+                   r.updatedAt = :updatedAt
+             WHERE r.targetActionItem.parentEvent.eventId = :eventId
+               AND r.targetActionItem.displayDate >= :displayDate
+               AND r.reminderStatus = :currentStatus
+            """)
+    int updateStatusForActionItemsByParentEventFromDisplayDate(
+            @Param("eventId") Long eventId,
+            @Param("displayDate") LocalDate displayDate,
             @Param("currentStatus") ReminderStatus currentStatus,
             @Param("nextStatus") ReminderStatus nextStatus,
             @Param("updatedAt") LocalDateTime updatedAt

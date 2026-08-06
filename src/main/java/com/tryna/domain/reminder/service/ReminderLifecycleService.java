@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Service
@@ -41,6 +42,28 @@ public class ReminderLifecycleService {
     public int cancelScheduledForSoftDeletedActionItemsByParentEvent(Long eventId) {
         return remindersRepository.updateStatusForActionItemsByParentEvent(
                 eventId,
+                ReminderStatus.SCHEDULED,
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
+        );
+    }
+
+    @Transactional
+    public int cancelScheduledForSoftDeletedActionItemsByParentEventAndDisplayDate(Long eventId, LocalDate displayDate) {
+        return remindersRepository.updateStatusForActionItemsByParentEventAndDisplayDate(
+                eventId,
+                displayDate,
+                ReminderStatus.SCHEDULED,
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
+        );
+    }
+
+    @Transactional
+    public int cancelScheduledForSoftDeletedActionItemsByParentEventFromDisplayDate(Long eventId, LocalDate displayDate) {
+        return remindersRepository.updateStatusForActionItemsByParentEventFromDisplayDate(
+                eventId,
+                displayDate,
                 ReminderStatus.SCHEDULED,
                 ReminderStatus.CANCELED,
                 LocalDateTime.now()

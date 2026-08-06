@@ -43,6 +43,34 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("deletedAt") LocalDateTime deletedAt
     );
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ActionItems a
+               SET a.deletedAt = :deletedAt
+             WHERE a.parentEvent.eventId = :eventId
+               AND a.displayDate = :displayDate
+               AND a.deletedAt IS NULL
+            """)
+    int softDeleteByParentEventIdAndDisplayDate(
+            @Param("eventId") Long eventId,
+            @Param("displayDate") LocalDate displayDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ActionItems a
+               SET a.deletedAt = :deletedAt
+             WHERE a.parentEvent.eventId = :eventId
+               AND a.displayDate >= :displayDate
+               AND a.deletedAt IS NULL
+            """)
+    int softDeleteByParentEventIdFromDisplayDate(
+            @Param("eventId") Long eventId,
+            @Param("displayDate") LocalDate displayDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
     /**
      * 삭제되지 않은 준비/실행 항목을 ID로 조회합니다.
      *

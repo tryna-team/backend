@@ -39,6 +39,13 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
              WHERE ue.user.userId = :userId
                AND e.startDate BETWEEN :startDate AND :endDate
                AND e.eventStatus IN :eventStatuses
+               AND NOT EXISTS (
+                    SELECT 1
+                      FROM RecurringEventExceptions ree
+                     WHERE ree.event = e
+                       AND ree.occurrenceDate = e.startDate
+                       AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
+               )
              GROUP BY e.startDate
             """)
     List<Object[]> countEventsByDate(
@@ -55,6 +62,13 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
              WHERE ue.user.userId = :userId
                AND e.startDate = :date
                AND e.eventStatus IN :eventStatuses
+               AND NOT EXISTS (
+                    SELECT 1
+                      FROM RecurringEventExceptions ree
+                     WHERE ree.event = e
+                       AND ree.occurrenceDate = :date
+                       AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
+               )
              ORDER BY
                CASE WHEN e.startDatetime IS NULL THEN 1 ELSE 0 END,
                e.startDatetime ASC,
