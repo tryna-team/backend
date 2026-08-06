@@ -9,7 +9,6 @@ import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.enums.RecurringEventExceptionType;
 import com.tryna.domain.event.enums.SourceType;
-import com.tryna.domain.event.entity.mapping.UserEvents;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.RecurringEventExceptionsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
@@ -42,7 +41,6 @@ public class EventQueryService {
     private static final int MAX_YEAR = 2100;
     private static final String NO_EVENTS = "NO_EVENTS";
     private static final String NO_SELECTED_DATE_EVENTS = "NO_SELECTED_DATE_EVENTS";
-    private static final int MONTHLY_PREVIEW_LIMIT = 3;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final EnumSet<EventStatus> VISIBLE_EVENT_STATUSES = EnumSet.of(
             EventStatus.CONFIRMED,
@@ -65,6 +63,11 @@ public class EventQueryService {
         CalendarDateEventsResponse dateEvents = buildDateEvents(userId, selectedDate);
         boolean hasEvents = userEventsRepository.countVisibleEventsByUserId(userId, VISIBLE_EVENT_STATUSES) > 0;
 
+        List<CalendarMonthlyResponse.DayEventCount> monthlyEventDays = monthlyCalendar.days()
+                .stream()
+                .filter(CalendarMonthlyResponse.DayEventCount::hasEvent)
+                .toList();
+
         return new CalendarMainResponse(
                 year,
                 month,
@@ -73,30 +76,67 @@ public class EventQueryService {
                 hasEvents,
                 false,
                 resolveMainEmptyState(hasEvents, dateEvents),
-                monthlyCalendar.days(),
+                monthlyEventDays,
                 dateEvents.events()
         );
+    }
+
+    public CalendarMonthlyResponse getMonthlyCalendar(Long userId, Integer year, Integer month) {
+        validateUserId(userId);
+        validateYearMonth(year, month, EventErrorCode.B102_CALENDAR_MONTHLY_400);
+
+        return buildMonthlyCalendar(userId, year, month);
+    }
+
+    /**
+     * 제공된 연도에 사용자가 볼 수 있는(표시되는) 일정이 있는지 확인
+     * 저장된 일정과 해당 범위 내에서 발생할 수 있는 반복 일정을 모두 고려합니다.
+     */
+    public boolean hasEventsInYear(Long userId, Integer year) {
+        validateUserId(userId);
+
+        if (year == null || year < MIN_YEAR || year > MAX_YEAR) {
+            return false;
+        }
+
+        LocalDate startDate = LocalDate.of(year, 1, 1);
+        LocalDate endDate = LocalDate.of(year, 12, 31);
+
+        List<Object[]> rows = userEventsRepository.countEventsByDate(
+                userId,
+                startDate,
+                endDate,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        if (!rows.isEmpty()) {
+            return rows.stream().anyMatch(r -> ((Long) r[1]) > 0);
+        }
+
+        List<Events> recurring = userEventsRepository.findRecurringEventsInRange(
+                userId,
+                startDate.atStartOfDay(),
+                endDate,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        return !recurring.isEmpty();
     }
 
     private CalendarMonthlyResponse buildMonthlyCalendar(Long userId, Integer year, Integer month) {
         YearMonth yearMonth = YearMonth.of(year, month);
         LocalDate startDate = yearMonth.atDay(1);
         LocalDate endDate = yearMonth.atEndOfMonth();
-        Map<LocalDate, List<EventOccurrence>> occurrencesByDate = getOccurrencesByDate(userId, startDate, endDate);
+        Map<LocalDate, Long> countsByDate = getCountsByDate(userId, startDate, endDate);
 
         List<CalendarMonthlyResponse.DayEventCount> days = new ArrayList<>();
         for (int day = 1; day <= yearMonth.lengthOfMonth(); day++) {
             LocalDate date = yearMonth.atDay(day);
-            List<EventOccurrence> occurrences = occurrencesByDate.getOrDefault(date, List.of());
-            Long eventCount = (long) occurrences.size();
+            Long eventCount = countsByDate.getOrDefault(date, 0L);
             days.add(new CalendarMonthlyResponse.DayEventCount(
                     date,
                     eventCount,
-                    eventCount > 0,
-                    occurrences.stream()
-                            .limit(MONTHLY_PREVIEW_LIMIT)
-                            .map(this::toEventSummary)
-                            .toList()
+                    eventCount > 0
             ));
         }
 
@@ -123,11 +163,41 @@ public class EventQueryService {
     }
 
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
-        List<EventOccurrence> occurrences = getOccurrencesByDate(userId, date, date)
-                .getOrDefault(date, List.of());
+        List<Events> directEvents = userEventsRepository.findEventsByDate(
+                userId,
+                date,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        List<Events> recurringEvents = userEventsRepository.findRecurringEventsInRange(
+                userId,
+                date.atStartOfDay(),
+                date,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        List<EventOccurrence> occurrences = new ArrayList<>(directEvents.stream()
+                .map(event -> new EventOccurrence(event, event.getStartDate()))
+                .toList());
+
+        List<EventOccurrence> recurringOccurrences = recurringEvents.stream()
+                .flatMap(event -> resolveAdditionalRecurringOccurrencesCoveringDate(event, date).stream())
+                .toList();
+
+        occurrences.addAll(recurringOccurrences);
+
+        Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
+        occurrences = occurrences.stream()
+                .filter(occurrence -> !isDeletedOccurrence(
+                        occurrence.event(),
+                        occurrence.occurrenceDate(),
+                        deletedOccurrences
+                ))
+                .toList();
+        occurrences.sort(eventOccurrenceComparator());
 
         List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
-                .map(this::toEventSummary)
+                .map(occurrence -> toEventSummary(occurrence.event(), occurrence.occurrenceDate()))
                 .toList();
 
         return new CalendarDateEventsResponse(
@@ -283,53 +353,49 @@ public class EventQueryService {
         return toEventDetailResponse(event);
     }
 
-    private Map<LocalDate, List<EventOccurrence>> getOccurrencesByDate(Long userId, LocalDate startDate, LocalDate endDate) {
-        List<UserEvents> directUserEvents = userEventsRepository.findUserEventsOverlappingRange(
+    private Map<LocalDate, Long> getCountsByDate(Long userId, LocalDate startDate, LocalDate endDate) {
+        List<Events> directEvents = userEventsRepository.findEventsOverlappingRange(
                 userId,
                 startDate,
                 endDate,
                 VISIBLE_EVENT_STATUSES
         );
 
-        List<EventOccurrence> occurrences = new ArrayList<>(directUserEvents.stream()
-                .map(userEvent -> new EventOccurrence(
-                        userEvent.getEvent(),
-                        userEvent.getEvent().getStartDate(),
-                        resolveLabelId(userEvent)
-                ))
+        Map<LocalDate, Long> countsByDate = new HashMap<>();
+        List<EventOccurrence> occurrences = new ArrayList<>(directEvents.stream()
+                .map(event -> new EventOccurrence(event, event.getStartDate()))
                 .toList());
 
-        List<UserEvents> recurringUserEvents = userEventsRepository.findRecurringUserEventsInRange(
+        List<Events> recurringEvents = userEventsRepository.findRecurringEventsInRange(
                 userId,
                 startDate.atStartOfDay(),
                 endDate,
                 VISIBLE_EVENT_STATUSES
         );
 
-        for (UserEvents userEvent : recurringUserEvents) {
-            Events event = userEvent.getEvent();
+        for (Events event : recurringEvents) {
             LocalDate occurrenceSearchStart = startDate.minusDays(eventDurationDays(event));
             for (LocalDate occurrenceDate : resolveRecurringOccurrenceDates(event, occurrenceSearchStart, endDate)) {
                 if (occurrenceDate.equals(event.getStartDate())) {
                     continue;
                 }
-                occurrences.add(new EventOccurrence(event, occurrenceDate, resolveLabelId(userEvent)));
+                occurrences.add(new EventOccurrence(event, occurrenceDate));
             }
         }
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
-        Map<LocalDate, List<EventOccurrence>> occurrencesByDate = new HashMap<>();
-        occurrences.stream()
-                .filter(occurrence -> !isDeletedOccurrence(
-                        occurrence.event(),
-                        occurrence.occurrenceDate(),
-                        deletedOccurrences
-                ))
-                .forEach(occurrence -> addOccurrenceToDates(occurrencesByDate, occurrence, startDate, endDate));
+        for (EventOccurrence occurrence : occurrences) {
+            if (isDeletedOccurrence(
+                    occurrence.event(),
+                    occurrence.occurrenceDate(),
+                    deletedOccurrences
+            )) {
+                continue;
+            }
+            incrementOccurrenceCounts(countsByDate, occurrence, startDate, endDate);
+        }
 
-        occurrencesByDate.values().forEach(events -> events.sort(eventOccurrenceComparator()));
-
-        return occurrencesByDate;
+        return countsByDate;
     }
 
     private List<LocalDate> resolveRecurringOccurrenceDates(Events event, LocalDate rangeStart, LocalDate rangeEnd) {
@@ -344,6 +410,16 @@ public class EventQueryService {
         }
 
         return dates;
+    }
+
+    private List<EventOccurrence> resolveAdditionalRecurringOccurrencesCoveringDate(Events event, LocalDate date) {
+        LocalDate occurrenceSearchStart = date.minusDays(eventDurationDays(event));
+        return resolveRecurringOccurrenceDates(event, occurrenceSearchStart, date)
+                .stream()
+                .filter(occurrenceDate -> !occurrenceDate.equals(event.getStartDate()))
+                .filter(occurrenceDate -> occurrenceCoversDate(event, occurrenceDate, date))
+                .map(occurrenceDate -> new EventOccurrence(event, occurrenceDate))
+                .toList();
     }
 
     private boolean isRecurringOccurrenceOn(Events event, LocalDate date) {
@@ -571,18 +647,20 @@ public class EventQueryService {
         }
     }
 
-    private CalendarDateEventsResponse.EventSummary toEventSummary(EventOccurrence occurrence) {
-        Events event = occurrence.event();
+    private CalendarDateEventsResponse.EventSummary toEventSummary(Events event) {
+        return toEventSummary(event, event.getStartDate());
+    }
+
+    private CalendarDateEventsResponse.EventSummary toEventSummary(Events event, LocalDate occurrenceDate) {
         return new CalendarDateEventsResponse.EventSummary(
                 event.getEventId(),
                 event.getTitle(),
-                occurrence.occurrenceDate(),
+                occurrenceDate,
                 formatTime(event.getStartDatetime()),
-                resolveOccurrenceEndDate(event, occurrence.occurrenceDate()),
+                resolveOccurrenceEndDate(event, occurrenceDate),
                 formatTime(event.getEndDatetime()),
                 event.getIsAllDay(),
                 event.getLocation(),
-                occurrence.labelId(),
                 event.getSourceType(),
                 event.getEventStatus()
         );
@@ -610,15 +688,8 @@ public class EventQueryService {
                 && !date.isAfter(occurrenceEndDate);
     }
 
-    private Long resolveLabelId(UserEvents userEvent) {
-        if (userEvent.getLabel() == null) {
-            return null;
-        }
-        return userEvent.getLabel().getLabelId();
-    }
-
-    private void addOccurrenceToDates(
-            Map<LocalDate, List<EventOccurrence>> occurrencesByDate,
+    private void incrementOccurrenceCounts(
+            Map<LocalDate, Long> countsByDate,
             EventOccurrence occurrence,
             LocalDate rangeStart,
             LocalDate rangeEnd
@@ -633,7 +704,7 @@ public class EventQueryService {
         LocalDate end = occurrenceEndDate.isAfter(rangeEnd) ? rangeEnd : occurrenceEndDate;
 
         while (!current.isAfter(end)) {
-            occurrencesByDate.computeIfAbsent(current, ignored -> new ArrayList<>()).add(occurrence);
+            countsByDate.merge(current, 1L, Long::sum);
             current = current.plusDays(1);
         }
     }
@@ -654,8 +725,7 @@ public class EventQueryService {
 
     private record EventOccurrence(
             Events event,
-            LocalDate occurrenceDate,
-            Long labelId
+            LocalDate occurrenceDate
     ) {
     }
 

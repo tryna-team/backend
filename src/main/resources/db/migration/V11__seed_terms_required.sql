@@ -1,0 +1,2 @@
+INSERT INTO terms (term_type, is_required, version, created_at, updated_at) VALUES ('SERVICE', TRUE, 'v1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO terms (term_type, is_required, version, created_at, updated_at) VALUES ('PRIVACY', TRUE, 'v1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

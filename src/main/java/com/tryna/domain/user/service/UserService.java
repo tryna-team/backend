@@ -1,21 +1,11 @@
 package com.tryna.domain.user.service;
 
-import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.auth.dto.AuthTokenResponse;
 import com.tryna.domain.auth.entity.Auths;
 import com.tryna.domain.auth.repository.AuthsRepository;
-import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
-import com.tryna.domain.auth.repository.SessionRedisRepository;
 import com.tryna.domain.auth.service.AuthService;
-import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
-import com.tryna.domain.event.repository.EventsRepository;
-import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
-import com.tryna.domain.external.repository.ExternalCalendarsRepository;
-import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
-import com.tryna.domain.reminder.repository.RemindersRepository;
-import com.tryna.domain.term.repository.UserAgreedTermsRepository;
 import com.tryna.domain.user.dto.*;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.entity.UserSettings;
@@ -27,13 +17,17 @@ import com.tryna.global.exception.UserErrorCode;
 import com.tryna.global.security.jwt.JwtTokenProvider;
 import com.tryna.global.security.jwt.TokenPair;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
-import java.time.LocalDateTime;
+import com.tryna.domain.label.service.DefaultLabelService;
+
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -41,24 +35,13 @@ public class UserService {
     // --- [Services & Providers] ---
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final DefaultLabelService defaultLabelService;
 
     // --- [JPA Repositories] ---
-    private final ActionItemsRepository actionItemsRepository;
     private final AuthsRepository authsRepository;
-    private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
-    private final EventsRepository eventsRepository;
     private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
-    private final ExternalCalendarsRepository externalCalendarsRepository;
-    private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
-    private final RemindersRepository remindersRepository;
-    private final UserAgreedTermsRepository userAgreedTermsRepository;
-    private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
     private final UserSettingsRepository userSettingsRepository;
-
-    // --- [Redis Repositories] ---
-    private final FcmTokenRedisRepository fcmTokenRedisRepository;
-    private final SessionRedisRepository sessionRedisRepository;
 
     /**
      * A101: 앱 진입 상태 조회
@@ -100,6 +83,17 @@ public class UserService {
 
             UserSettings settings = UserSettings.createDefault(targetUser);
             userSettingsRepository.save(settings);
+
+            try {
+                defaultLabelService.createDefaultLabel(targetUser);
+            } catch (DataIntegrityViolationException e) {
+                String rootMessage = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : null;
+                if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
+                    log.info("Guest default label creation collision absorbed - userId={}", targetUser.getUserId());
+                } else {
+                    throw e;
+                }
+            }
 
             isNewUser = true;
         }
@@ -151,48 +145,6 @@ public class UserService {
                 linkedAuthDtos,
                 hasConnection
         );
-    }
-
-    /**
-     * G104: 데이터 삭제 (회원 탈퇴)
-     */
-    @Transactional
-    public void withdraw(Long userId) {
-        // 1. 유저 검증
-        if (userRepository.findByUserIdAndDeletedAtIsNull(userId).isEmpty()) {
-            throw new BusinessException(UserErrorCode.G103_USER_PROFILE_404);
-        }
-
-        LocalDateTime deletedAt = LocalDateTime.now();
-
-        // --- [Step 1] Events & ActionItems Soft Delete (가장 먼저!) ---
-        actionItemsRepository.softDeleteByUserId(userId, deletedAt);
-        eventsRepository.softDeleteByUserId(userId, deletedAt);
-
-        // --- [Step 2] UserEvents를 참조하는 자식 테이블 Hard Delete ---
-        eventAnalysisLogsRepository.deleteByUserId(userId);
-
-        // --- [Step 3] 부모/자식 테이블 Hard Delete ---
-        remindersRepository.deleteByUserId(userId);
-        recommendationFeedbacksRepository.deleteByUserId(userId);
-        userAgreedTermsRepository.deleteByUserId(userId);
-
-        // --- [Step 4] 외부 캘린더 도메인 Hard Delete ---
-        // Step 1에서 Events가 이미 Soft Delete 되었으므로, SET_NULL 시 Check 에러 발생 안 함
-        externalCalendarsRepository.deleteByUserId(userId);
-        externalCalendarConnectionsRepository.deleteByUserId(userId);
-
-        // --- [Step 5] 다리(매핑 테이블) 폭파 (Hard Delete) ---
-        userEventsRepository.deleteByUserId(userId);
-
-        // --- [Step 6] 유저 본체와 직접 연결된 것들 Soft Delete ---
-        userSettingsRepository.softDeleteByUserId(userId, deletedAt);
-        authsRepository.softDeleteByUserId(userId, deletedAt);
-        userRepository.softDeleteByUserId(userId, deletedAt);
-
-        // --- [Step 7] Redis 캐시 및 FCM 토큰 파기 ---
-        sessionRedisRepository.deleteAllByUserId(userId);
-        fcmTokenRedisRepository.deleteAllByUserId(userId);
     }
 
     // --- Helper Method ---
