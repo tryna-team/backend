@@ -39,10 +39,7 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
              WHERE ue.user.userId = :userId
                AND e.startDate IS NOT NULL
                AND e.startDate <= :endDate
-               AND (
-                    e.endDate IS NULL
-                    OR e.endDate >= :startDate
-               )
+               AND COALESCE(e.endDate, e.startDate) >= :startDate
                AND e.eventStatus IN :eventStatuses
                AND NOT EXISTS (
                     SELECT 1
@@ -66,16 +63,13 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             WHERE ue.user.userId = :userId
               AND e.startDate IS NOT NULL
               AND e.startDate <= :date
-              AND (
-                   e.endDate IS NULL
-                   OR e.endDate >= :date
-              )
+              AND COALESCE(e.endDate, e.startDate) >= :date
               AND e.eventStatus IN :eventStatuses
               AND NOT EXISTS (
                    SELECT 1
                      FROM RecurringEventExceptions ree
                     WHERE ree.event = e
-                       AND ree.occurrenceDate = :date
+                       AND ree.occurrenceDate = e.startDate
                        AND ree.exceptionType = com.tryna.domain.event.enums.RecurringEventExceptionType.DELETED
                )
              ORDER BY
@@ -100,6 +94,10 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
                AND (
                     e.recurrenceEndDate IS NULL
                     OR e.recurrenceEndDate >= :startDateTime
+                    OR (
+                        e.endDate IS NOT NULL
+                        AND e.endDate > e.startDate
+                    )
                )
                AND e.eventStatus IN :eventStatuses
             """)

@@ -648,9 +648,9 @@ public class EventQueryService {
     }
 
     private boolean occurrenceCoversDate(Events event, LocalDate occurrenceDate, LocalDate date) {
-        LocalDate occurrenceEndDate = resolveOccurrenceEndDate(event, occurrenceDate);
+        LocalDate occurrenceEndDate = occurrenceDate.plusDays(eventDurationDays(event));
         return !date.isBefore(occurrenceDate)
-                && (occurrenceEndDate == null || !date.isAfter(occurrenceEndDate));
+                && !date.isAfter(occurrenceEndDate);
     }
 
     private void incrementOccurrenceCounts(
