@@ -66,6 +66,13 @@ public record EventSearchResponse(
             Long actionItemId,
 
             @Schema(
+                    description = "검색 결과 일정 또는 부모 일정에 연결된 라벨 ID",
+                    example = "5",
+                    nullable = true
+            )
+            Long labelId,
+
+            @Schema(
                     description = "검색된 일정 또는 준비/실행 항목 제목",
                     example = "일본 여행"
             )
@@ -100,11 +107,12 @@ public record EventSearchResponse(
          * @param event 검색된 일정 엔티티
          * @return EVENT 유형 검색 결과
          */
-        public static Result fromEvent(Events event) {
+        public static Result fromEvent(Events event, Long labelId) {
             return new Result(
                     EventSearchResultType.EVENT,
                     event.getEventId(),
                     null,
+                    labelId,
                     event.getTitle(),
                     null,
                     event.getStartDate(),
@@ -121,12 +129,14 @@ public record EventSearchResponse(
          */
         public static Result fromActionItem(
                 Events event,
-                ActionItems actionItem
+                ActionItems actionItem,
+                Long labelId
         ) {
             return new Result(
                     EventSearchResultType.ACTION_ITEM,
                     event.getEventId(),
                     actionItem.getActionItemId(),
+                    labelId,
                     actionItem.getTitle(),
                     event.getTitle(),
                     event.getStartDate(),
