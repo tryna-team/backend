@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.ColumnDefault;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -50,6 +51,12 @@ public class ExternalCalendarConnections extends BaseEntity {
     @ColumnDefault("'ACTIVE'")
     private ConnectionStatus connectionStatus = ConnectionStatus.ACTIVE;
 
+    @Column(name = "last_synced_at")
+    private LocalDateTime lastSyncedAt;
+
+    @Column(name = "last_sync_status", length = 50)
+    private String lastSyncStatus;
+
     public static ExternalCalendarConnections create(Users user, Provider provider, String refreshToken) {
         ExternalCalendarConnections connection = new ExternalCalendarConnections();
         connection.user = user;
@@ -57,5 +64,10 @@ public class ExternalCalendarConnections extends BaseEntity {
         connection.refreshToken = refreshToken;
         connection.connectionStatus = ConnectionStatus.ACTIVE;
         return connection;
+    }
+
+    public void updateSyncStatus(LocalDateTime at, String status) {
+        this.lastSyncedAt = at;
+        this.lastSyncStatus = status;
     }
 }

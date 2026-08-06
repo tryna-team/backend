@@ -88,6 +88,40 @@ public class EventQueryService {
         return buildMonthlyCalendar(userId, year, month);
     }
 
+    /**
+     * 제공된 연도에 사용자가 볼 수 있는(표시되는) 일정이 있는지 확인
+     * 저장된 일정과 해당 범위 내에서 발생할 수 있는 반복 일정을 모두 고려합니다.
+     */
+    public boolean hasEventsInYear(Long userId, Integer year) {
+        validateUserId(userId);
+        if (year == null) {
+            return false;
+        }
+
+        LocalDate startDate = LocalDate.of(year, 1, 1);
+        LocalDate endDate = LocalDate.of(year, 12, 31);
+
+        List<Object[]> rows = userEventsRepository.countEventsByDate(
+                userId,
+                startDate,
+                endDate,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        if (!rows.isEmpty()) {
+            return rows.stream().anyMatch(r -> ((Long) r[1]) > 0);
+        }
+
+        List<Events> recurring = userEventsRepository.findRecurringEventsInRange(
+                userId,
+                startDate.atStartOfDay(),
+                endDate,
+                VISIBLE_EVENT_STATUSES
+        );
+
+        return !recurring.isEmpty();
+    }
+
     private CalendarMonthlyResponse buildMonthlyCalendar(Long userId, Integer year, Integer month) {
         YearMonth yearMonth = YearMonth.of(year, month);
         LocalDate startDate = yearMonth.atDay(1);

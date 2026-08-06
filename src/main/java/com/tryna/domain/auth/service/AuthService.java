@@ -44,7 +44,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 @Slf4j
@@ -72,6 +71,7 @@ public class AuthService {
     private final GoogleTokenProvider googleTokenProvider;
     private final SocialSignupService socialSignupService;
     private final DefaultLabelService defaultLabelService;
+    private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * A104: 로그인 필요 여부 확인
@@ -151,10 +151,19 @@ public class AuthService {
         // 3. 토큰 발급 및 Redis 세션/FCM 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
+        // 3-1. DB 커밋 완료 후 비동기로 구글 캘린더 동기화 이벤트 발행 및 플래그 설정
+        boolean syncScheduled = false;
+        if (request.provider() == Provider.GOOGLE && request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+            final Long syncUserId = user.getUserId();
+            applicationEventPublisher.publishEvent(new com.tryna.domain.external.CalendarSyncRequestedEvent(syncUserId, null));
+            syncScheduled = true;
+        }
+
         return new AuthSessionResponse(
                 user.getUserId(),
                 user.getUserRole().name(),
                 isNewUser,
+                syncScheduled,
                 createAuthTokenResponse(tokenPair)
         );
     }
@@ -229,6 +238,12 @@ public class AuthService {
 
         // 9. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
+
+        // 9-1. 토큰 저장 후 안전하게 외부 캘린더 동기화 트리거 (이벤트 발행)
+        if (request.provider() == Provider.GOOGLE && request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+            final Long syncUserId = user.getUserId();
+            applicationEventPublisher.publishEvent(new com.tryna.domain.external.CalendarSyncRequestedEvent(syncUserId, null));
+        }
 
         return new UserConversionResponse(
                 user.getUserId(),

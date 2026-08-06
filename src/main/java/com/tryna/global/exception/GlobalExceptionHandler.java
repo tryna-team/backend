@@ -62,8 +62,14 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleBadRequestException(Exception e, HttpServletRequest request) {
         String requestUri = request.getRequestURI();
-        String method = request.getMethod();
+        String contextPath = request.getContextPath();
 
+        // URI에서 Context Path 제거 보장
+        if (requestUri.startsWith(contextPath)) {
+            requestUri = requestUri.substring(contextPath.length());
+        }
+
+        String method = request.getMethod();
         ErrorCode errorCode = CommonErrorCode.COMMON_400;
 
         // API 명세서 기준 400 에러 코드 세분화

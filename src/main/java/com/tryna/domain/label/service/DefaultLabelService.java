@@ -21,27 +21,19 @@ public class DefaultLabelService {
      * 독립된 트랜잭션(REQUIRES_NEW)으로 기본 라벨 생성을 시도합니다.
      * 충돌 발생 시 이 독립 트랜잭션만 롤백되며, 호출한 부모 트랜잭션에는 영향을 주지 않습니다.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void createDefaultLabel(Users user) {
         boolean hasDefaultLabel = labelsRepository.findByUser_UserIdAndIsDefaultTrue(user.getUserId()).isPresent();
         if (hasDefaultLabel) {
             return;
         }
 
-        String rawNickname = (user.getNickname() != null && !user.getNickname().isBlank())
-                ? user.getNickname().trim()
-                : "사용자";
-
-        if (rawNickname.length() > 96) {
-            rawNickname = rawNickname.substring(0, 96);
-        }
-
-        String labelName = rawNickname + "의 라벨";
-        String normalizedName = labelName.toLowerCase(Locale.ROOT);
+        String defaultLabelName = "기본";
+        String normalizedName = defaultLabelName.toLowerCase(Locale.ROOT);
 
         Labels defaultLabel = Labels.createDefault(
                 user,
-                labelName,
+                defaultLabelName,
                 normalizedName,
                 LabelColor.GREEN,
                 1
