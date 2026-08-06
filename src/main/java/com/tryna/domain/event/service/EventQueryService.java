@@ -13,6 +13,7 @@ import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.RecurringEventExceptionsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
+import com.tryna.domain.external.CalendarSyncRequestedEvent;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -29,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +54,7 @@ public class EventQueryService {
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
     private final RecurringEventExceptionsRepository recurringEventExceptionsRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
         validateUserId(userId);
@@ -811,5 +814,32 @@ public class EventQueryService {
         }
         LocalTime time = dateTime.toLocalTime();
         return time.format(TIME_FORMATTER);
+    }
+
+    /**
+     * 캘린더 메인 조회 + 연도별 일정 부재 시 동기화 이벤트 발행 (트랜잭션 보장)
+     */
+    @Transactional
+    public CalendarMainResponse getCalendarMainWithSyncCheck(Long userId, Integer year, Integer month, String selectedDate) {
+        boolean hasYearEvents = hasEventsInYear(userId, year);
+        if (!hasYearEvents) {
+            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
+        }
+        return getCalendarMain(userId, year, month, selectedDate);
+    }
+
+    /**
+     * 날짜별 일정 조회 + 연도별 일정 부재 시 동기화 이벤트 발행 (트랜잭션 보장)
+     */
+    @Transactional
+    public CalendarDateEventsResponse getDateEventsWithSyncCheck(Long userId, String date) {
+        LocalDate parsed = LocalDate.parse(date);
+        int year = parsed.getYear();
+
+        boolean hasYearEvents = hasEventsInYear(userId, year);
+        if (!hasYearEvents) {
+            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
+        }
+        return getDateEvents(userId, date);
     }
 }

@@ -42,13 +42,8 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 연도 동기화를 수행하여 selectedDate의 일정이 DB에 존재하도록 보장
-        boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
-        if (!hasYearEvents) {
-            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
-        }
+        CalendarMainResponse response = eventQueryService.getCalendarMainWithSyncCheck(userId, year, month, selectedDate);
 
-        CalendarMainResponse response = eventQueryService.getCalendarMain(userId, year, month, selectedDate);
         return ApiResponse.success(
                 "B101_CALENDAR_MAIN_200",
                 "캘린더 메인 화면 조회에 성공했습니다.",
@@ -63,22 +58,8 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        try {
-            LocalDate parsed = LocalDate.parse(date);
-            int year = parsed.getYear();
-            boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
-            if (!hasYearEvents) {
-                applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year)); // 🚀 [이벤트 발행]
-            }
-        } catch (DateTimeParseException e) {
-            // 잘못된 날짜 형식은 파싱 예외로 처리 (실제 400 에러는 서비스 단에서 발생)
-            log.debug("날짜별 일정 조회 중 잘못된 날짜 형식 입력: {}", date);
-        } catch (Exception e) {
-            // 동기화 이벤트 발행 등 기타 예외는 로그로 기록
-            log.warn("날짜별 일정 조회 중 연도 동기화 트리거 실패: {}", e.getMessage(), e);
-        }
+        CalendarDateEventsResponse response = eventQueryService.getDateEventsWithSyncCheck(userId, date);
 
-        CalendarDateEventsResponse response = eventQueryService.getDateEvents(userId, date);
         return ApiResponse.success(
                 "B103_CALENDAR_DATE_EVENTS_200",
                 "날짜별 일정 목록 조회에 성공했습니다.",

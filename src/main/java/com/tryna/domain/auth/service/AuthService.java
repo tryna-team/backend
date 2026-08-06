@@ -141,6 +141,9 @@ public class AuthService {
                     user = concurrentAuth.getUser();
                     concurrentAuth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
                     isNewUser = false;
+
+                    // 동시성 충돌로 복구된 concurrentAuth를 existingAuth에 반영하여 이후 토큰 검증(hasValidToken) 정상 동작 보장
+                    existingAuth = Optional.of(concurrentAuth);
                 } else {
                     // 그 외의 데이터 무결성 위반(예: 기타 제약조건 에러 등)은 그대로 예외 전파
                     throw e;
