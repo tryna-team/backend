@@ -21,7 +21,7 @@ public class DefaultLabelService {
      * 독립된 트랜잭션(REQUIRES_NEW)으로 기본 라벨 생성을 시도합니다.
      * 충돌 발생 시 이 독립 트랜잭션만 롤백되며, 호출한 부모 트랜잭션에는 영향을 주지 않습니다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createDefaultLabel(Users user) {
         boolean hasDefaultLabel = labelsRepository.findByUser_UserIdAndIsDefaultTrue(user.getUserId()).isPresent();
         if (hasDefaultLabel) {

@@ -48,7 +48,6 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
-
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
@@ -190,16 +189,14 @@ public class EventQueryService {
         occurrences.addAll(recurringOccurrences);
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
-        occurrences = occurrences.stream()
+
+        List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
                 .filter(occurrence -> !isDeletedOccurrence(
                         occurrence.event(),
                         occurrence.occurrenceDate(),
                         deletedOccurrences
                 ))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        occurrences.sort(eventOccurrenceComparator());
-
-        List<CalendarDateEventsResponse.EventSummary> events = occurrences.stream()
+                .sorted(eventOccurrenceComparator())
                 .map(this::toEventSummary)
                 .toList();
 

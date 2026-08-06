@@ -57,7 +57,7 @@ public class Events extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "external_calendar_id")
-    @OnDelete(action = OnDeleteAction.SET_NULL)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private ExternalCalendars externalCalendar;
 
     @Column(name = "source_text", columnDefinition = "TEXT")

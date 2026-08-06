@@ -16,7 +16,7 @@ public class CalendarSyncEventListener {
     private final CalendarSyncService calendarSyncService;
 
     @Async("calendarSyncTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handle(CalendarSyncRequestedEvent event) {
         try {
             calendarSyncService.syncGoogleCalendar(event.userId(), event.targetYear());

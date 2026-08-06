@@ -169,7 +169,7 @@ public class CalendarSyncService {
                             }
                         });
 
-                labelsRepository.findByExternalCalendar(externalCal).orElseGet(() -> {
+                labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal).orElseGet(() -> {
                     try {
                         Integer nextSort = labelsRepository
                                 .findTopByUser_UserIdOrderBySortOrderDesc(userId)
@@ -192,7 +192,7 @@ public class CalendarSyncService {
                     } catch (org.springframework.dao.DataIntegrityViolationException e) {
                         String rootMessage = e.getMostSpecificCause().getMessage();
                         if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
-                            return labelsRepository.findByExternalCalendar(externalCal)
+                            return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal)
                                     .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
                         } else {
                             throw e;
@@ -211,7 +211,7 @@ public class CalendarSyncService {
                 externalCalendar.getConnection().getExternalCalendarConnectionId() : null;
 
         com.tryna.domain.label.entity.Labels externalLabel = labelsRepository
-                .findByExternalCalendar(externalCalendar)
+                .findByExternalCalendarAndDeletedAtIsNull(externalCalendar)
                 .orElseThrow(() -> {
                     markSyncFailed(userId);
                     return new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
@@ -340,7 +340,8 @@ public class CalendarSyncService {
             }
         } catch (Exception e) {
             markSyncFailed(userId);
-            throw e;
+            log.error("구글 캘린더 동기화 처리 중 예외 발생 for user {}: {}", userId, e.getMessage(), e);
+            // 예외를 상위로 전파하지 않고 실패 상태만 기록하고 종료합니다.
         }
     }
 
@@ -414,7 +415,7 @@ public class CalendarSyncService {
             List<ExternalCalendars> calendars = externalCalendarsRepository.findAllByConnection(connection);
 
             for (ExternalCalendars cal : calendars) {
-                labelsRepository.findByExternalCalendar(cal).ifPresent(extLabel -> {
+                labelsRepository.findByExternalCalendarAndDeletedAtIsNull(cal).ifPresent(extLabel -> {
                     Long sourceLabelId = extLabel.getLabelId();
                     userEventsRepository.moveLabelAssignments(userId, sourceLabelId, defaultLabel);
                 });

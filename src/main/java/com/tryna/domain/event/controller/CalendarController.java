@@ -10,16 +10,20 @@ import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/calendars")
@@ -59,7 +63,6 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 날짜별 일정 조회 시에도 에러 유발하던 동기 호출을 비동기 이벤트 발행으로 변경
         try {
             LocalDate parsed = LocalDate.parse(date);
             int year = parsed.getYear();
@@ -67,7 +70,12 @@ public class CalendarController implements CalendarControllerDocs {
             if (!hasYearEvents) {
                 applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year)); // 🚀 [이벤트 발행]
             }
-        } catch (Exception ignored) {
+        } catch (DateTimeParseException e) {
+            // 잘못된 날짜 형식은 파싱 예외로 처리 (실제 400 에러는 서비스 단에서 발생)
+            log.debug("날짜별 일정 조회 중 잘못된 날짜 형식 입력: {}", date);
+        } catch (Exception e) {
+            // 동기화 이벤트 발행 등 기타 예외는 로그로 기록
+            log.warn("날짜별 일정 조회 중 연도 동기화 트리거 실패: {}", e.getMessage(), e);
         }
 
         CalendarDateEventsResponse response = eventQueryService.getDateEvents(userId, date);
