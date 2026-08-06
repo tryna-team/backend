@@ -3,7 +3,6 @@ package com.tryna.domain.event.controller;
 import com.tryna.domain.event.controller.docs.CalendarControllerDocs;
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMainResponse;
-import com.tryna.domain.event.dto.CalendarMonthlyResponse;
 import com.tryna.domain.event.service.EventQueryService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -36,22 +35,6 @@ public class CalendarController implements CalendarControllerDocs {
         return ApiResponse.success(
                 "B101_CALENDAR_MAIN_200",
                 "캘린더 메인 화면 조회에 성공했습니다.",
-                response
-        );
-    }
-
-    @Override
-    @GetMapping("/monthly")
-    public ApiResponse<CalendarMonthlyResponse> getMonthlyCalendar(
-            Authentication authentication,
-            @RequestParam Integer year,
-            @RequestParam Integer month
-    ) {
-        Long userId = extractUserId(authentication);
-        CalendarMonthlyResponse response = eventQueryService.getMonthlyCalendar(userId, year, month);
-        return ApiResponse.success(
-                "B102_CALENDAR_MONTHLY_200",
-                "월간 캘린더 조회에 성공했습니다.",
                 response
         );
     }
