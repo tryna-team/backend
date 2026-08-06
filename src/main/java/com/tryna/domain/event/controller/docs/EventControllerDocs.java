@@ -73,7 +73,8 @@ public interface EventControllerDocs {
                     외부 캘린더 원본 일정은 삭제하지 않습니다.
                     cascade는 MVP에서 true만 허용하며, 일정에 연결된 준비/실행 항목도 함께 soft delete 처리합니다.
                     일반 일정은 deleteScope=SINGLE로 요청합니다.
-                    반복 일정의 특정 회차 삭제 또는 선택 회차 이후 삭제는 별도 반복 예외 정책 확정 후 처리합니다.
+                    반복 일정의 특정 회차만 삭제할 때는 deleteScope=SINGLE과 occurrenceDate를 함께 전달합니다.
+                    반복 일정의 선택 회차 및 이후 회차를 삭제할 때는 deleteScope=THIS_AND_FUTURE와 occurrenceDate를 함께 전달합니다.
                     """,
             operationId = "deleteEvent"
     )

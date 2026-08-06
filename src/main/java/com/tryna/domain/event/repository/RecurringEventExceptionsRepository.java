@@ -6,15 +6,30 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RecurringEventExceptionsRepository extends JpaRepository<RecurringEventExceptions, Long> {
 
-    boolean existsByEvent_EventIdAndOccurrenceDateAndExceptionType(
-            Long eventId,
-            LocalDate occurrenceDate,
-            RecurringEventExceptionType exceptionType
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            INSERT INTO recurring_event_exceptions (
+                event_id,
+                occurrence_date,
+                exception_type
+            )
+            VALUES (
+                :eventId,
+                :occurrenceDate,
+                :exceptionType
+            )
+            ON CONFLICT (event_id, occurrence_date, exception_type) DO NOTHING
+            """, nativeQuery = true)
+    int insertDeletedOccurrenceIfAbsent(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("exceptionType") String exceptionType
     );
 
     @Query("""

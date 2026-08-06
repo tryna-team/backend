@@ -4,7 +4,6 @@ import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventDeleteRequest;
 import com.tryna.domain.event.dto.EventDeleteResponse;
 import com.tryna.domain.event.entity.Events;
-import com.tryna.domain.event.entity.RecurringEventExceptions;
 import com.tryna.domain.event.enums.DeleteScope;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
@@ -120,15 +119,11 @@ public class EventDeletionService {
     }
 
     private EventDeleteResponse deleteRecurringSingleOccurrence(Events event, LocalDate occurrenceDate) {
-        if (!recurringEventExceptionsRepository.existsByEvent_EventIdAndOccurrenceDateAndExceptionType(
+        recurringEventExceptionsRepository.insertDeletedOccurrenceIfAbsent(
                 event.getEventId(),
                 occurrenceDate,
-                RecurringEventExceptionType.DELETED
-        )) {
-            recurringEventExceptionsRepository.save(
-                    RecurringEventExceptions.createDeletedOccurrence(event, occurrenceDate)
-            );
-        }
+                RecurringEventExceptionType.DELETED.name()
+        );
 
         LocalDateTime deletedAt = LocalDateTime.now();
         reminderLifecycleService.cancelScheduledForSoftDeletedActionItemsByParentEventAndDisplayDate(
