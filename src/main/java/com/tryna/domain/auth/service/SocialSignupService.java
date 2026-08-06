@@ -61,26 +61,16 @@ public class SocialSignupService {
         Users user = userRepository.save(Users.createUser());
         userSettingsRepository.save(UserSettings.createDefault(user));
 
-        // 닉네임 추출 및 안전 길이 자르기
-        String rawNickname = (user.getNickname() != null && !user.getNickname().isBlank())
-                ? user.getNickname().trim()
-                : "사용자";
+        // 2-1. 신규 회원 가입 시 기본 라벨 생성
+        String defaultLabelName = "기본";
+        String normalizedName = defaultLabelName.toLowerCase(Locale.ROOT);
 
-        // "의 라벨"(4자)을 붙였을 때 100자를 넘지 않도록 닉네임은 최대 96자까지만 사용
-        if (rawNickname.length() > 96) {
-            rawNickname = rawNickname.substring(0, 96);
-        }
-
-        String labelName = rawNickname + "의 라벨";
-        String normalizedName = labelName.toLowerCase(Locale.ROOT);
-
-        // 2-1. 신규 회원 가입 시 기본 라벨 생성 (isDefault = true, color = LabelColor.GREEN)
-        Labels defaultLabel = Labels.createDefault( // 메서드명 수정
+        Labels defaultLabel = Labels.createDefault(
                 user,
-                labelName,         // 예: "사용자의 라벨"
+                defaultLabelName,
                 normalizedName,
-                LabelColor.GREEN,  // String -> Enum 타입으로 수정
-                1                  // sortOrder = 1
+                LabelColor.GREEN,
+                1
         );
         labelsRepository.save(defaultLabel);
 

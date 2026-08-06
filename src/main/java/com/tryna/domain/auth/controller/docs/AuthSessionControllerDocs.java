@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -41,6 +42,7 @@ public interface AuthSessionControllerDocs {
             description = "만료된 액세스 토큰을 재발급받기 위해 리프레시 토큰을 검증하고 새로운 토큰 쌍을 반환합니다. (Refresh Token Rotation 정책 적용)",
             operationId = "reissueToken"
     )
+    @SecurityRequirements({})
     ResponseEntity<ApiResponse<AuthTokenResponse>> reissueToken(
             @Valid @RequestBody AuthTokenRefreshRequest request
     );
@@ -52,6 +54,7 @@ public interface AuthSessionControllerDocs {
     )
     @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<Void>> logout(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
             @Parameter(description = "접속 기기 식별자", required = true)
             @RequestParam("deviceId") String deviceId
     );

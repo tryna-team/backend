@@ -214,6 +214,7 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
      * @param destinationLabel 이동할 기본 라벨
      * @return 라벨이 변경된 사용자-일정 매핑 개수
      */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE UserEvents ue
            SET ue.label = :destinationLabel
@@ -224,5 +225,23 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             @Param("userId") Long userId,
             @Param("sourceLabelId") Long sourceLabelId,
             @Param("destinationLabel") Labels destinationLabel
+    );
+
+    @Query("""
+            SELECT e, COUNT(e)
+              FROM UserEvents ue
+              JOIN ue.event e
+             WHERE ue.user.userId = :userId
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND COALESCE(e.endDate, e.startDate) >= :startDate
+               AND e.eventStatus IN :eventStatuses
+             GROUP BY e
+            """)
+    List<Object[]> countEventsByDate(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 }

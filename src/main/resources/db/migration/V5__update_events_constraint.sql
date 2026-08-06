@@ -1,4 +1,4 @@
--- V4: 외부 캘린더 연동 해제 시 CASCADE 정책 및 제약조건 추가 (NOT VALID로 락 방지)
+-- V5: 외부 캘린더 연동 해제 시 CASCADE 정책 및 제약조건 추가 (NOT VALID로 락 방지)
 
 -- 1. events 테이블 외래키 추가 (NOT VALID)
 ALTER TABLE events

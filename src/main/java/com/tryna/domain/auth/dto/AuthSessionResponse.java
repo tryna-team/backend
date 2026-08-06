@@ -14,6 +14,9 @@ public record AuthSessionResponse(
         @Schema(description = "신규 회원가입 여부", example = "true")
         boolean isNewUser,
 
+        @Schema(description = "백그라운드 외부 캘린더 동기화 작업 예약 여부", example = "true")
+        boolean syncScheduled,
+
         @Schema(description = "발급된 토큰 정보")
         AuthTokenResponse auth
 ) {
