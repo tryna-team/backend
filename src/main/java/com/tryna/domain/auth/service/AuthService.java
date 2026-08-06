@@ -12,6 +12,7 @@ import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
+import com.tryna.domain.external.repository.ExternalCalendarsRepository;
 import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.label.service.DefaultLabelService;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
@@ -67,6 +68,7 @@ public class AuthService {
     private final RecommendationFeedbacksRepository recommendationFeedbacksRepository;
     private final EventAnalysisLogsRepository eventAnalysisLogsRepository;
     private final LabelsRepository labelsRepository;
+    private final ExternalCalendarsRepository externalCalendarsRepository;
     private final OAuthClientProvider oAuthClientProvider;
     private final GoogleTokenProvider googleTokenProvider;
     private final SocialSignupService socialSignupService;
@@ -404,10 +406,26 @@ public class AuthService {
         actionItemsRepository.softDeleteByUserId(userId, now);
         eventsRepository.softDeleteByUserId(userId, now);
 
-        // 3. Hard Delete 대상 물리 삭제
+        // labels를 삭제하기 전에, labels를 참조하고 있는 user_events를 먼저 삭제
+        userEventsRepository.deleteByUserId(userId);
+
+        // 그 캘린더를 참조하고 있는 '외부 캘린더 라벨'들을 먼저 물리 삭제
+        externalCalendarConnectionsRepository.findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
+                .ifPresent(conn -> {
+                    List<com.tryna.domain.external.entity.ExternalCalendars> calendars =
+                            externalCalendarsRepository.findAllByConnection(conn);
+                    for (com.tryna.domain.external.entity.ExternalCalendars cal : calendars) {
+                        labelsRepository.deleteByExternalCalendar(cal);
+                    }
+                    labelsRepository.flush();
+                });
+
+        // 외부 캘린더 커넥션(부모)을 삭제하기 전에, external_calendars(자식) 데이터를 먼저 벌크 삭제하여 외래키 제약조건 위반 방지
+        externalCalendarsRepository.deleteByUserId(userId);
+
+        // 3. Hard Delete 대상 물리 삭제 (외부 캘린더 및 커넥션 삭제)
         remindersRepository.deleteByUserId(userId);
         recommendationFeedbacksRepository.deleteByUserId(userId);
-        userEventsRepository.deleteByUserId(userId);
         userAgreedTermsRepository.deleteByUserId(userId);
         externalCalendarConnectionsRepository.deleteByUserId(userId);
 
