@@ -3,6 +3,7 @@ package com.tryna.domain.event.controller;
 import com.tryna.domain.event.controller.docs.EventControllerDocs;
 import com.tryna.domain.event.dto.*;
 import com.tryna.domain.event.service.EventCommandService;
+import com.tryna.domain.event.service.EventDeletionService;
 import com.tryna.domain.event.service.EventParseService;
 import com.tryna.domain.event.service.EventQueryService;
 import com.tryna.global.exception.AuthErrorCode;
@@ -22,6 +23,7 @@ public class EventController implements EventControllerDocs {
     private final EventCommandService eventCommandService;
     private final EventQueryService eventQueryService;
     private final EventParseService eventParseService;
+    private final EventDeletionService eventDeletionService;
 
     @Override
     @PostMapping("/parse")
@@ -66,6 +68,22 @@ public class EventController implements EventControllerDocs {
         return ApiResponse.success(
                 "B104_EVENT_DETAIL_200",
                 "일정 상세 조회에 성공했습니다.",
+                response
+        );
+    }
+
+    @Override
+    @DeleteMapping("/{eventId}")
+    public ApiResponse<EventDeleteResponse> deleteEvent(
+            Authentication authentication,
+            @PathVariable Long eventId,
+            @RequestBody EventDeleteRequest request
+    ) {
+        Long userId = extractUserId(authentication);
+        EventDeleteResponse response = eventDeletionService.deleteEvent(userId, eventId, request);
+        return ApiResponse.success(
+                "C106_EVENT_DELETE_200",
+                "일정 삭제에 성공했습니다.",
                 response
         );
     }

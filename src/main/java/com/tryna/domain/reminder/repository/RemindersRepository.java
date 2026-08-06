@@ -57,6 +57,21 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
+            UPDATE Reminders r
+               SET r.reminderStatus = :nextStatus,
+                   r.updatedAt = :updatedAt
+             WHERE r.targetActionItem.parentEvent.eventId = :eventId
+               AND r.reminderStatus = :currentStatus
+            """)
+    int updateStatusForActionItemsByParentEvent(
+            @Param("eventId") Long eventId,
+            @Param("currentStatus") ReminderStatus currentStatus,
+            @Param("nextStatus") ReminderStatus nextStatus,
+            @Param("updatedAt") LocalDateTime updatedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
             DELETE FROM Reminders r
              WHERE r.user.userId = :userId
             """)

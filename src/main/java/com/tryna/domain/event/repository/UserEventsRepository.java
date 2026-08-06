@@ -102,6 +102,18 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             Long eventId
     );
 
+    @Query("""
+            SELECT COUNT(ue.userEventId) > 0
+              FROM UserEvents ue
+             WHERE ue.user.userId = :userId
+               AND ue.event.eventId = :eventId
+               AND ue.eventRole = com.tryna.domain.event.enums.EventRole.OWNER
+            """)
+    boolean existsOwnerByUserIdAndEventId(
+            @Param("userId") Long userId,
+            @Param("eventId") Long eventId
+    );
+
     /**
      * 회원 탈퇴 시 해당 사용자의 일정 연결 정보를 모두 삭제합니다.
      *

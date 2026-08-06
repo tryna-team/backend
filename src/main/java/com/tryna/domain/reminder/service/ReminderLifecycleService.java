@@ -37,6 +37,16 @@ public class ReminderLifecycleService {
         );
     }
 
+    @Transactional
+    public int cancelScheduledForSoftDeletedActionItemsByParentEvent(Long eventId) {
+        return remindersRepository.updateStatusForActionItemsByParentEvent(
+                eventId,
+                ReminderStatus.SCHEDULED,
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
+        );
+    }
+
     public boolean isAlreadyScheduledForEvent(Long eventId, LocalDateTime scheduledAt, String deliveryChannel) {
         return remindersRepository.existsByTargetEvent_EventIdAndScheduledAtAndDeliveryChannelAndReminderStatus(
                 eventId,
