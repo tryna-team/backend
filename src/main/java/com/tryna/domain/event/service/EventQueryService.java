@@ -94,7 +94,8 @@ public class EventQueryService {
      */
     public boolean hasEventsInYear(Long userId, Integer year) {
         validateUserId(userId);
-        if (year == null) {
+
+        if (year == null || year < MIN_YEAR || year > MAX_YEAR) {
             return false;
         }
 

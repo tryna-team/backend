@@ -67,7 +67,6 @@ public class CalendarSyncService {
      * @param userId 유저 ID
      * @param targetYear 동기화할 연도 (null인 경우 기본값: 현재 연도)
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void syncGoogleCalendar(Long userId, Integer targetYear) {
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 

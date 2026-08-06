@@ -66,13 +66,27 @@ public class GoogleTokenProvider {
                 Map<String, Object> body = response.getBody();
 
                 if (body == null) {
-                    throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+                    log.warn("구글 토큰 응답 본문(body)이 비어 있음 (will retry {} / {})", attempt, maxAttempts);
+                    if (attempt >= maxAttempts) {
+                        log.error("구글 토큰 응답 본문 누락 (최대 재시도 도달)");
+                        throw new BusinessException(CommonErrorCode.COMMON_500);
+                    }
+                    try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new BusinessException(CommonErrorCode.COMMON_500); }
+                    backoffMs *= 2;
+                    continue;
                 }
 
                 // 꺼낸 값이 String 타입이 맞는지 확인과 동시에 accessToken 변수에 담고, 빈 값인지까지 방어
                 Object tokenObj = body.get("access_token");
                 if (!(tokenObj instanceof String accessToken) || accessToken.isBlank()) {
-                    throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+                    log.warn("구글 토큰 응답에 access_token이 누락되었거나 형식이 올바르지 않음 (will retry {} / {})", attempt, maxAttempts);
+                    if (attempt >= maxAttempts) {
+                        log.error("구글 토큰 응답 access_token 누락 (최대 재시도 도달)");
+                        throw new BusinessException(CommonErrorCode.COMMON_500);
+                    }
+                    try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new BusinessException(CommonErrorCode.COMMON_500); }
+                    backoffMs *= 2;
+                    continue;
                 }
 
                 return accessToken;

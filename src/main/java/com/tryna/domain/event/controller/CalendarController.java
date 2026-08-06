@@ -5,11 +5,13 @@ import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMainResponse;
 import com.tryna.domain.event.dto.CalendarMonthlyResponse;
 import com.tryna.domain.event.service.EventQueryService;
+import com.tryna.domain.external.CalendarSyncRequestedEvent;
 import com.tryna.domain.external.service.CalendarSyncService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CalendarController implements CalendarControllerDocs {
 
     private final EventQueryService eventQueryService;
-    private final CalendarSyncService calendarSyncService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     @GetMapping("/main")
@@ -40,7 +42,7 @@ public class CalendarController implements CalendarControllerDocs {
         // 연도 동기화를 수행하여 selectedDate의 일정이 DB에 존재하도록 보장
         boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
         if (!hasYearEvents) {
-            calendarSyncService.syncGoogleCalendar(userId, year);
+            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
         }
 
         CalendarMainResponse response = eventQueryService.getCalendarMain(userId, year, month, selectedDate);
@@ -60,10 +62,10 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 연도에 이벤트가 없으면 calendarSyncService.syncGoogleCalendar(userId, year)를 동기 호출
+        // 월간 캘린더 조회 시에도 동기 호출 제거하고 비동기 이벤트 발행으로 전환
         boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
         if (!hasYearEvents) {
-            calendarSyncService.syncGoogleCalendar(userId, year);
+            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year)); // 🚀 [이벤트 발행]
         }
 
         CalendarMonthlyResponse response = eventQueryService.getMonthlyCalendar(userId, year, month);
@@ -82,13 +84,13 @@ public class CalendarController implements CalendarControllerDocs {
     ) {
         Long userId = extractUserId(authentication);
 
-        // 요청된 날짜에 해당하는 연도의 동기화를 보장합니다.
+        // 날짜별 일정 조회 시에도 에러 유발하던 동기 호출을 비동기 이벤트 발행으로 변경
         try {
             LocalDate parsed = LocalDate.parse(date);
             int year = parsed.getYear();
             boolean hasYearEvents = eventQueryService.hasEventsInYear(userId, year);
             if (!hasYearEvents) {
-                calendarSyncService.syncGoogleCalendar(userId, year);
+                applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year)); // 🚀 [이벤트 발행]
             }
         } catch (Exception ignored) {
         }

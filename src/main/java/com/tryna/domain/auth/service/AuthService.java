@@ -152,11 +152,21 @@ public class AuthService {
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
         // 3-1. DB 커밋 완료 후 비동기로 구글 캘린더 동기화 이벤트 발행 및 플래그 설정
+        // 3-1. DB 커밋 완료 후 비동기로 구글 캘린더 동기화 이벤트 발행 및 플래그 설정
         boolean syncScheduled = false;
-        if (request.provider() == Provider.GOOGLE && request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
-            final Long syncUserId = user.getUserId();
-            applicationEventPublisher.publishEvent(new com.tryna.domain.external.CalendarSyncRequestedEvent(syncUserId, null));
-            syncScheduled = true;
+        if (request.provider() == Provider.GOOGLE) {
+            // 1) 요청 바디에 새로운 토큰이 들어왔거나,
+            // 2) 바디에 없더라도 DB(Auths)에 이미 유효한 리프레시 토큰이 저장되어 있는지 확인
+            boolean hasValidToken = (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank())
+                    || authsRepository.findByUser_UserIdAndProviderAndDeletedAtIsNull(user.getUserId(), Provider.GOOGLE)
+                    .map(auth -> auth.getOauthRefreshToken() != null && !auth.getOauthRefreshToken().isBlank())
+                    .orElse(false);
+
+            if (hasValidToken) {
+                final Long syncUserId = user.getUserId();
+                applicationEventPublisher.publishEvent(new com.tryna.domain.external.CalendarSyncRequestedEvent(syncUserId, null));
+                syncScheduled = true;
+            }
         }
 
         return new AuthSessionResponse(
