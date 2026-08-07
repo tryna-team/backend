@@ -5,6 +5,7 @@ import com.tryna.domain.user.dto.GuestCreateResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ public interface GuestControllerDocs {
             description = "임시 사용자를 생성하거나 기존 비회원으로 재접속합니다.",
             operationId = "createGuest"
     )
+    @SecurityRequirements({})
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "201",
