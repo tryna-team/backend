@@ -3,6 +3,7 @@ package com.tryna.domain.event.dto;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventSearchResultType;
+import com.tryna.domain.label.enums.LabelColor;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
@@ -67,10 +68,9 @@ public record EventSearchResponse(
 
             @Schema(
                     description = "검색 결과 일정 또는 부모 일정에 연결된 라벨 ID",
-                    example = "5",
                     nullable = true
             )
-            Long labelId,
+            LabelInfo label,
 
             @Schema(
                     description = "검색된 일정 또는 준비/실행 항목 제목",
@@ -97,7 +97,21 @@ public record EventSearchResponse(
                     example = "14:00",
                     nullable = true
             )
-            String time
+            String startTime,
+
+            @Schema(
+                    description = "일정 종료 시간 또는 부모 일정 종료 시간",
+                    example = "15:30",
+                    nullable = true
+            )
+                    String endTime,
+
+            @Schema(
+                    description = "일정 장소 또는 부모 일정 장소",
+                    example = "스타벅스 여의도점",
+                    nullable = true
+            )
+            String location
 
     ) {
 
@@ -107,16 +121,18 @@ public record EventSearchResponse(
          * @param event 검색된 일정 엔티티
          * @return EVENT 유형 검색 결과
          */
-        public static Result fromEvent(Events event, Long labelId) {
+        public static Result fromEvent(Events event, LabelInfo label) {
             return new Result(
                     EventSearchResultType.EVENT,
                     event.getEventId(),
                     null,
-                    labelId,
+                    label,
                     event.getTitle(),
                     null,
                     event.getStartDate(),
-                    formatTime(event.getStartDatetime())
+                    formatTime(event.getStartDatetime()),
+                    formatTime(event.getEndDatetime()),
+                    event.getLocation()
             );
         }
 
@@ -130,19 +146,39 @@ public record EventSearchResponse(
         public static Result fromActionItem(
                 Events event,
                 ActionItems actionItem,
-                Long labelId
+                LabelInfo label
         ) {
             return new Result(
                     EventSearchResultType.ACTION_ITEM,
                     event.getEventId(),
                     actionItem.getActionItemId(),
-                    labelId,
+                    label,
                     actionItem.getTitle(),
                     event.getTitle(),
                     event.getStartDate(),
-                    formatTime(event.getStartDatetime())
+                    formatTime(event.getStartDatetime()),
+                    formatTime(event.getEndDatetime()),
+                    event.getLocation()
             );
         }
+    }
+
+    /**
+     * 검색 결과 일정에 연결된 라벨 정보를 표현
+     */
+    @Schema(description = "검색 결과 일정의 라벨 정보")
+    public record LabelInfo(
+
+            @Schema(description = "라벨 ID", example = "5")
+            Long labelId,
+
+            @Schema(description = "라벨 이름", example = "개인")
+            String name,
+
+            @Schema(description = "라벨 색상", example = "GREEN")
+            LabelColor color
+
+    ) {
     }
 
     private static String formatTime(LocalDateTime dateTime) {
