@@ -34,6 +34,52 @@ public class GoogleTokenProvider {
     @Value("${oauth2.google.token-url:https://oauth2.googleapis.com/token}")
     private String googleTokenUrl;
 
+    // 인가 코드 교환 결과를 담을 내부 레코드
+    public record GoogleTokens(String accessToken, String refreshToken) {}
+
+    /**
+     * 프론트엔드로부터 받은 인가 코드(Authorization Code)를 구글 서버와 통신하여 실제 토큰으로 교환합니다.
+     */
+    public GoogleTokens exchangeCodeForTokens(String authorizationCode, String redirectUri) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("client_id", googleClientId);
+        params.add("client_secret", googleClientSecret);
+        params.add("code", authorizationCode);
+        params.add("grant_type", "authorization_code");
+        // 리디렉션 URI가 비어있으면 postmessage(웹 SDK 기본값) 처리하거나 생략
+        params.add("redirect_uri", redirectUri != null && !redirectUri.isBlank() ? redirectUri : "postmessage");
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(googleTokenUrl, request, Map.class);
+            Map<String, Object> body = response.getBody();
+
+            if (body == null) {
+                throw new BusinessException(CommonErrorCode.COMMON_500);
+            }
+
+            String accessToken = (String) body.get("access_token");
+            String refreshToken = (String) body.get("refresh_token"); // 최초 동의(prompt=consent) 시에만 반환됨
+
+            if (accessToken == null || accessToken.isBlank()) {
+                throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+            }
+
+            return new GoogleTokens(accessToken, refreshToken);
+
+        } catch (HttpClientErrorException e) {
+            log.warn("구글 인가 코드 교환 실패 (잘못되었거나 만료된 코드): {}", e.getResponseBodyAsString());
+            throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
+        } catch (Exception e) {
+            log.error("구글 인가 코드 교환 중 시스템 오류 발생", e);
+            throw new BusinessException(CommonErrorCode.COMMON_500);
+        }
+    }
+
     /**
      * DB에 저장된 구글 Refresh Token을 사용해 새로운 Access Token을 발급받습니다.
      */

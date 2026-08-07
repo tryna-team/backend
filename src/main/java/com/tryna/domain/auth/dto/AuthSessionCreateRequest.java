@@ -9,20 +9,19 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-@Schema(description = "A105 소셜 로그인 및 회원가입 요청 DTO")
+@Schema(description = "A105 소셜 로그인 및 회원가입 요청 DTO (인가 코드 방식)")
 public record AuthSessionCreateRequest(
 
         @Schema(description = "외부 연동/로그인 제공자", example = "KAKAO")
         @NotNull(message = "제공자(Provider)는 필수입니다.")
         Provider provider,
 
-        @Schema(description = "소셜 서버에서 발급받은 인증 토큰", example = "kakao-123456789")
-        @NotBlank(message = "OAuth 액세스 토큰은 필수입니다.")
-        String oauthAccessToken,
+        @Schema(description = "소셜 서버에서 발급받은 인가 코드 (Authorization Code)", example = "4/0AeaY...")
+        @NotBlank(message = "인가 코드(Authorization Code)는 필수입니다.")
+        String authorizationCode,
 
-        @Schema(description = "소셜 서버에서 발급받은 리프레시 토큰 (최초 로그인/권한 재동의 시에만 프론트가 전달)", example = "1//0eA...")
-        @Size(max = 512, message = "OAuth 리프레시 토큰은 512자를 초과할 수 없습니다.")
-        String oauthRefreshToken,
+        @Schema(description = "구글 콘솔에 등록된 승인된 리디렉션 URI (웹 환경 필수, 모바일/테스트 시 생략 가능)", example = "http://localhost:3000")
+        String redirectUri,
 
         @Schema(description = "신규 가입 시 동의한 약관 유형 목록 (기존 회원은 빈 배열 가능)", example = "[\"SERVICE\", \"PRIVACY\", \"LOCATION\"]")
         @NotNull(message = "약관 동의 목록은 Null일 수 없습니다.")
