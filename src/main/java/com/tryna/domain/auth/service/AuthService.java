@@ -95,14 +95,27 @@ public class AuthService {
     @Transactional
     public AuthSessionResponse socialLogin(AuthSessionCreateRequest request) {
 
-        // 1. 소셜 서버를 통해 토큰 검증 및 유저 프로필 획득
+        // 1. 인가 코드로 엑세스 토큰 및 리프레시 토큰 추출 (Google Code Flow 적용)
+        String accessToken;
+        String oauthRefreshToken = null;
+
+        if (request.provider() == Provider.GOOGLE) {
+            GoogleTokenProvider.GoogleTokens tokens = googleTokenProvider.exchangeCodeForTokens(request.authorizationCode(), request.redirectUri());
+            accessToken = tokens.accessToken();
+            oauthRefreshToken = tokens.refreshToken(); // 최초 동의 시에만 발급됨
+        } else {
+            // TODO: 카카오, 애플 등 타 플랫폼 인가 코드 흐름 지원 전까지는 임시로 코드를 토큰으로 취급
+            accessToken = request.authorizationCode();
+        }
+
+        // 2. 소셜 서버를 통해 유저 프로필 획득
         OAuthClient client = oAuthClientProvider.getClient(request.provider());
-        OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
+        OAuthClient.SocialUserProfile profile = client.getProfile(accessToken);
         String socialId = profile.socialId();
         String email = profile.email();
         String grantedScopes = profile.grantedScopes();
 
-        // 2. 이미 연동된 소셜 계정인지 확인
+        // 3. 이미 연동된 소셜 계정인지 확인
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
 
         Users user;
@@ -113,22 +126,18 @@ public class AuthService {
             Auths auth = existingAuth.get();
             user = auth.getUser();
 
-            validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-
-            if (request.oauthRefreshToken() != null || grantedScopes != null) {
-                auth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
+            if (oauthRefreshToken != null || grantedScopes != null) {
+                auth.updateOAuthInfo(oauthRefreshToken, grantedScopes);
             }
         } else {
             // [B. 신규 회원 가입]
-            validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-
             try {
                 // 독립된 트랜잭션(REQUIRES_NEW)으로 신규 가입 시도
                 user = socialSignupService.registerNewUser(
                         request.provider(),
                         socialId,
                         email,
-                        request.oauthRefreshToken(),
+                        oauthRefreshToken,
                         grantedScopes,
                         request.agreedTermTypes()
                 );
@@ -141,7 +150,7 @@ public class AuthService {
                             .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_409));
 
                     user = concurrentAuth.getUser();
-                    concurrentAuth.updateOAuthInfo(request.oauthRefreshToken(), grantedScopes);
+                    concurrentAuth.updateOAuthInfo(oauthRefreshToken, grantedScopes);
                     isNewUser = false;
 
                     // 동시성 충돌로 복구된 concurrentAuth를 existingAuth에 반영하여 이후 토큰 검증(hasValidToken) 정상 동작 보장
@@ -153,14 +162,14 @@ public class AuthService {
             }
         }
 
-        // 3. 토큰 발급 및 Redis 세션/FCM 저장
+        // 4. 토큰 발급 및 Redis 세션/FCM 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
-        // 3-1. DB 커밋 완료 후 비동기로 구글 캘린더 동기화 이벤트 발행 및 플래그 설정
+        // 4-1. DB 커밋 완료 후 비동기로 구글 캘린더 동기화 이벤트 발행 및 플래그 설정
         boolean syncScheduled = false;
         if (request.provider() == Provider.GOOGLE) {
             // 1) 요청 바디에 토큰이 있거나, 2) 기존 사용자(existingAuth)가 있고 그 안에 토큰이 있는지 확인
-            boolean hasValidToken = (request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank())
+            boolean hasValidToken = (oauthRefreshToken != null && !oauthRefreshToken.isBlank())
                     || (existingAuth.isPresent() && existingAuth.get().getOauthRefreshToken() != null && !existingAuth.get().getOauthRefreshToken().isBlank());
 
             if (hasValidToken) {
@@ -193,23 +202,35 @@ public class AuthService {
             throw new BusinessException(AuthErrorCode.A106_USER_CONVERSION_403);
         }
 
-        // 2. 소셜 프로필 조회
+        // 2. 인가 코드로 토큰 교환
+        String accessToken;
+        String oauthRefreshToken = null;
+
+        if (request.provider() == Provider.GOOGLE) {
+            GoogleTokenProvider.GoogleTokens tokens = googleTokenProvider.exchangeCodeForTokens(request.authorizationCode(), request.redirectUri());
+            accessToken = tokens.accessToken();
+            oauthRefreshToken = tokens.refreshToken();
+        } else {
+            accessToken = request.authorizationCode();
+        }
+
+        // 3. 소셜 프로필 조회
         OAuthClient client = oAuthClientProvider.getClient(request.provider());
-        OAuthClient.SocialUserProfile profile = client.getProfile(request.oauthAccessToken());
+        OAuthClient.SocialUserProfile profile = client.getProfile(accessToken);
         String socialId = profile.socialId();
         String email = profile.email();
         String grantedScopes = profile.grantedScopes();
 
-        // 3. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
+        // 4. 이미 가입된 소셜 계정인지 확인 (어뷰징 및 중복 방지)
         Optional<Auths> existingAuth = authsRepository.findByProviderAndSocialIdAndDeletedAtIsNull(request.provider(), socialId);
         if (existingAuth.isPresent()) {
             throw new BusinessException(AuthErrorCode.AUTH_409);
         }
 
-        // 4. 필수 약관 검증
+        // 5. 필수 약관 검증
         validateRequiredTerms(request.agreedTermTypes());
 
-        // 5. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장 (독립 트랜잭션 처리)
+        // 6. 비회원 -> 회원 승급 시 기본 라벨 존재 여부 확인 및 보장 (독립 트랜잭션 처리)
         try {
             defaultLabelService.createDefaultLabel(user);
         } catch (DataIntegrityViolationException e) {
@@ -222,13 +243,11 @@ public class AuthService {
             }
         }
 
-        // 6. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
+        // 7. 비회원 데이터 승급 및 guestId 초기화 (더티 체킹)
         user.upgradeToUser();
 
-        validateOAuthRefreshTokenOwnership(request.oauthRefreshToken(), socialId, request.provider());
-
-        // 7. Auths 정보 생성 및 약관 매핑 저장
-        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, request.oauthRefreshToken(), grantedScopes);
+        // 8. Auths 정보 생성 및 약관 매핑 저장
+        Auths newAuth = Auths.createAuth(user, request.provider(), socialId, email, oauthRefreshToken, grantedScopes);
         try {
             authsRepository.saveAndFlush(newAuth);
         } catch (DataIntegrityViolationException e) {
@@ -237,21 +256,21 @@ public class AuthService {
 
         saveUserAgreedTerms(user, request.agreedTermTypes());
 
-        // 8. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
-        // 8-1. 기존 세션에서 FCM 토큰을 안전하게 조회
+        // 9. 기존 GUEST 권한의 Redis 세션 및 FCM 토큰 파기
+        // 9-1. 기존 세션에서 FCM 토큰을 안전하게 조회
         Optional<String> existingFcmToken = sessionRedisRepository.findFcmToken(userId, request.deviceId());
 
-        // 8-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
+        // 9-2. 기존 토큰이 존재한다면 FCM Set에서 확실하게 제거
         existingFcmToken.ifPresent(token -> fcmTokenRedisRepository.remove(userId, token));
 
-        // 8-3. 안전하게 세션 Hash를 삭제
+        // 9-3. 안전하게 세션 Hash를 삭제
         sessionRedisRepository.delete(userId, request.deviceId());
 
-        // 9. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
+        // 10. 새로운 정식 회원 토큰(USER) 발급 및 세션 저장
         TokenPair tokenPair = issueSession(user.getUserId(), request.deviceId(), request.fcmToken(), user.getUserRole().name());
 
-        // 9-1. 토큰 저장 후 안전하게 외부 캘린더 동기화 트리거 (이벤트 발행)
-        if (request.provider() == Provider.GOOGLE && request.oauthRefreshToken() != null && !request.oauthRefreshToken().isBlank()) {
+        // 11. 토큰 저장 후 안전하게 외부 캘린더 동기화 트리거 (이벤트 발행)
+        if (request.provider() == Provider.GOOGLE && oauthRefreshToken != null && !oauthRefreshToken.isBlank()) {
             final Long syncUserId = user.getUserId();
             applicationEventPublisher.publishEvent(new com.tryna.domain.external.CalendarSyncRequestedEvent(syncUserId, null));
         }
@@ -483,37 +502,6 @@ public class AuthService {
                     .map(term -> UserAgreedTerms.create(user, term))
                     .toList();
             userAgreedTermsRepository.saveAll(agreedTermsList);
-        }
-    }
-
-    // 프론트엔드가 보낸 Refresh Token이 Access Token의 주인과 일치하는지 교차 검증
-    private void validateOAuthRefreshTokenOwnership(String refreshToken, String expectedSocialId, Provider provider) {
-        if (refreshToken == null || refreshToken.isBlank() || provider != Provider.GOOGLE) {
-            return;
-        }
-
-        try {
-            // 프론트가 준 Refresh Token을 이용해 구글에서 1회용 새 Access Token 발급
-            String tempAccessToken = googleTokenProvider.getFreshAccessToken(refreshToken);
-
-            // 주입된 OAuthClientProvider를 통해 클라이언트 구현체를 가져와 유저 정보 조회
-            OAuthClient client = oAuthClientProvider.getClient(provider);
-            OAuthClient.SocialUserProfile tempProfile = client.getProfile(tempAccessToken);
-
-            if (!expectedSocialId.equals(tempProfile.socialId())) {
-                throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
-            }
-        } catch (BusinessException e) {
-            // 구글 서버 설정 오류, 인프라 장애 등 500 에러는 401로 왜곡시키지 않고 그대로 전파
-            if (e.getErrorCode() == com.tryna.global.exception.CommonErrorCode.COMMON_500) {
-                throw e;
-            }
-            // 그 외 토큰 만료/유효하지 않음 등의 비즈니스 예외는 401로 처리
-            throw new BusinessException(AuthErrorCode.AUTH_401_INVALID_TOKEN);
-        } catch (Exception e) {
-            // 예상치 못한 시스템/네트워크 예외는 500 에러로 안전하게 처리
-            log.error("구글 리프레시 토큰 교차 검증 중 시스템 오류 발생: {}", e.getMessage(), e);
-            throw new BusinessException(com.tryna.global.exception.CommonErrorCode.COMMON_500);
         }
     }
 }
