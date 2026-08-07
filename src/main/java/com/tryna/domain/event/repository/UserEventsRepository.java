@@ -151,11 +151,14 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     );
 
     @Query("""
-            SELECT ue.event.eventId, ue.label.labelId
-              FROM UserEvents ue
-             WHERE ue.user.userId = :userId
-               AND ue.event.eventId IN :eventIds
-            """)
+        SELECT ue.event.eventId,
+               ue.label.labelId,
+               ue.label.name,
+               ue.label.color
+          FROM UserEvents ue
+         WHERE ue.user.userId = :userId
+           AND ue.event.eventId IN :eventIds
+        """)
     List<Object[]> findLabelIdsByUserIdAndEventIds(
             @Param("userId") Long userId,
             @Param("eventIds") Collection<Long> eventIds
