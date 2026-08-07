@@ -412,40 +412,35 @@ public class CalendarSyncService {
      * 동시성 충돌 발생 시에도 안전하게 외부 캘린더 라벨을 조회하거나 생성하는 독립 트랜잭션 메서드
      */
     private com.tryna.domain.label.entity.Labels getOrCreateExternalLabel(Users user, ExternalCalendars externalCal, Long userId) {
-        TransactionTemplate requiresNewTemplate = new TransactionTemplate(transactionManager);
-        requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal).orElseGet(() -> {
+            try {
+                Integer nextSort = labelsRepository
+                        .findTopByUser_UserIdOrderBySortOrderDesc(userId)
+                        .map(label -> label.getSortOrder() + 1)
+                        .orElse(1);
 
-        return requiresNewTemplate.execute(status -> {
-            return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal).orElseGet(() -> {
-                try {
-                    Integer nextSort = labelsRepository
-                            .findTopByUser_UserIdOrderBySortOrderDesc(userId)
-                            .map(label -> label.getSortOrder() + 1)
-                            .orElse(1);
+                String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
+                String normalized = calName.trim().toLowerCase(Locale.ROOT);
 
-                    String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
-                    String normalized = calName.trim().toLowerCase(Locale.ROOT);
+                com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
+                        user,
+                        externalCal,
+                        calName,
+                        normalized,
+                        LabelColor.BLUE,
+                        nextSort
+                );
 
-                    com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
-                            user,
-                            externalCal,
-                            calName,
-                            normalized,
-                            LabelColor.BLUE,
-                            nextSort
-                    );
-
-                    return labelsRepository.saveAndFlush(newLabel);
-                } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                    String rootMessage = e.getMostSpecificCause().getMessage();
-                    if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
-                        return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal)
-                                .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
-                    } else {
-                        throw e;
-                    }
+                return labelsRepository.saveAndFlush(newLabel);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                String rootMessage = e.getMostSpecificCause().getMessage();
+                if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
+                    return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal)
+                            .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
+                } else {
+                    throw e;
                 }
-            });
+            }
         });
     }
 }

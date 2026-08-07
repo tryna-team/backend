@@ -4,6 +4,7 @@ import com.tryna.domain.auth.dto.AuthTokenResponse;
 import com.tryna.domain.auth.entity.Auths;
 import com.tryna.domain.auth.repository.AuthsRepository;
 import com.tryna.domain.auth.service.AuthService;
+import com.tryna.domain.auth.service.GuestSignupService;
 import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
 import com.tryna.domain.user.dto.*;
@@ -36,6 +37,7 @@ public class UserService {
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
     private final DefaultLabelService defaultLabelService;
+    private final GuestSignupService guestSignupService;
 
     // --- [JPA Repositories] ---
     private final AuthsRepository authsRepository;
@@ -78,12 +80,10 @@ public class UserService {
             targetUser = existingGuest.get();
             isNewUser = false;
         } else {
-            targetUser = Users.createGuest(request.guestId());
-            userRepository.save(targetUser);
+            // 1. 독립된 트랜잭션으로 유저와 설정을 DB에 완벽히 커밋
+            targetUser = guestSignupService.registerNewGuest(request.guestId());
 
-            UserSettings settings = UserSettings.createDefault(targetUser);
-            userSettingsRepository.save(settings);
-
+            // 2. 유저가 DB에 확실히 존재하므로 외래키 제약조건 위반 없이 안전하게 라벨 생성
             try {
                 defaultLabelService.createDefaultLabel(targetUser);
             } catch (DataIntegrityViolationException e) {
