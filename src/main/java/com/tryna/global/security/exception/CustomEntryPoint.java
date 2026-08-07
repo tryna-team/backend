@@ -15,6 +15,8 @@ import java.io.IOException;
 
 public class CustomEntryPoint implements AuthenticationEntryPoint {
 
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
     @Override
     public void commence(
             HttpServletRequest request,
@@ -27,8 +29,6 @@ public class CustomEntryPoint implements AuthenticationEntryPoint {
 
         // 2. ErrorCode 타입이면 사용하고, 아니면 기본 AUTH_401 사용
         ErrorCode code = (exception instanceof ErrorCode) ? (ErrorCode) exception : AuthErrorCode.AUTH_401;
-
-        ObjectMapper objectMapper = new ObjectMapper();
 
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(code.getHttpStatus().value());

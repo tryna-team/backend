@@ -13,13 +13,14 @@ import java.io.IOException;
 
 public class CustomAccessDenied implements AccessDeniedHandler {
 
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
     @Override
     public void handle(
             HttpServletRequest request,
             HttpServletResponse response,
             AccessDeniedException accessDeniedException
     ) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
         ErrorCode code = CommonErrorCode.COMMON_403;
 
         response.setContentType("application/json;charset=UTF-8");

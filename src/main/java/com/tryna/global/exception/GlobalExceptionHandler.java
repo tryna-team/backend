@@ -28,29 +28,7 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException e,
             HttpServletRequest request
     ) {
-        String requestUri = request.getRequestURI();
-        String contextPath = request.getContextPath();
-
-        if (requestUri.startsWith(contextPath)) {
-            requestUri = requestUri.substring(contextPath.length());
-        }
-        
-        String requestMethod = request.getMethod();
-
-        if ("POST".equalsIgnoreCase(requestMethod)
-                && "/api/v1/labels".equals(requestUri)) {
-            return ResponseEntity
-                    .status(LabelErrorCode.B108_LABEL_CREATE_400.getHttpStatus())
-                    .body(ApiResponse.fail(
-                            LabelErrorCode.B108_LABEL_CREATE_400
-                    ));
-        }
-
-        return ResponseEntity
-                .status(CommonErrorCode.COMMON_400.getHttpStatus())
-                .body(ApiResponse.fail(
-                        CommonErrorCode.COMMON_400
-                ));
+        return handleValidationAndParsingException(request);
     }
 
     @ExceptionHandler({
@@ -61,14 +39,15 @@ public class GlobalExceptionHandler {
             MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleBadRequestException(Exception e, HttpServletRequest request) {
+        return handleValidationAndParsingException(request);
+    }
+
+    private ResponseEntity<ApiResponse<Void>> handleValidationAndParsingException(HttpServletRequest request) {
         String requestUri = request.getRequestURI();
         String contextPath = request.getContextPath();
-
-        // URI에서 Context Path 제거 보장
         if (requestUri.startsWith(contextPath)) {
             requestUri = requestUri.substring(contextPath.length());
         }
-
         String method = request.getMethod();
         ErrorCode errorCode = CommonErrorCode.COMMON_400;
 
@@ -85,6 +64,9 @@ public class GlobalExceptionHandler {
             errorCode = AuthErrorCode.A109_AUTH_LOGOUT_400;
         } else if ("/api/v1/guests".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
             errorCode = UserErrorCode.A102_GUEST_CREATE_400;
+        } else if ("/api/v1/labels".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
+            // 기존 라벨 에러 처리 병합
+            errorCode = LabelErrorCode.B108_LABEL_CREATE_400;
         }
 
         return ResponseEntity
