@@ -71,4 +71,9 @@ public class Users extends BaseEntity {
         this.userRole = UserRole.USER;
         this.guestId = null; // 다른 사람이 해당 기기로 다시 비회원을 시작할 수 있도록 비워줌
     }
+
+    // 회원 탈퇴 시 계정 Soft Delete 처리용 메서드
+    public void deleteSoft() {
+        this.deletedAt = LocalDateTime.now();
+    }
 }

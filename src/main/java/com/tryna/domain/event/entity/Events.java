@@ -45,8 +45,7 @@ import java.time.LocalDateTime;
                 )
         }
 )
-@Check(constraints = "deleted_at IS NOT NULL OR source_type <> 'EXTERNAL_CALENDAR' OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)")
-@SQLRestriction("deleted_at IS NULL")
+@Check(constraints = "deleted_at IS NOT NULL OR source_type <> 'EXTERNAL_CALENDAR' OR (external_calendar_id IS NOT NULL AND external_event_id IS NOT NULL)")@SQLRestriction("deleted_at IS NULL")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Events extends BaseEntity {
@@ -58,7 +57,7 @@ public class Events extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "external_calendar_id")
-    @OnDelete(action = OnDeleteAction.SET_NULL)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private ExternalCalendars externalCalendar;
 
     @Column(name = "source_text", columnDefinition = "TEXT")
@@ -178,4 +177,54 @@ public class Events extends BaseEntity {
         return event;
     }
 
+
+    // 동기화 및 자체 삭제를 위한 Soft Delete 메서드
+    public void deleteSoft() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    // B105 외부 캘린더 동기화 시 업데이트를 위한 메서드
+    public void updateExternalEvent(String title, String description, String location, Boolean isAllDay, LocalDate startDate, LocalDateTime startDatetime, LocalDate endDate, LocalDateTime endDatetime) {
+        this.title = title;
+        this.description = description;
+        this.location = location;
+        this.isAllDay = isAllDay;
+        this.startDate = startDate;
+        this.startDatetime = startDatetime;
+        this.endDate = endDate;
+        this.endDatetime = endDatetime;
+    }
+
+    public void truncateRecurrenceEndDate(LocalDateTime recurrenceEndDate) {
+        this.recurrenceEndDate = recurrenceEndDate;
+    }
+
+    public static Events createExternalEvent(
+            ExternalCalendars externalCalendar,
+            String externalEventId,
+            String title,
+            String description,
+            String location,
+            Boolean isAllDay,
+            LocalDate startDate,
+            LocalDateTime startDatetime,
+            LocalDate endDate,
+            LocalDateTime endDatetime
+    ) {
+        Events event = new Events();
+        event.externalCalendar = externalCalendar;
+        event.sourceType = SourceType.EXTERNAL_CALENDAR;
+        event.externalEventId = externalEventId;
+        event.provider = Provider.GOOGLE;
+        event.title = title;
+        event.description = description;
+        event.location = location;
+        event.isAllDay = isAllDay;
+        event.startDate = startDate;
+        event.startDatetime = startDatetime;
+        event.endDate = endDate;
+        event.endDatetime = endDatetime;
+        event.eventStatus = EventStatus.CONFIRMED;
+        return event;
+    }
 }

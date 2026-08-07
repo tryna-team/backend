@@ -2,6 +2,8 @@ package com.tryna.domain.event.controller.docs;
 
 import com.tryna.domain.event.dto.EventCreateRequest;
 import com.tryna.domain.event.dto.EventCreateResponse;
+import com.tryna.domain.event.dto.EventDeleteRequest;
+import com.tryna.domain.event.dto.EventDeleteResponse;
 import com.tryna.domain.event.dto.EventDetailResponse;
 import com.tryna.domain.event.dto.EventParseRequest;
 import com.tryna.domain.event.dto.EventParseResponse;
@@ -33,7 +35,14 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "C104 일정 최종 저장",
-            description = "사용자가 확인한 일정 정보와 선택한 준비/실행 항목을 최종 저장합니다.",
+            description = """
+                    사용자가 확인한 일정 정보, 라벨, 선택한 준비/실행 항목을 최종 저장합니다.
+                    
+                    labelId는 선택 입력값입니다.
+                    labelId가 전달되면 현재 사용자 소유의 삭제되지 않은 라벨인지 검증한 뒤 일정에 연결합니다.
+                    labelId가 null이거나 생략되면 현재 사용자의 기본 라벨(isDefault=true)을 일정에 연결합니다.
+                    응답의 labelId는 실제로 일정에 연결된 라벨 ID를 반환합니다.
+                    """,
             operationId = "createEvent"
     )
     @SecurityRequirement(name = "bearerAuth")
@@ -53,6 +62,28 @@ public interface EventControllerDocs {
 
             @Parameter(description = "조회할 일정 ID", required = true, example = "1")
             @PathVariable String eventId
+    );
+
+    @Operation(
+            summary = "C106 일정 삭제",
+            description = """
+                    저장된 Tryna 내부 일정을 삭제합니다.
+
+                    삭제 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
+                    외부 캘린더 원본 일정은 삭제하지 않습니다.
+                    cascade는 MVP에서 true만 허용하며, 일정에 연결된 준비/실행 항목도 함께 soft delete 처리합니다.
+                    일반 일정은 deleteScope=SINGLE로 요청합니다.
+                    반복 일정의 특정 회차만 삭제할 때는 deleteScope=SINGLE과 occurrenceDate를 함께 전달합니다.
+                    반복 일정의 선택 회차 및 이후 회차를 삭제할 때는 deleteScope=THIS_AND_FUTURE와 occurrenceDate를 함께 전달합니다.
+                    """,
+            operationId = "deleteEvent"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ApiResponse<EventDeleteResponse> deleteEvent(
+            Authentication authentication,
+            @Parameter(description = "삭제할 일정 ID", required = true, example = "1")
+            @PathVariable Long eventId,
+            @RequestBody EventDeleteRequest request
     );
 
     @Operation(

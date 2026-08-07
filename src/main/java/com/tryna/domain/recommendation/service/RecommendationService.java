@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 import java.util.List;
@@ -20,6 +23,18 @@ public class RecommendationService {
 
     private static final String RECOMMENDATION_PATH =
             "/api/v1/recommendations";
+    private static final String ERROR_RESPONSE_BODY_MISSING =
+            "D100_BRAIN_RESPONSE_BODY_MISSING";
+    private static final String ERROR_RESPONSE_MISMATCH =
+            "D100_BRAIN_RESPONSE_MISMATCH";
+    private static final String ERROR_CLIENT =
+            "D100_BRAIN_CLIENT_ERROR";
+    private static final String ERROR_SERVER =
+            "D100_BRAIN_SERVER_ERROR";
+    private static final String ERROR_CONNECTION =
+            "D100_BRAIN_CONNECTION_FAILED";
+    private static final String ERROR_INVALID_RESPONSE =
+            "D100_BRAIN_INVALID_RESPONSE";
 
     private final BrainClient brainClient;
 
@@ -43,7 +58,8 @@ public class RecommendationService {
             if (body == null) {
                 return fallbackResponse(
                         request,
-                        "추천 결과를 생성하지 못했습니다."
+                        ERROR_RESPONSE_BODY_MISSING,
+                        "추천 서버 응답 본문이 없습니다."
                 );
             }
 
@@ -62,14 +78,17 @@ public class RecommendationService {
 
                 return fallbackResponse(
                         request,
+                        ERROR_RESPONSE_MISMATCH,
                         "추천 요청과 응답 정보가 일치하지 않습니다."
                 );
             }
 
             return body;
-        } catch (RestClientException e) {
-            log.warn(
-                    "Brain recommendation API request failed. tempEventId={}, draftRevision={}, path={}",
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Brain recommendation client error. " +
+                            "status={}, tempEventId={}, draftRevision={}, path={}",
+                    e.getStatusCode(),
                     request.tempEventId(),
                     request.draftRevision(),
                     RECOMMENDATION_PATH,
@@ -78,14 +97,65 @@ public class RecommendationService {
 
             return fallbackResponse(
                     request,
-                    "추천 서버 호출에 실패했습니다."
+                    ERROR_CLIENT,
+                    "추천 항목을 불러오지 못했습니다."
+            );
+
+        } catch (HttpServerErrorException e) {
+            log.error(
+                    "Brain recommendation server error. " +
+                            "status={}, tempEventId={}, draftRevision={}, path={}",
+                    e.getStatusCode(),
+                    request.tempEventId(),
+                    request.draftRevision(),
+                    RECOMMENDATION_PATH,
+                    e
+            );
+
+            return fallbackResponse(
+                    request,
+                    ERROR_SERVER,
+                    "추천 항목을 불러오지 못했습니다."
+            );
+
+        } catch (ResourceAccessException e) {
+            log.warn(
+                    "Brain recommendation connection failed. " +
+                            "tempEventId={}, draftRevision={}, path={}",
+                    request.tempEventId(),
+                    request.draftRevision(),
+                    RECOMMENDATION_PATH,
+                    e
+            );
+
+            return fallbackResponse(
+                    request,
+                    ERROR_CONNECTION,
+                    "추천 서버에 연결하지 못했습니다."
+            );
+
+        } catch (RestClientException e) {
+            log.error(
+                    "Brain recommendation response handling failed. " +
+                            "tempEventId={}, draftRevision={}, path={}",
+                    request.tempEventId(),
+                    request.draftRevision(),
+                    RECOMMENDATION_PATH,
+                    e
+            );
+
+            return fallbackResponse(
+                    request,
+                    ERROR_INVALID_RESPONSE,
+                    "추천 서버 응답을 처리하지 못했습니다."
             );
         }
     }
 
-    // 파이프라인 호출 실패시 빈 결과 응답
+    // Brain 추천 처리 실패 시 ERROR 상태의 대체 응답 생성
     private RecommendationDTO.RecommendationResDTO fallbackResponse(
             RecommendationDTO.RecommendationReqDTO request,
+            String errorCode,
             String errorMessage
     ) {
         return RecommendationDTO.RecommendationResDTO.builder()
@@ -93,6 +163,7 @@ public class RecommendationService {
                 .draftRevision(request.draftRevision())
                 .suggestionStatus(SuggestionStatus.ERROR)
                 .suggestions(List.of())
+                .errorCode(errorCode)
                 .errors(List.of(errorMessage))
                 .build();
     }

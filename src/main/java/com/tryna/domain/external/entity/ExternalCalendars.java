@@ -56,4 +56,12 @@ public class ExternalCalendars extends BaseEntity {
     @ColumnDefault("true")
     private Boolean isSelected = true;
 
+    public static ExternalCalendars createDefault(ExternalCalendarConnections connection, String providerExternalCalendarId, String name) {
+        ExternalCalendars calendar = new ExternalCalendars();
+        calendar.connection = connection;
+        calendar.providerExternalCalendarId = providerExternalCalendarId;
+        calendar.name = name;
+        calendar.isSelected = true;
+        return calendar;
+    }
 }

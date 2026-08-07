@@ -58,7 +58,8 @@ public class Auths extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    public static Auths createAuth(Users user, Provider provider, String socialId, String email, String oauthRefreshToken, String grantedScopes) {        Auths auth = new Auths();
+    public static Auths createAuth(Users user, Provider provider, String socialId, String email, String oauthRefreshToken, String grantedScopes) {
+        Auths auth = new Auths();
         auth.user = user;
         auth.provider = provider;
         auth.socialId = socialId;
@@ -76,5 +77,13 @@ public class Auths extends BaseEntity {
         if (grantedScopes != null && !grantedScopes.isBlank()) {
             this.grantedScopes = grantedScopes;
         }
+    }
+
+    /**
+     * 유효하지 않거나 만료된 OAuth 인증 정보를 명시적으로 초기화(무효화)합니다.
+     */
+    public void clearOAuthInfo() {
+        this.oauthRefreshToken = null; // 필드명에 맞춰 조정 (예: refreshToken 또는 oauthRefreshToken)
+        this.grantedScopes = null;
     }
 }

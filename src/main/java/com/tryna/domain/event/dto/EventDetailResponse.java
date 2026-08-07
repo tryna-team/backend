@@ -24,6 +24,7 @@ public record EventDetailResponse(
         Integer recurrenceDayOfMonth,
         LocalDateTime recurrenceEndDate,
         String location,
+        Long labelId,
         String eventTypeCandidate,
         String eventType,
         SourceType sourceType,

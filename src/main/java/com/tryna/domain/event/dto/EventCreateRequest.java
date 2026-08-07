@@ -17,6 +17,7 @@ public record EventCreateRequest(
         RecurrenceType recurrenceType,
         Integer recurrenceInterval,
         String recurrenceEndDate,
+        Long labelId,
         ActionItemSaveRequest actionItems
 ) {
 }

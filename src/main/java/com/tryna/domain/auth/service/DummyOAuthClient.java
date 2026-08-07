@@ -22,7 +22,7 @@ public class DummyOAuthClient implements OAuthClient {
                 : "dummy_social_id_1234";
 
         return new SocialUserProfile(
-                "dummy_social_id_1234",
+                socialId,
                 "dummy_email@example.com",
                 null
         );

@@ -106,6 +106,7 @@ jobs:
 
           java -jar "$JAR" \
             --spring.profiles.active=local \
+            --spring.flyway.locations=classpath:db/migration \
             --oauth2.google.client-id=dummy-client-id-for-ci \
             >>"$LOG" 2>&1 &
           PID=$!

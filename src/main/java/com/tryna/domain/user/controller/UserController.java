@@ -9,8 +9,7 @@ import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,22 +22,19 @@ public class UserController implements UserControllerDocs {
 
     @GetMapping("/status")
     @Override
-    public ResponseEntity<ApiResponse<UserStatusResponse>> getUserStatus() {
-        Long userId = extractUserIdFromSecurityContext();
+    public ResponseEntity<ApiResponse<UserStatusResponse>> getUserStatus(
+            @AuthenticationPrincipal Long userId
+    ) {
         UserStatusResponse response = userService.getUserStatus(userId);
-
-        return ResponseEntity.ok(
-                ApiResponse.success("A101_USER_STATUS_200", "앱 진입 상태 조회에 성공했습니다.", response)
-        );
+        return ResponseEntity.ok(ApiResponse.success("A101_USER_STATUS_200", "앱 진입 상태 조회에 성공했습니다.", response));
     }
 
     @PostMapping("/conversions")
     @Override
     public ResponseEntity<ApiResponse<UserConversionResponse>> convertGuestToUser(
+            @AuthenticationPrincipal Long userId,
             @Valid @RequestBody AuthSessionCreateRequest request
     ) {
-        Long userId = extractUserIdFromSecurityContext();
-
         // 인증 필터에서 예외 처리가 되지만, 혹시 모를 NPE 방어
         if (userId == null) {
             throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
@@ -53,9 +49,9 @@ public class UserController implements UserControllerDocs {
 
     @GetMapping("/me")
     @Override
-    public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile() {
-        Long userId = extractUserIdFromSecurityContext();
-
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
+            @AuthenticationPrincipal Long userId
+    ) {
         // 비로그인 상태 접근 방어
         if (userId == null) {
             throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
@@ -70,15 +66,15 @@ public class UserController implements UserControllerDocs {
 
     @DeleteMapping("/me")
     @Override
-    public ResponseEntity<ApiResponse<Void>> withdraw() {
-        Long userId = extractUserIdFromSecurityContext();
-
+    public ResponseEntity<ApiResponse<Void>> withdraw(
+            @AuthenticationPrincipal Long userId
+    ) {
         // 비로그인 상태 접근 방어
         if (userId == null) {
             throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
         }
 
-        userService.withdraw(userId);
+        authService.withdraw(userId);
 
         // data: null 반환
         return ResponseEntity.ok(
@@ -89,9 +85,9 @@ public class UserController implements UserControllerDocs {
     @PatchMapping("/me/recommendation-feedback-setting")
     @Override
     public ResponseEntity<ApiResponse<FeedBackDataSettingResponse>> feedBackDataSetting(
-            @Valid @RequestBody FeedBackDataSettingRequest request) {
-        Long userId = extractUserIdFromSecurityContext();
-
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody FeedBackDataSettingRequest request
+    ) {
         if (userId == null) {
             throw new com.tryna.global.exception.BusinessException(com.tryna.global.exception.AuthErrorCode.AUTH_401);
         }
@@ -102,16 +98,5 @@ public class UserController implements UserControllerDocs {
                 ApiResponse.success("G105_FEEDBACK_DATA_SETTING_200",
                         "추천 피드백 데이터 사용 설정이 변경되었습니다.", response)
         );
-    }
-
-
-
-    // SecurityContext에서 안전하게 userId 추출 (비로그인이면 null 반환)
-    private Long extractUserIdFromSecurityContext() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof Long) {
-            return (Long) authentication.getPrincipal();
-        }
-        return null;
     }
 }
