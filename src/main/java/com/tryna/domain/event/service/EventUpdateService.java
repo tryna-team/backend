@@ -188,15 +188,18 @@ public class EventUpdateService {
             EventUpdateRequest request,
             LocalDate occurrenceDate
     ) {
+        validateSplitStartDate(request, occurrenceDate, event.getRecurrenceEndDate());
+
+        Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, false, null);
+        saveNewOwnerEvent(userEvent, modifiedEvent, label);
+        CopiedActionItemResult copiedActionItemResult =
+                copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
+
         recurringEventExceptionsRepository.insertDeletedOccurrenceIfAbsent(
                 event.getEventId(),
                 occurrenceDate,
                 RecurringEventExceptionType.DELETED.name()
         );
-
-        Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, false, null);
-        saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        int copiedActionItemCount = copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
 
         eventsRepository.flush();
 
@@ -204,9 +207,9 @@ public class EventUpdateService {
                 modifiedEvent.getEventId(),
                 UpdateScope.SINGLE,
                 modifiedEvent.getEventStatus(),
-                1,
-                copiedActionItemCount,
-                false,
+                2,
+                copiedActionItemResult.copiedActionItemCount(),
+                copiedActionItemResult.requiresActionItemReview(),
                 resolveLabelId(label),
                 modifiedEvent.getUpdatedAt()
         );
@@ -225,11 +228,13 @@ public class EventUpdateService {
         }
 
         LocalDateTime originalRecurrenceEndDate = event.getRecurrenceEndDate();
+        validateSplitStartDate(request, occurrenceDate, originalRecurrenceEndDate);
         event.truncateRecurrenceEndDate(occurrenceDate.minusDays(1).atTime(LocalTime.MAX));
 
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, true, originalRecurrenceEndDate);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        int copiedActionItemCount = copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
+        CopiedActionItemResult copiedActionItemResult =
+                copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
 
         eventsRepository.flush();
 
@@ -238,8 +243,8 @@ public class EventUpdateService {
                 UpdateScope.THIS_AND_FUTURE,
                 modifiedEvent.getEventStatus(),
                 2,
-                copiedActionItemCount,
-                false,
+                copiedActionItemResult.copiedActionItemCount(),
+                copiedActionItemResult.requiresActionItemReview(),
                 resolveLabelId(label),
                 modifiedEvent.getUpdatedAt()
         );
@@ -272,6 +277,10 @@ public class EventUpdateService {
                 isAllDay,
                 normalizeBlank(request.location()),
                 status
+        );
+        event.updateRecurrenceAnchors(
+                resolveUpdatedRecurrenceDayOfWeek(event, startDate),
+                resolveUpdatedRecurrenceDayOfMonth(event, startDate)
         );
 
         ActionItemAdjustmentResult adjustmentResult =
@@ -337,21 +346,26 @@ public class EventUpdateService {
         userEventsRepository.save(UserEvents.createOwner(sourceUserEvent.getUser(), event, label));
     }
 
-    private int copyLinkedActionItems(Events sourceEvent, Events targetEvent, LocalDate targetStartDate) {
+    private CopiedActionItemResult copyLinkedActionItems(Events sourceEvent, Events targetEvent, LocalDate targetStartDate) {
         List<ActionItems> sourceActionItems =
                 actionItemsRepository.findAllByParentEvent_EventIdAndDeletedAtIsNull(sourceEvent.getEventId());
 
         if (sourceActionItems.isEmpty()) {
-            return 0;
+            return new CopiedActionItemResult(0, false);
         }
 
         List<ActionItems> copiedActionItems = new ArrayList<>();
+        boolean requiresActionItemReview = false;
         for (ActionItems sourceActionItem : sourceActionItems) {
-            copiedActionItems.add(copyActionItem(sourceActionItem, targetEvent, targetStartDate));
+            ActionItems copiedActionItem = copyActionItem(sourceActionItem, targetEvent, targetStartDate);
+            copiedActionItems.add(copiedActionItem);
+            if (requiresCopiedActionItemReview(sourceActionItem, copiedActionItem, targetStartDate)) {
+                requiresActionItemReview = true;
+            }
         }
 
         actionItemsRepository.saveAll(copiedActionItems);
-        return copiedActionItems.size();
+        return new CopiedActionItemResult(copiedActionItems.size(), requiresActionItemReview);
     }
 
     private ActionItems copyActionItem(
@@ -381,6 +395,25 @@ public class EventUpdateService {
                 sourceActionItem.getCreatedBy(),
                 sourceActionItem.getSourceTemplateId()
         );
+    }
+
+    private boolean requiresCopiedActionItemReview(
+            ActionItems sourceActionItem,
+            ActionItems copiedActionItem,
+            LocalDate targetStartDate
+    ) {
+        if (sourceActionItem.getItemType() == ItemType.TIMED_ACTION
+                && sourceActionItem.getOffsetDays() != null
+                && targetStartDate != null) {
+            return false;
+        }
+
+        LocalDate displayDate = copiedActionItem.getDisplayDate();
+        if (displayDate == null) {
+            return false;
+        }
+
+        return targetStartDate == null || !displayDate.equals(targetStartDate);
     }
 
     private ActionItemAdjustmentResult adjustLinkedActionItems(
@@ -417,6 +450,25 @@ public class EventUpdateService {
             throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
         }
         return occurrenceDate;
+    }
+
+    private void validateSplitStartDate(
+            EventUpdateRequest request,
+            LocalDate occurrenceDate,
+            LocalDateTime recurrenceEndDate
+    ) {
+        LocalDate requestedStartDate = parseDate(request.startDate());
+        if (requestedStartDate == null) {
+            return;
+        }
+
+        if (requestedStartDate.isBefore(occurrenceDate)) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+
+        if (recurrenceEndDate != null && requestedStartDate.isAfter(recurrenceEndDate.toLocalDate())) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
     }
 
     private boolean isRecurringOccurrenceOn(Events event, LocalDate date) {
@@ -612,6 +664,12 @@ public class EventUpdateService {
 
     private record ActionItemAdjustmentResult(
             Integer adjustedActionItemCount,
+            Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record CopiedActionItemResult(
+            Integer copiedActionItemCount,
             Boolean requiresActionItemReview
     ) {
     }
