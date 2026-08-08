@@ -44,6 +44,12 @@ public enum ActionErrorCode implements ErrorCode {
             "일정을 찾을 수 없습니다."
     ),
 
+    F103_ACTION_ITEM_400(
+            HttpStatus.BAD_REQUEST,
+            "F103_ACTION_ITEM_400",
+            "반복 일정 회차 날짜가 올바르지 않습니다."
+    ),
+
     /**
      * F104: 캘린더 내 시간형 실행 항목 조회
      */

@@ -35,7 +35,7 @@ public class GoogleCalendarClient {
         String formattedTimeMax = timeMax.toInstant().toString();
 
         // 2. URL을 직접 짜깁기하지 않고, 스프링에 변수({timeMin})로 넘겨서 인코딩 처리
-        String uriTemplate = calendarApiUrl + "?timeMin={timeMin}&timeMax={timeMax}&singleEvents=true&orderBy=startTime";
+        String uriTemplate = calendarApiUrl + "?timeMin={timeMin}&timeMax={timeMax}&singleEvents=true&orderBy=startTime&showDeleted=true";
 
         try {
             // 스프링 RestTemplate이 uriTemplate의 {} 괄호 안에 순서대로 값을 넣으며 가장 안전하게 인코딩

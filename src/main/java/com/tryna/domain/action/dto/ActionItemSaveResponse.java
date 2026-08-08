@@ -62,6 +62,12 @@ public record ActionItemSaveResponse(
             Long parentEventId,
 
             @Schema(
+                    description = "반복 일정의 실제 회차 날짜",
+                    example = "2026-08-25"
+            )
+            LocalDate occurrenceDate,
+
+            @Schema(
                     description = "준비/실행 항목 제목",
                     example = "선물 준비하기"
             )
@@ -109,6 +115,7 @@ public record ActionItemSaveResponse(
             return new Item(
                     actionItem.getActionItemId(),
                     actionItem.getParentEvent().getEventId(),
+                    actionItem.getOccurrenceDate(),
                     actionItem.getTitle(),
                     actionItem.getItemType(),
                     actionItem.getDisplayDate(),

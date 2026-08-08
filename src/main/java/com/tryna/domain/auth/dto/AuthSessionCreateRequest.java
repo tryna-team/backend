@@ -12,7 +12,7 @@ import java.util.List;
 @Schema(description = "A105 소셜 로그인 및 회원가입 요청 DTO (인가 코드 방식)")
 public record AuthSessionCreateRequest(
 
-        @Schema(description = "외부 연동/로그인 제공자", example = "KAKAO")
+        @Schema(description = "외부 연동/로그인 제공자", example = "GOOGLE")
         @NotNull(message = "제공자(Provider)는 필수입니다.")
         Provider provider,
 
@@ -20,7 +20,7 @@ public record AuthSessionCreateRequest(
         @NotBlank(message = "인가 코드(Authorization Code)는 필수입니다.")
         String authorizationCode,
 
-        @Schema(description = "구글 콘솔에 등록된 승인된 리디렉션 URI (웹 환경 필수, 모바일/테스트 시 생략 가능)", example = "http://localhost:3000")
+        @Schema(description = "구글 콘솔에 등록된 승인된 리디렉션 URI (웹 환경 필수, 모바일/테스트 시 생략 가능)", example = "http://localhost:5173")
         String redirectUri,
 
         @Schema(description = "신규 가입 시 동의한 약관 유형 목록 (기존 회원은 빈 배열 가능)", example = "[\"SERVICE\", \"PRIVACY\", \"LOCATION\"]")

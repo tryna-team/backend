@@ -52,6 +52,9 @@ public record TimedActionItemResponse(
             @Schema(description = "연결된 일정 ID", example = "1")
             Long parentEventId,
 
+            @Schema(description = "반복 일정의 실제 회차 날짜", example = "2026-08-25")
+            LocalDate occurrenceDate,
+
             @Schema(description = "연결된 일정 제목", example = "엄마 생신")
             String parentEventTitle,
 
@@ -91,6 +94,7 @@ public record TimedActionItemResponse(
             return new Item(
                     actionItem.getActionItemId(),
                     actionItem.getParentEvent().getEventId(),
+                    actionItem.getOccurrenceDate(),
                     actionItem.getParentEvent().getTitle(),
                     actionItem.getTitle(),
                     actionItem.getItemType(),

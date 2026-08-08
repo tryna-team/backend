@@ -5,6 +5,7 @@ import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,6 +56,10 @@ public record EventActionItemResponse(
             @Schema(description = "항목 유형", example = "TIMED_ACTION")
             ItemType itemType,
 
+            @Schema(description = "반복 일정의 실제 회차 날짜. 반복 일정이 아니면 일정 시작 날짜", example = "2026-08-25")
+            @NotNull(message = "회차 날짜는 필수입니다.")
+            LocalDate occurrenceDate,
+
             @Schema(description = "캘린더 표시 날짜", example = "2026-07-15")
             LocalDate displayDate,
 
@@ -92,6 +97,7 @@ public record EventActionItemResponse(
                     actionItem.getActionItemId(),
                     actionItem.getTitle(),
                     actionItem.getItemType(),
+                    actionItem.getOccurrenceDate(),
                     actionItem.getDisplayDate(),
                     actionItem.getDisplayDatetime(),
                     actionItem.getOffsetDays(),

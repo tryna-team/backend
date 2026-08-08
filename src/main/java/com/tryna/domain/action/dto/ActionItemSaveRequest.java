@@ -43,6 +43,13 @@ public record ActionItemSaveRequest(
             @NotNull(message = "항목 유형은 필수입니다.")
             ItemType itemType,
 
+            @Schema(
+                    description = "반복 일정의 실제 회차 날짜. 반복 일정이 아니면 일정 시작 날짜",
+                    example = "2026-08-25"
+            )
+            @NotNull(message = "회차 날짜는 필수입니다.")
+            LocalDate occurrenceDate,
+
             @Schema(description = "캘린더 표시 날짜", example = "2026-07-03")
             LocalDate displayDate,
 

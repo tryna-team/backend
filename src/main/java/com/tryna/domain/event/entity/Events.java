@@ -245,6 +245,7 @@ public class Events extends BaseEntity {
     // 동기화 및 자체 삭제를 위한 Soft Delete 메서드
     public void deleteSoft() {
         this.deletedAt = LocalDateTime.now();
+        this.eventStatus = EventStatus.DELETED;
     }
 
     // B105 외부 캘린더 동기화 시 업데이트를 위한 메서드

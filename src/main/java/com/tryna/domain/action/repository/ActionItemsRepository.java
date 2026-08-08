@@ -82,6 +82,18 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
+     * 특정 반복 일정에서 기준 회차 이후의 준비/실행 항목을 조회합니다.
+     *
+     * THIS_AND_FUTURE 수정 시 기준 회차 이후의 항목을
+     * 새 반복 시리즈로 복사하기 위해 사용합니다.
+     */
+    List<ActionItems>
+    findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+            Long eventId,
+            LocalDate occurrenceDate
+    );
+
+    /**
      * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
      *
      * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
@@ -94,6 +106,23 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     List<ActionItems>
     findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
             Long eventId
+    );
+
+    /**
+     * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
+     *
+     * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
+     * 표시 날짜, 표시 일시, 항목 ID 순으로 정렬합니다.
+     *
+     * @param eventId 일정 ID
+     * @param occurrenceDate 반복 회차 소속 날짜
+     * @return 일정에 연결된 준비/실행 항목 목록
+     */
+    @EntityGraph(attributePaths = "parentEvent")
+    List<ActionItems>
+    findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+            Long eventId,
+            LocalDate occurrenceDate
     );
 
     List<ActionItems> findAllByParentEvent_EventIdAndDeletedAtIsNull(
@@ -174,5 +203,45 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("keyword") String keyword,
             @Param("eventStatuses") Collection<EventStatus> eventStatuses,
             @Param("excludedSourceType") SourceType excludedSourceType
+    );
+
+    /**
+     * 반복 일정의 특정 회차에 속한 준비/실행 항목을 soft delete 합니다.
+     *
+     * SINGLE 일정 수정 후 원본 회차의 항목이
+     * 중복 노출되지 않도록 처리하기 위해 사용합니다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE ActionItems a
+           SET a.deletedAt = :deletedAt
+         WHERE a.parentEvent.eventId = :eventId
+           AND a.occurrenceDate = :occurrenceDate
+           AND a.deletedAt IS NULL
+        """)
+    int softDeleteByParentEventIdAndOccurrenceDate(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    /**
+     * 반복 일정의 기준 회차 이후 준비/실행 항목을 모두 soft delete 합니다.
+     *
+     * THIS_AND_FUTURE 일정 수정 후 기존 시리즈의 이후 회차 항목이
+     * 새 시리즈의 복사 항목과 중복되지 않도록 처리합니다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE ActionItems a
+           SET a.deletedAt = :deletedAt
+         WHERE a.parentEvent.eventId = :eventId
+           AND a.occurrenceDate >= :occurrenceDate
+           AND a.deletedAt IS NULL
+        """)
+    int softDeleteByParentEventIdFromOccurrenceDate(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("deletedAt") LocalDateTime deletedAt
     );
 }
