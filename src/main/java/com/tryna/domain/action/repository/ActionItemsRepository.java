@@ -204,4 +204,44 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("eventStatuses") Collection<EventStatus> eventStatuses,
             @Param("excludedSourceType") SourceType excludedSourceType
     );
+
+    /**
+     * 반복 일정의 특정 회차에 속한 준비/실행 항목을 soft delete 합니다.
+     *
+     * SINGLE 일정 수정 후 원본 회차의 항목이
+     * 중복 노출되지 않도록 처리하기 위해 사용합니다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE ActionItems a
+           SET a.deletedAt = :deletedAt
+         WHERE a.parentEvent.eventId = :eventId
+           AND a.occurrenceDate = :occurrenceDate
+           AND a.deletedAt IS NULL
+        """)
+    int softDeleteByParentEventIdAndOccurrenceDate(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    /**
+     * 반복 일정의 기준 회차 이후 준비/실행 항목을 모두 soft delete 합니다.
+     *
+     * THIS_AND_FUTURE 일정 수정 후 기존 시리즈의 이후 회차 항목이
+     * 새 시리즈의 복사 항목과 중복되지 않도록 처리합니다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE ActionItems a
+           SET a.deletedAt = :deletedAt
+         WHERE a.parentEvent.eventId = :eventId
+           AND a.occurrenceDate >= :occurrenceDate
+           AND a.deletedAt IS NULL
+        """)
+    int softDeleteByParentEventIdFromOccurrenceDate(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
 }

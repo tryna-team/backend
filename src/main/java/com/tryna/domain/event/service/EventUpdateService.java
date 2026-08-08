@@ -396,6 +396,14 @@ public class EventUpdateService {
 
         actionItemsRepository.saveAll(copiedActionItems);
 
+        // 새 일정에 복사한 뒤 기존 반복 회차의 원본 action-item은
+        // F103/F104에서 중복 노출되지 않도록 soft delete
+        actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+                sourceEvent.getEventId(),
+                sourceOccurrenceDate,
+                LocalDateTime.now()
+        );
+
         return new CopiedActionItemResult(
                 copiedActionItems.size(),
                 requiresActionItemReview
@@ -421,35 +429,56 @@ public class EventUpdateService {
         List<ActionItems> copiedActionItems = new ArrayList<>();
         boolean requiresActionItemReview = false;
 
-        long occurrenceShiftDays = ChronoUnit.DAYS.between(
-                sourceOccurrenceDate,
-                targetSeriesStartDate
-        );
+        LocalDate currentSourceOccurrence = null;
+        LocalDate currentTargetOccurrence = targetSeriesStartDate;
 
         for (ActionItems sourceActionItem : sourceActionItems) {
-            LocalDate targetOccurrenceDate = sourceActionItem
-                    .getOccurrenceDate()
-                    .plusDays(occurrenceShiftDays);
 
-            ActionItems copiedActionItem = copyActionItem(
-                    sourceActionItem,
-                    targetEvent,
-                    targetOccurrenceDate,
-                    targetOccurrenceDate
-            );
+            // source occurrence가 다음 회차로 넘어갔다면
+            // target 반복 일정에서도 다음 회차를 계산합니다.
+            if (!Objects.equals(
+                    currentSourceOccurrence,
+                    sourceActionItem.getOccurrenceDate()
+            )) {
+                if (currentSourceOccurrence != null) {
+                    currentTargetOccurrence =
+                            nextOccurrence(
+                                    targetEvent,
+                                    currentTargetOccurrence
+                            );
+                }
+
+                currentSourceOccurrence =
+                        sourceActionItem.getOccurrenceDate();
+            }
+
+            ActionItems copiedActionItem =
+                    copyActionItem(
+                            sourceActionItem,
+                            targetEvent,
+                            currentTargetOccurrence,
+                            currentTargetOccurrence
+                    );
 
             copiedActionItems.add(copiedActionItem);
 
             if (requiresCopiedActionItemReview(
                     sourceActionItem,
                     copiedActionItem,
-                    targetOccurrenceDate
+                    currentTargetOccurrence
             )) {
                 requiresActionItemReview = true;
             }
         }
 
         actionItemsRepository.saveAll(copiedActionItems);
+
+        // 새 반복시리즈로 복사된 기준 회차 이후의 원본 action-item 제거
+        actionItemsRepository.softDeleteByParentEventIdFromOccurrenceDate(
+                sourceEvent.getEventId(),
+                sourceOccurrenceDate,
+                LocalDateTime.now()
+        );
 
         return new CopiedActionItemResult(
                 copiedActionItems.size(),
@@ -763,5 +792,37 @@ public class EventUpdateService {
             Integer copiedActionItemCount,
             Boolean requiresActionItemReview
     ) {
+    }
+
+    /**
+     * 반복 일정의 다음 회차 날짜를 계산합니다.
+     *
+     * 고정 일수 이동이 아니라 recurrenceType과 interval을 기준으로
+     * 다음 회차를 계산하여 월/연 반복에서도 순서를 유지합니다.
+     */
+    private LocalDate nextOccurrence(
+            Events event,
+            LocalDate currentOccurrence
+    ) {
+        int interval = event.getRecurrenceInterval() == null
+                ? 1
+                : event.getRecurrenceInterval();
+
+        return switch (event.getRecurrenceType()) {
+            case DAILY ->
+                    currentOccurrence.plusDays(interval);
+
+            case WEEKLY ->
+                    currentOccurrence.plusWeeks(interval);
+
+            case MONTHLY ->
+                    currentOccurrence.plusMonths(interval);
+
+            case YEARLY ->
+                    currentOccurrence.plusYears(interval);
+
+            case NONE, CUSTOM ->
+                    currentOccurrence;
+        };
     }
 }

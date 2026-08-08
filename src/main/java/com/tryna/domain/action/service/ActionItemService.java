@@ -6,6 +6,8 @@ import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.entity.Events;
+import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
+import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.recommendation.entity.mapping.RecommendationFeedbacks;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -107,7 +110,10 @@ public class ActionItemService {
         List<ActionItems> savedActionItems = List.of();
 
         if (request != null && request.items() != null && !request.items().isEmpty()) {
-            validateActionItems(request.items());
+            validateActionItems(
+                    request.items(),
+                    event
+            );
 
             // 6. 요청 항목을 ActionItems 엔티티로 변환
             List<ActionItems> actionItems = request.items().stream()
@@ -174,14 +180,26 @@ public class ActionItemService {
      * @param items 저장 요청 항목 목록
      */
     private void validateActionItems(
-            List<ActionItemSaveRequest.Item> items
+            List<ActionItemSaveRequest.Item> items,
+            Events event
     ) {
         boolean hasInvalidItem = items.stream()
                 .anyMatch(item -> {
+
+                    // 1. action-item이 어느 일정 회차에 속하는지 반드시 존재해야 함
                     if (item.occurrenceDate() == null) {
                         return true;
                     }
 
+                    // 2. occurrenceDate가 실제 부모 일정의 유효한 회차인지 확인
+                    if (!isValidOccurrenceDate(
+                            event,
+                            item.occurrenceDate()
+                    )) {
+                        return true;
+                    }
+
+                    // 3. 기존 itemType별 검증 유지
                     return switch (item.itemType()) {
                         case TIMED_ACTION ->
                                 item.displayDate() == null;
@@ -199,6 +217,179 @@ public class ActionItemService {
                     ActionErrorCode.E105_ACTION_ITEM_400_2
             );
         }
+    }
+
+    /**
+     * 준비/실행 항목의 occurrenceDate가
+     * 실제 부모 일정의 유효한 회차인지 확인합니다.
+     *
+     * 비반복 일정은 일정 시작 날짜와 동일한 occurrenceDate만 허용합니다.
+     * 반복 일정은 설정된 반복 규칙에 포함되는 날짜만 허용합니다.
+     *
+     * @param event 부모 일정
+     * @param occurrenceDate 준비/실행 항목이 속한 실제 일정 회차
+     * @return 유효한 일정 회차이면 true
+     */
+    private boolean isValidOccurrenceDate(
+            Events event,
+            LocalDate occurrenceDate
+    ) {
+        // 시작 날짜가 존재하지 않는 일정은 occurrenceDate를 확정할 수 없음
+        if (event.getStartDate() == null) {
+            return false;
+        }
+
+        // 비반복 일정은 부모 일정 날짜와 정확히 일치해야 함
+        if (!Boolean.TRUE.equals(event.getIsRecurring())) {
+            return event.getStartDate().equals(occurrenceDate);
+        }
+
+        return isRecurringOccurrenceOn(
+                event,
+                occurrenceDate
+        );
+    }
+
+    /**
+     * 반복 일정의 실제 발생 날짜인지 확인합니다.
+     */
+    private boolean isRecurringOccurrenceOn(
+            Events event,
+            LocalDate date
+    ) {
+        if (!Boolean.TRUE.equals(event.getIsRecurring())
+                || event.getStartDate() == null
+                || date.isBefore(event.getStartDate())
+                || event.getRecurrenceType() == null
+                || event.getRecurrenceType() == RecurrenceType.NONE
+                || event.getRecurrenceType() == RecurrenceType.CUSTOM) {
+            return false;
+        }
+
+        // 반복 종료일 이후의 회차는 허용하지 않음
+        if (event.getRecurrenceEndDate() != null
+                && date.isAfter(
+                event.getRecurrenceEndDate().toLocalDate()
+        )) {
+            return false;
+        }
+
+        int interval = event.getRecurrenceInterval() == null
+                ? 1
+                : event.getRecurrenceInterval();
+
+        if (interval < 1) {
+            return false;
+        }
+
+        return switch (event.getRecurrenceType()) {
+            case DAILY ->
+                    ChronoUnit.DAYS.between(
+                            event.getStartDate(),
+                            date
+                    ) % interval == 0;
+
+            case WEEKLY ->
+                    isWeeklyOccurrence(
+                            event,
+                            date,
+                            interval
+                    );
+
+            case MONTHLY ->
+                    isMonthlyOccurrence(
+                            event,
+                            date,
+                            interval
+                    );
+
+            case YEARLY ->
+                    isYearlyOccurrence(
+                            event,
+                            date,
+                            interval
+                    );
+
+            case NONE, CUSTOM -> false;
+        };
+    }
+
+    private boolean isWeeklyOccurrence(
+            Events event,
+            LocalDate date,
+            int interval
+    ) {
+        RecurrenceDayOfWeek expectedDayOfWeek =
+                event.getRecurrenceDayOfWeek();
+
+        if (expectedDayOfWeek == null
+                || expectedDayOfWeek == RecurrenceDayOfWeek.NONE) {
+            expectedDayOfWeek =
+                    toRecurrenceDayOfWeek(
+                            event.getStartDate()
+                    );
+        }
+
+        return expectedDayOfWeek
+                == toRecurrenceDayOfWeek(date)
+                && ChronoUnit.WEEKS.between(
+                event.getStartDate(),
+                date
+        ) % interval == 0;
+    }
+
+    private boolean isMonthlyOccurrence(
+            Events event,
+            LocalDate date,
+            int interval
+    ) {
+        Integer expectedDayOfMonth =
+                event.getRecurrenceDayOfMonth();
+
+        if (expectedDayOfMonth == null
+                || date.getDayOfMonth() != expectedDayOfMonth) {
+            return false;
+        }
+
+        long months = ChronoUnit.MONTHS.between(
+                event.getStartDate().withDayOfMonth(1),
+                date.withDayOfMonth(1)
+        );
+
+        return months % interval == 0;
+    }
+
+    private boolean isYearlyOccurrence(
+            Events event,
+            LocalDate date,
+            int interval
+    ) {
+        if (event.getRecurrenceDayOfMonth() == null
+                || date.getDayOfMonth()
+                != event.getRecurrenceDayOfMonth()
+                || date.getMonth()
+                != event.getStartDate().getMonth()) {
+            return false;
+        }
+
+        return ChronoUnit.YEARS.between(
+                event.getStartDate(),
+                date
+        ) % interval == 0;
+    }
+
+    private RecurrenceDayOfWeek toRecurrenceDayOfWeek(
+            LocalDate date
+    ) {
+        return switch (date.getDayOfWeek()) {
+            case MONDAY -> RecurrenceDayOfWeek.MON;
+            case TUESDAY -> RecurrenceDayOfWeek.TUE;
+            case WEDNESDAY -> RecurrenceDayOfWeek.WED;
+            case THURSDAY -> RecurrenceDayOfWeek.THU;
+            case FRIDAY -> RecurrenceDayOfWeek.FRI;
+            case SATURDAY -> RecurrenceDayOfWeek.SAT;
+            case SUNDAY -> RecurrenceDayOfWeek.SUN;
+        };
     }
 
     /**
