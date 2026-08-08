@@ -57,7 +57,6 @@ public class Events extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "external_calendar_id")
-    @OnDelete(action = OnDeleteAction.CASCADE)
     private ExternalCalendars externalCalendar;
 
     @Column(name = "source_text", columnDefinition = "TEXT")
@@ -177,6 +176,29 @@ public class Events extends BaseEntity {
         return event;
     }
 
+    public void updateInternalEvent(
+            String eventTitle,
+            String description,
+            LocalDate startDate,
+            LocalDateTime startDatetime,
+            LocalDate endDate,
+            LocalDateTime endDatetime,
+            Boolean isAllDay,
+            String location,
+            EventStatus eventStatus
+    ) {
+        this.sourceText = eventTitle;
+        this.title = eventTitle;
+        this.description = description;
+        this.startDate = startDate;
+        this.startDatetime = startDatetime;
+        this.endDate = endDate;
+        this.endDatetime = endDatetime;
+        this.isAllDay = isAllDay;
+        this.location = location;
+        this.sourceType = SourceType.USER_MANUAL_EDIT;
+        this.eventStatus = eventStatus;
+    }
 
     // 동기화 및 자체 삭제를 위한 Soft Delete 메서드
     public void deleteSoft() {
@@ -226,5 +248,20 @@ public class Events extends BaseEntity {
         event.endDatetime = endDatetime;
         event.eventStatus = EventStatus.CONFIRMED;
         return event;
+    }
+
+    // 삭제된 외부 일정을 재연동 시 되살리기 위한 메서드
+    public void resurrectExternalEvent(ExternalCalendars externalCalendar, String title, String description, String location, Boolean isAllDay, LocalDate startDate, LocalDateTime startDatetime, LocalDate endDate, LocalDateTime endDatetime) {
+        this.externalCalendar = externalCalendar;
+        this.title = title;
+        this.description = description;
+        this.location = location;
+        this.isAllDay = isAllDay;
+        this.startDate = startDate;
+        this.startDatetime = startDatetime;
+        this.endDate = endDate;
+        this.endDatetime = endDatetime;
+        this.eventStatus = EventStatus.CONFIRMED;
+        this.deletedAt = null;
     }
 }

@@ -19,8 +19,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
 
-    void deleteAllByEvent_ExternalCalendar(ExternalCalendars externalCalendar);
-
     @Query("""
             SELECT COUNT(ue.userEventId)
               FROM UserEvents ue
@@ -137,6 +135,11 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
     boolean existsOwnerByUserIdAndEventId(
             @Param("userId") Long userId,
             @Param("eventId") Long eventId
+    );
+
+    Optional<UserEvents> findByUser_UserIdAndEvent_EventId(
+            Long userId,
+            Long eventId
     );
 
     @Query("""

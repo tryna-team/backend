@@ -132,4 +132,23 @@ public class ActionItems extends BaseEntity {
         this.completedAt = null;
     }
 
+    public boolean adjustDisplayDateByParentStartDate(LocalDate parentStartDate) {
+        if (itemType != ItemType.TIMED_ACTION || offsetDays == null || parentStartDate == null) {
+            return false;
+        }
+
+        LocalDate adjustedDate = parentStartDate.plusDays(offsetDays);
+        this.displayDate = adjustedDate;
+
+        if (displayDatetime != null) {
+            this.displayDatetime = LocalDateTime.of(adjustedDate, displayDatetime.toLocalTime());
+        }
+
+        return true;
+    }
+
+    public boolean requiresReviewWhenParentDateMissing() {
+        return itemType == ItemType.TIMED_ACTION && offsetDays != null;
+    }
+
 }

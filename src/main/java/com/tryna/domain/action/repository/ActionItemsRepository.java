@@ -96,6 +96,10 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             Long eventId
     );
 
+    List<ActionItems> findAllByParentEvent_EventIdAndDeletedAtIsNull(
+            Long eventId
+    );
+
     /**
      * 현재 사용자의 일정에 연결된 항목 중
      * 선택한 날짜에 표시할 시간형 실행 항목을 조회합니다.

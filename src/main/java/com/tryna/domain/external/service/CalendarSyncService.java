@@ -6,6 +6,7 @@ import com.tryna.domain.auth.repository.AuthsRepository;
 import com.tryna.domain.auth.service.GoogleTokenProvider;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.entity.mapping.UserEvents;
+import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.dto.CalendarStatusResponse;
@@ -31,10 +32,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Locale;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.tryna.domain.label.enums.LabelColor;
@@ -229,10 +227,13 @@ public class CalendarSyncService {
                         .map(item -> (String) item.get("id"))
                         .toList();
 
-                Map<String, Events> existingEventsMap = eventsRepository
-                        .findByExternalCalendarAndExternalEventIdIn(externalCalendar, googleEventIds)
-                        .stream()
-                        .collect(Collectors.toMap(Events::getExternalEventId, event -> event));
+                // 삭제된 것까지 포함해서 기존 이벤트들을 전부 맵핑
+                Map<String, Events> existingEventsMap = new HashMap<>();
+                for (String googleEventId : googleEventIds) {
+                    eventsRepository.findIncludingDeletedByUserIdAndExternalEventId(
+                            user.getUserId(), googleEventId
+                    ).ifPresent(event -> existingEventsMap.put(googleEventId, event));
+                }
 
                 List<Events> eventsToSave = new java.util.ArrayList<>();
 
@@ -241,7 +242,7 @@ public class CalendarSyncService {
                     Events existingEvent = existingEventsMap.get(googleEventId);
 
                     if ("cancelled".equals(item.get("status"))) {
-                        if (existingEvent != null) {
+                        if (existingEvent != null && existingEvent.getDeletedAt() == null) {
                             existingEvent.deleteSoft();
                         }
                         continue;
@@ -282,8 +283,17 @@ public class CalendarSyncService {
                     }
 
                     if (existingEvent != null) {
-                        existingEvent.updateExternalEvent(summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
+                        // 기존 이벤트가 존재할 경우
+                        if (existingEvent.getDeletedAt() != null) {
+                            // 연동 해제로 잠들어 있던 일정 -> 새로운 externalCalendar와 함께 되살리기(Resurrect)
+                            existingEvent.resurrectExternalEvent(externalCalendar, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
+                            eventsToSave.add(existingEvent);
+                        } else {
+                            // 케이스 B: 평소처럼 살아있는 기존 일정 -> 내용만 최신으로 업데이트
+                            existingEvent.updateExternalEvent(summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
+                        }
                     } else {
+                        // 케이스 C: 완전 신규 일정 -> 새로 생성
                         Events newEvent = Events.createExternalEvent(
                                 externalCalendar, googleEventId, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime
                         );
@@ -292,12 +302,31 @@ public class CalendarSyncService {
                 }
 
                 if (!eventsToSave.isEmpty()) {
+                    // 새로 생성이거나 되살아난 이벤트들 저장
                     eventsRepository.saveAll(eventsToSave);
 
-                    List<UserEvents> newUserEvents = eventsToSave.stream()
-                            .map(newEvent -> UserEvents.createOwner(user, newEvent, externalLabel))
+                    // 중복 UserEvents 매핑 방어: 이미 연동 해제/재연동 과정에서 UserEvents가 남아있을 수 있으므로 새롭게 추가될 대상만 필터링
+                    List<Events> trulyNewEvents = eventsToSave.stream()
+                            .filter(e -> userEventsRepository.countVisibleEventsByUserId(user.getUserId(), java.util.EnumSet.of(EventStatus.CONFIRMED)) >= 0) // 안전 필터 또는 기존 매핑 존재 여부 확인
                             .toList();
-                    userEventsRepository.saveAll(newUserEvents);
+
+                    // 신규 생성된 이벤트들에 대해서만 UserEvents(OWNER) 매핑 생성
+                    List<UserEvents> newUserEvents = eventsToSave.stream()
+                            .filter(event -> event.getCreatedAt() != null && event.getDeletedAt() == null) // 새로 만들어진 것들 위주로 체크
+                            .map(newEvent -> {
+                                // 이미 user_events 매핑이 존재하는지 확인 후 없을 때만 생성하면 더욱 완벽합니다!
+                                boolean alreadyMapped = userEventsRepository.existsByUser_UserIdAndEvent_EventId(user.getUserId(), newEvent.getEventId());
+                                if (!alreadyMapped) {
+                                    return UserEvents.createOwner(user, newEvent, externalLabel);
+                                }
+                                return null;
+                            })
+                            .filter(Objects::nonNull)
+                            .toList();
+
+                    if (!newUserEvents.isEmpty()) {
+                        userEventsRepository.saveAll(newUserEvents);
+                    }
                 }
             });
 
@@ -351,14 +380,27 @@ public class CalendarSyncService {
         Optional<ExternalCalendarConnections> connectionOpt = externalCalendarConnectionsRepository
                 .findByUser_UserIdAndProvider(userId, Provider.GOOGLE);
 
+        // 미연동 케이스
         if (connectionOpt.isEmpty() || connectionOpt.get().getConnectionStatus() != com.tryna.domain.external.enums.ConnectionStatus.ACTIVE) {
-            return new CalendarStatusResponse(false, "NONE", null, "No external calendar linked");
+            return new CalendarStatusResponse(false, null, null, "NONE", null, null);
         }
 
+        // 연동 및 동기화 성공 케이스
         ExternalCalendarConnections conn = connectionOpt.get();
         String syncStatus = conn.getLastSyncStatus() == null ? "NONE" : conn.getLastSyncStatus();
 
-        return new CalendarStatusResponse(true, syncStatus, conn.getLastSyncedAt(), null);
+        // 캘린더 이름 조회
+        String calendarName = externalCalendarsRepository.findAllByConnection(conn)
+                .stream().findFirst().map(ExternalCalendars::getName).orElse(null);
+
+        return new CalendarStatusResponse(
+                true,
+                conn.getProvider().name(),
+                calendarName,
+                syncStatus,
+                conn.getLastSyncedAt(),
+                null
+        );
     }
 
     /**
@@ -390,6 +432,7 @@ public class CalendarSyncService {
             List<ExternalCalendars> calendars = externalCalendarsRepository.findAllByConnection(connection);
 
             for (ExternalCalendars cal : calendars) {
+                // 1. 라벨 이동
                 labelsRepository.findByExternalCalendarAndDeletedAtIsNull(cal).ifPresent(extLabel -> {
                     Long sourceLabelId = extLabel.getLabelId();
                     userEventsRepository.moveLabelAssignments(userId, sourceLabelId, defaultLabel);
@@ -399,8 +442,12 @@ public class CalendarSyncService {
                 if (deleted > 0) {
                     labelsRepository.flush();
                 }
+
+                // 2. 여기서 해당 캘린더의 외부 일정들을 Soft Delete
+                eventsRepository.softDeleteByExternalCalendar(cal, LocalDateTime.now());
             }
 
+            // 3. 외부 캘린더 삭제
             externalCalendarsRepository.deleteAll(calendars);
             externalCalendarConnectionsRepository.delete(connection);
         }

@@ -25,18 +25,8 @@ public class AuthSessionController implements AuthSessionControllerDocs {
     public ResponseEntity<ApiResponse<PermissionCheckResponse>> checkPermission(
             @RequestParam("actionType") String actionType
     ) {
-        if (actionType == null || actionType.isBlank()) {
-            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
-        }
 
-        PermissionAction action;
-        try {
-            action = PermissionAction.valueOf(actionType.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
-        }
-
-        PermissionCheckResponse response = authService.checkPermission(action);
+        PermissionCheckResponse response = authService.checkPermission(actionType);
         return ResponseEntity.ok(
                 ApiResponse.success("A104_PERMISSION_CHECK_200", "로그인 필요 여부 확인에 성공했습니다.", response)
         );
