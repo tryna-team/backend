@@ -91,20 +91,30 @@ public interface EventControllerDocs {
     @Operation(
             summary = "C107 일정 수정",
             description = """
-                    저장된 Tryna 내부 일반 일정을 수정합니다.
+                    저장된 Tryna 내부 일정을 수정합니다.
                     
-                    1차 구현 범위에서는 반복 일정 수정은 지원하지 않으며,
-                    updateScope=SINGLE인 일반 일정만 수정할 수 있습니다.
+                    일반 일정은 updateScope=SINGLE로 수정합니다.
+                    반복 일정의 특정 회차만 수정할 때는 updateScope=SINGLE과 occurrenceDate를 함께 전달합니다.
+                    이 경우 선택 회차는 기존 반복 일정에서 제외하고, 수정된 단일 일정으로 새로 저장합니다.
+                    반복 일정의 선택 회차 및 이후 회차를 수정할 때는 updateScope=THIS_AND_FUTURE와 occurrenceDate를 함께 전달합니다.
+                    이 경우 기존 반복 일정은 선택 회차 전날까지로 종료하고, 수정된 반복 일정을 새로 저장합니다.
                     
                     수정 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
                     외부 캘린더 원본 일정은 수정하지 않습니다.
                     
-                    labelId는 필수 입력값이며,
-                    현재 사용자 소유의 삭제되지 않은 라벨인지 검증한 뒤 일정에 연결합니다.
+                    labelId는 선택 입력값입니다.
+                    labelId가 전달되면 현재 사용자 소유의 삭제되지 않은 라벨인지 검증한 뒤 일정에 연결합니다.
+                    labelId가 null이거나 생략되면 기존 일정에 연결된 라벨을 유지합니다.
+                    응답의 labelId는 실제로 일정에 연결된 라벨 ID를 반환합니다.
                     
                     일정 날짜가 변경되면 offsetDays가 있는 시간형 실행 항목의 displayDate를
                     새 시작일 기준으로 함께 보정합니다.
                     날짜를 제거해 보정할 수 없는 경우 requiresActionItemReview=true를 반환합니다.
+                    반복 일정 회차를 새 일정으로 분리하는 경우 기존 준비/실행 항목은 새 일정에도 복사합니다.
+                    
+                    준비/실행 항목의 내용 수정, 삭제, 직접 추가, 완료 처리는 본 API가 담당하지 않습니다.
+                    수정 화면에서 준비/실행 항목 변경이 발생한 경우 Action Items API를 별도로 호출합니다.
+                    본 API는 일정 정보 수정에 따른 기존 시간형 실행 항목 날짜 보정까지만 처리합니다.
                     """,
             operationId = "updateEvent"
     )

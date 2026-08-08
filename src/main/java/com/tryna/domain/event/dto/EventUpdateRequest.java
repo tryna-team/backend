@@ -12,6 +12,7 @@ public record EventUpdateRequest(
         Boolean isAllDay,
         String location,
         Long labelId,
+        String occurrenceDate,
         UpdateScope updateScope
 ) {
 }
