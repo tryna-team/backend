@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class EventUpdateService {
 
     private static final int MAX_TITLE_LENGTH = 255;
+    private static final int MAX_LOCATION_LENGTH = 255;
     private static final Set<EventStatus> UPDATABLE_STATUSES = Set.of(
             EventStatus.CONFIRMED,
             EventStatus.NEEDS_CONFIRMATION
@@ -107,6 +108,7 @@ public class EventUpdateService {
 
         validateRequiredText(request.eventTitle());
         validateTitleLength(request.eventTitle());
+        validateLocationLength(request.location());
 
         if (request.labelId() == null || request.updateScope() != UpdateScope.SINGLE) {
             throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
@@ -114,17 +116,13 @@ public class EventUpdateService {
     }
 
     private Events findUpdatableEvent(Long userId, Long eventId) {
-        if (!eventsRepository.existsVisibleByEventIdAndEventStatusIn(eventId, UPDATABLE_STATUSES)) {
-            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_404);
-        }
-
         return eventsRepository.findVisibleEventAccessibleToUser(
                         userId,
                         eventId,
                         UPDATABLE_STATUSES,
                         ConnectionStatus.ACTIVE
                 )
-                .orElseThrow(() -> new BusinessException(CommonErrorCode.COMMON_403));
+                .orElseThrow(() -> new BusinessException(EventErrorCode.C107_EVENT_UPDATE_404));
     }
 
     private void validateInternalOwnerEvent(Long userId, Events event) {
@@ -182,6 +180,12 @@ public class EventUpdateService {
 
     private void validateTitleLength(String title) {
         if (title.trim().length() > MAX_TITLE_LENGTH) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+    }
+
+    private void validateLocationLength(String location) {
+        if (location != null && location.trim().length() > MAX_LOCATION_LENGTH) {
             throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
         }
     }
