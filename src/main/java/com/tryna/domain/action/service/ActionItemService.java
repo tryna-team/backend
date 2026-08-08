@@ -115,6 +115,7 @@ public class ActionItemService {
                             event,
                             item.title(),
                             item.itemType(),
+                            item.occurrenceDate(),
                             item.displayDate(),
                             item.displayTime(),
                             item.offsetDays(),
@@ -176,15 +177,21 @@ public class ActionItemService {
             List<ActionItemSaveRequest.Item> items
     ) {
         boolean hasInvalidItem = items.stream()
-                .anyMatch(item -> switch (item.itemType()) {
-                    case TIMED_ACTION ->
-                            item.displayDate() == null;
+                .anyMatch(item -> {
+                    if (item.occurrenceDate() == null) {
+                        return true;
+                    }
 
-                    case UNTIMED_PREP ->
-                            item.displayDate() != null
-                                    || item.displayTime() != null;
+                    return switch (item.itemType()) {
+                        case TIMED_ACTION ->
+                                item.displayDate() == null;
 
-                    case UNRESOLVED -> false;
+                        case UNTIMED_PREP ->
+                                item.displayDate() != null
+                                        || item.displayTime() != null;
+
+                        case UNRESOLVED -> false;
+                    };
                 });
 
         if (hasInvalidItem) {

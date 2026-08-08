@@ -55,6 +55,9 @@ public class ActionItems extends BaseEntity {
     @Column(name = "item_type", nullable = false, length = 50)
     private ItemType itemType;
 
+    @Column(name = "occurrence_date")
+    private LocalDate occurrenceDate;
+
     @Column(name = "display_date")
     private LocalDate displayDate;
 
@@ -92,6 +95,7 @@ public class ActionItems extends BaseEntity {
             Events parentEvent,
             String title,
             ItemType itemType,
+            LocalDate occurrenceDate,
             LocalDate displayDate,
             LocalDateTime displayDatetime,
             Integer offsetDays,
@@ -103,6 +107,7 @@ public class ActionItems extends BaseEntity {
         actionItem.parentEvent = parentEvent;
         actionItem.title = title;
         actionItem.itemType = itemType;
+        actionItem.occurrenceDate = occurrenceDate;
         actionItem.displayDate = displayDate;
         actionItem.displayDatetime = displayDatetime;
         actionItem.offsetDays = offsetDays;

@@ -82,6 +82,18 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
+     * 특정 반복 일정에서 기준 회차 이후의 준비/실행 항목을 조회합니다.
+     *
+     * THIS_AND_FUTURE 수정 시 기준 회차 이후의 항목을
+     * 새 반복 시리즈로 복사하기 위해 사용합니다.
+     */
+    List<ActionItems>
+    findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+            Long eventId,
+            LocalDate occurrenceDate
+    );
+
+    /**
      * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
      *
      * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
@@ -94,6 +106,23 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     List<ActionItems>
     findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
             Long eventId
+    );
+
+    /**
+     * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
+     *
+     * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
+     * 표시 날짜, 표시 일시, 항목 ID 순으로 정렬합니다.
+     *
+     * @param eventId 일정 ID
+     * @param occurrenceDate 반복 회차 소속 날짜
+     * @return 일정에 연결된 준비/실행 항목 목록
+     */
+    @EntityGraph(attributePaths = "parentEvent")
+    List<ActionItems>
+    findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+            Long eventId,
+            LocalDate occurrenceDate
     );
 
     List<ActionItems> findAllByParentEvent_EventIdAndDeletedAtIsNull(

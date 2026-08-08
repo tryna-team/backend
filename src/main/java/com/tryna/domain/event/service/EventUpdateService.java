@@ -193,7 +193,12 @@ public class EventUpdateService {
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, false, null);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
         CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
+                copyLinkedActionItems(
+                        event,
+                        modifiedEvent,
+                        occurrenceDate,
+                        modifiedEvent.getStartDate()
+                );
 
         recurringEventExceptionsRepository.insertDeletedOccurrenceIfAbsent(
                 event.getEventId(),
@@ -234,7 +239,12 @@ public class EventUpdateService {
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, true, originalRecurrenceEndDate);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
         CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItems(event, modifiedEvent, modifiedEvent.getStartDate());
+                copyLinkedActionItemsFromOccurrence(
+                        event,
+                        modifiedEvent,
+                        occurrenceDate,
+                        modifiedEvent.getStartDate()
+                );
 
         eventsRepository.flush();
 
@@ -346,9 +356,17 @@ public class EventUpdateService {
         userEventsRepository.save(UserEvents.createOwner(sourceUserEvent.getUser(), event, label));
     }
 
-    private CopiedActionItemResult copyLinkedActionItems(Events sourceEvent, Events targetEvent, LocalDate targetStartDate) {
-        List<ActionItems> sourceActionItems =
-                actionItemsRepository.findAllByParentEvent_EventIdAndDeletedAtIsNull(sourceEvent.getEventId());
+    private CopiedActionItemResult copyLinkedActionItems(
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetOccurrenceDate
+    ) {
+        List<ActionItems> sourceActionItems = actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                );
 
         if (sourceActionItems.isEmpty()) {
             return new CopiedActionItemResult(0, false);
@@ -356,23 +374,95 @@ public class EventUpdateService {
 
         List<ActionItems> copiedActionItems = new ArrayList<>();
         boolean requiresActionItemReview = false;
+
         for (ActionItems sourceActionItem : sourceActionItems) {
-            ActionItems copiedActionItem = copyActionItem(sourceActionItem, targetEvent, targetStartDate);
+            ActionItems copiedActionItem = copyActionItem(
+                    sourceActionItem,
+                    targetEvent,
+                    targetOccurrenceDate,
+                    targetOccurrenceDate
+            );
+
             copiedActionItems.add(copiedActionItem);
-            if (requiresCopiedActionItemReview(sourceActionItem, copiedActionItem, targetStartDate)) {
+
+            if (requiresCopiedActionItemReview(
+                    sourceActionItem,
+                    copiedActionItem,
+                    targetOccurrenceDate
+            )) {
                 requiresActionItemReview = true;
             }
         }
 
         actionItemsRepository.saveAll(copiedActionItems);
-        return new CopiedActionItemResult(copiedActionItems.size(), requiresActionItemReview);
+
+        return new CopiedActionItemResult(
+                copiedActionItems.size(),
+                requiresActionItemReview
+        );
+    }
+
+    private CopiedActionItemResult copyLinkedActionItemsFromOccurrence(
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetSeriesStartDate
+    ) {
+        List<ActionItems> sourceActionItems = actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                );
+
+        if (sourceActionItems.isEmpty()) {
+            return new CopiedActionItemResult(0, false);
+        }
+
+        List<ActionItems> copiedActionItems = new ArrayList<>();
+        boolean requiresActionItemReview = false;
+
+        long occurrenceShiftDays = ChronoUnit.DAYS.between(
+                sourceOccurrenceDate,
+                targetSeriesStartDate
+        );
+
+        for (ActionItems sourceActionItem : sourceActionItems) {
+            LocalDate targetOccurrenceDate = sourceActionItem
+                    .getOccurrenceDate()
+                    .plusDays(occurrenceShiftDays);
+
+            ActionItems copiedActionItem = copyActionItem(
+                    sourceActionItem,
+                    targetEvent,
+                    targetOccurrenceDate,
+                    targetOccurrenceDate
+            );
+
+            copiedActionItems.add(copiedActionItem);
+
+            if (requiresCopiedActionItemReview(
+                    sourceActionItem,
+                    copiedActionItem,
+                    targetOccurrenceDate
+            )) {
+                requiresActionItemReview = true;
+            }
+        }
+
+        actionItemsRepository.saveAll(copiedActionItems);
+
+        return new CopiedActionItemResult(
+                copiedActionItems.size(),
+                requiresActionItemReview
+        );
     }
 
     private ActionItems copyActionItem(
             ActionItems sourceActionItem,
             Events targetEvent,
+            LocalDate targetOccurrenceDate,
             LocalDate targetStartDate
-    ) {
+    ){
         LocalDate displayDate = sourceActionItem.getDisplayDate();
         LocalDateTime displayDatetime = sourceActionItem.getDisplayDatetime();
 
@@ -389,6 +479,7 @@ public class EventUpdateService {
                 targetEvent,
                 sourceActionItem.getTitle(),
                 sourceActionItem.getItemType(),
+                targetOccurrenceDate,
                 displayDate,
                 displayDatetime,
                 sourceActionItem.getOffsetDays(),
