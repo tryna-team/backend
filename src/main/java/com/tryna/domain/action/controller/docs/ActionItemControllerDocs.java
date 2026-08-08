@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.time.LocalDate;
+
 @Tag(name = "Action Items", description = "준비/실행 항목 관리 API")
 public interface ActionItemControllerDocs {
 
@@ -51,7 +53,6 @@ public interface ActionItemControllerDocs {
             description = "특정 일정의 상세 화면에 노출할 준비/실행 항목 목록을 조회합니다.",
             operationId = "getEventActionItems"
     )
-    @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
             @Parameter(
                     description = "준비/실행 항목을 조회할 일정 ID",
