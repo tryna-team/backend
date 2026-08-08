@@ -137,6 +137,11 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
             @Param("eventId") Long eventId
     );
 
+    Optional<UserEvents> findByUser_UserIdAndEvent_EventId(
+            Long userId,
+            Long eventId
+    );
+
     @Query("""
             SELECT ue.label.labelId
               FROM UserEvents ue

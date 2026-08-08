@@ -8,6 +8,8 @@ import com.tryna.domain.event.dto.EventDetailResponse;
 import com.tryna.domain.event.dto.EventParseRequest;
 import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.domain.event.dto.EventSearchResponse;
+import com.tryna.domain.event.dto.EventUpdateRequest;
+import com.tryna.domain.event.dto.EventUpdateResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -84,6 +86,34 @@ public interface EventControllerDocs {
             @Parameter(description = "삭제할 일정 ID", required = true, example = "1")
             @PathVariable Long eventId,
             @RequestBody EventDeleteRequest request
+    );
+
+    @Operation(
+            summary = "C107 일정 수정",
+            description = """
+                    저장된 Tryna 내부 일반 일정을 수정합니다.
+                    
+                    1차 구현 범위에서는 반복 일정 수정은 지원하지 않으며,
+                    updateScope=SINGLE인 일반 일정만 수정할 수 있습니다.
+                    
+                    수정 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
+                    외부 캘린더 원본 일정은 수정하지 않습니다.
+                    
+                    labelId는 필수 입력값이며,
+                    현재 사용자 소유의 삭제되지 않은 라벨인지 검증한 뒤 일정에 연결합니다.
+                    
+                    일정 날짜가 변경되면 offsetDays가 있는 시간형 실행 항목의 displayDate를
+                    새 시작일 기준으로 함께 보정합니다.
+                    날짜를 제거해 보정할 수 없는 경우 requiresActionItemReview=true를 반환합니다.
+                    """,
+            operationId = "updateEvent"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ApiResponse<EventUpdateResponse> updateEvent(
+            Authentication authentication,
+            @Parameter(description = "수정할 일정 ID", required = true, example = "1")
+            @PathVariable Long eventId,
+            @RequestBody EventUpdateRequest request
     );
 
     @Operation(
