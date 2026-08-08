@@ -154,6 +154,48 @@ public class Events extends BaseEntity {
             String eventType,
             EventStatus eventStatus
     ) {
+        return createInternalEvent(
+                sourceText,
+                title,
+                description,
+                startDate,
+                startDatetime,
+                endDate,
+                endDatetime,
+                isAllDay,
+                isRecurring,
+                recurrenceType,
+                recurrenceInterval,
+                recurrenceDayOfWeek,
+                recurrenceDayOfMonth,
+                recurrenceEndDate,
+                location,
+                eventType,
+                SourceType.USER_NATURAL_LANGUAGE,
+                eventStatus
+        );
+    }
+
+    public static Events createInternalEvent(
+            String sourceText,
+            String title,
+            String description,
+            LocalDate startDate,
+            LocalDateTime startDatetime,
+            LocalDate endDate,
+            LocalDateTime endDatetime,
+            Boolean isAllDay,
+            Boolean isRecurring,
+            RecurrenceType recurrenceType,
+            Integer recurrenceInterval,
+            RecurrenceDayOfWeek recurrenceDayOfWeek,
+            Integer recurrenceDayOfMonth,
+            LocalDateTime recurrenceEndDate,
+            String location,
+            String eventType,
+            SourceType sourceType,
+            EventStatus eventStatus
+    ) {
         Events event = new Events();
         event.sourceText = sourceText;
         event.title = title;
@@ -171,7 +213,7 @@ public class Events extends BaseEntity {
         event.recurrenceEndDate = recurrenceEndDate;
         event.location = location;
         event.eventType = eventType;
-        event.sourceType = SourceType.USER_NATURAL_LANGUAGE;
+        event.sourceType = sourceType;
         event.eventStatus = eventStatus;
         return event;
     }
