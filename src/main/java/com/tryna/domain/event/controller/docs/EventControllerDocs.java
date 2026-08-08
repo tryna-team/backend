@@ -105,6 +105,10 @@ public interface EventControllerDocs {
                     일정 날짜가 변경되면 offsetDays가 있는 시간형 실행 항목의 displayDate를
                     새 시작일 기준으로 함께 보정합니다.
                     날짜를 제거해 보정할 수 없는 경우 requiresActionItemReview=true를 반환합니다.
+                    
+                    준비/실행 항목의 내용 수정, 삭제, 직접 추가, 완료 처리는 본 API가 담당하지 않습니다.
+                    수정 화면에서 준비/실행 항목 변경이 발생한 경우 Action Items API를 별도로 호출합니다.
+                    본 API는 일정 정보 수정에 따른 기존 시간형 실행 항목 날짜 보정까지만 처리합니다.
                     """,
             operationId = "updateEvent"
     )
