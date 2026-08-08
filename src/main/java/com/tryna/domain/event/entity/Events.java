@@ -177,6 +177,29 @@ public class Events extends BaseEntity {
         return event;
     }
 
+    public void updateInternalEvent(
+            String eventTitle,
+            String description,
+            LocalDate startDate,
+            LocalDateTime startDatetime,
+            LocalDate endDate,
+            LocalDateTime endDatetime,
+            Boolean isAllDay,
+            String location,
+            EventStatus eventStatus
+    ) {
+        this.sourceText = eventTitle;
+        this.title = eventTitle;
+        this.description = description;
+        this.startDate = startDate;
+        this.startDatetime = startDatetime;
+        this.endDate = endDate;
+        this.endDatetime = endDatetime;
+        this.isAllDay = isAllDay;
+        this.location = location;
+        this.sourceType = SourceType.USER_MANUAL_EDIT;
+        this.eventStatus = eventStatus;
+    }
 
     // 동기화 및 자체 삭제를 위한 Soft Delete 메서드
     public void deleteSoft() {
