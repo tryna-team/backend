@@ -36,14 +36,12 @@ public class UserService {
     // --- [Services & Providers] ---
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
-    private final DefaultLabelService defaultLabelService;
     private final GuestSignupService guestSignupService;
 
     // --- [JPA Repositories] ---
     private final AuthsRepository authsRepository;
     private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
     private final UserRepository userRepository;
-    private final UserSettingsRepository userSettingsRepository;
 
     /**
      * A101: 앱 진입 상태 조회
@@ -80,21 +78,8 @@ public class UserService {
             targetUser = existingGuest.get();
             isNewUser = false;
         } else {
-            // 1. 독립된 트랜잭션으로 유저와 설정을 DB에 완벽히 커밋
+            // 독립된 트랜잭션으로 유저, 설정, 라벨을 DB에 완벽한 한 세트로 커밋
             targetUser = guestSignupService.registerNewGuest(request.guestId());
-
-            // 2. 유저가 DB에 확실히 존재하므로 외래키 제약조건 위반 없이 안전하게 라벨 생성
-            try {
-                defaultLabelService.createDefaultLabel(targetUser);
-            } catch (DataIntegrityViolationException e) {
-                String rootMessage = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : null;
-                if (rootMessage != null && rootMessage.contains("uq_labels_user_default_active")) {
-                    log.info("Guest default label creation collision absorbed - userId={}", targetUser.getUserId());
-                } else {
-                    throw e;
-                }
-            }
-
             isNewUser = true;
         }
 
