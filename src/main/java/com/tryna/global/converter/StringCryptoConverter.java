@@ -75,8 +75,7 @@ public class StringCryptoConverter implements AttributeConverter<String, String>
                 return decryptPayload(decoded, true);
             } catch (Exception e) {
                 // 2. 복호화 실패 시(Tag Mismatch 등), 레거시 방식(Direct 바이트 키)으로 폴백 시도
-                // 기존 데이터(V1)가 조회되면 이 분기를 타서 안전하게 데이터를 반환하며,
-                // 다음번 영속성 컨텍스트 플러시(Save) 시 최신 V2 포맷으로 덮어씌워집니다 (Lazy Migration).
+                // 기존 V1 데이터 조회를 안전하게 지원하기 위한 읽기 전용 폴백입니다.
                 return decryptPayload(decoded, false);
             }
         } catch (Exception e) {

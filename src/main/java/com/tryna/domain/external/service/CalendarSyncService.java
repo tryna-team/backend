@@ -129,6 +129,8 @@ public class CalendarSyncService {
         requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
         ExternalCalendars externalCalendar;
+        Long connectionId;
+
         try {
             ExternalCalendarConnections connection = externalCalendarConnectionsRepository
                     .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
@@ -146,6 +148,9 @@ public class CalendarSyncService {
                                     .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
                         }
                     });
+
+            // LazyInitializationException 방지를 위해 안전한 스코프에서 미리 ID를 뽑아둡니다.
+            connectionId = connection.getExternalCalendarConnectionId();
 
             externalCalendar = externalCalendarsRepository
                     .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
@@ -170,8 +175,6 @@ public class CalendarSyncService {
             markSyncFailed(userId);
             throw e;
         }
-
-        Long connectionId = externalCalendar.getConnection().getExternalCalendarConnectionId();
 
         // 4. 동기화 범위 결정 (연도 단위: 1월 1일 ~ 12월 31일)
         ZoneId seoulZone = ZoneId.of("Asia/Seoul");
