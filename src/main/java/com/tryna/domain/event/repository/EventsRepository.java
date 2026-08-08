@@ -15,11 +15,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
 
-    Optional<Events> findByExternalCalendarAndExternalEventId(com.tryna.domain.external.entity.ExternalCalendars externalCalendar, String externalEventId);
-
     List<Events> findByExternalCalendarAndExternalEventIdIn(ExternalCalendars externalCalendar, Collection<String> externalEventIds);
-
-    void deleteAllByExternalCalendar(ExternalCalendars externalCalendar);
 
     @Query("""
             SELECT COUNT(e) > 0
@@ -80,7 +76,7 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
     @Query("""
             UPDATE Events e
                SET e.deletedAt = :deletedAt
-                 , e.eventStatus = com.tryna.domain.event.enums.EventStatus.DELETED
+                 , e.eventStatus = :deletedStatus
              WHERE e.eventId IN (
                    SELECT ue.event.eventId
                      FROM UserEvents ue
@@ -91,6 +87,35 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
             """)
     int softDeleteByUserId(
             @Param("userId") Long userId,
+            @Param("deletedAt") LocalDateTime deletedAt,
+            @Param("deletedStatus") EventStatus deletedStatus
+    );
+
+    // 외부 캘린더 연동 해제 시 소속된 일정들을 Soft Delete
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Events e
+               SET e.deletedAt = :deletedAt
+                 , e.eventStatus = com.tryna.domain.event.enums.EventStatus.DELETED
+             WHERE e.externalCalendar = :externalCalendar
+               AND e.deletedAt IS NULL
+            """)
+    int softDeleteByExternalCalendar(
+            @Param("externalCalendar") ExternalCalendars externalCalendar,
             @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    // 재연동 시 캘린더 ID가 바뀌었거나 NULL이 되었어도, 유저 ID와 구글 이벤트 ID로 삭제된(DELETED) 기존 일정까지 포함하여 단건 조회 (Native Query로 @SQLRestriction 간섭 우회)
+    @Query(value = """
+            SELECT e.* 
+              FROM events e
+              JOIN user_events ue ON ue.event_id = e.event_id
+             WHERE ue.user_id = :userId
+               AND e.external_event_id = :externalEventId
+               AND e.source_type = 'EXTERNAL_CALENDAR'
+            """, nativeQuery = true)
+    Optional<Events> findIncludingDeletedByUserIdAndExternalEventId(
+            @Param("userId") Long userId,
+            @Param("externalEventId") String externalEventId
     );
 }
