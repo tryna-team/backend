@@ -123,68 +123,58 @@ public class CalendarSyncService {
             }
         }
 
-        // 3. 연동 정보 부트스트랩 수행 (동시성 충돌 방어 적용) - DB 트랜잭션 범위 1
+        // 3. 연동 정보 부트스트랩 수행 (동시성 충돌 방어 적용)
+        // JPA Rollback-only 오염 방지를 위해 저장(Insert) 시도만 별도의 미니 트랜잭션으로 격리합니다.
+        TransactionTemplate requiresNewTemplate = new TransactionTemplate(transactionManager);
+        requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
         ExternalCalendars externalCalendar;
+        Long connectionId;
+
         try {
-            externalCalendar = transactionTemplate.execute(status -> {
-                ExternalCalendarConnections connection = externalCalendarConnectionsRepository
-                        .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
-                        .orElseGet(() -> {
-                            try {
+            ExternalCalendarConnections connection = externalCalendarConnectionsRepository
+                    .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
+                    .orElseGet(() -> {
+                        try {
+                            return requiresNewTemplate.execute(status -> {
                                 ExternalCalendarConnections newConn = ExternalCalendarConnections.create(
                                         user, Provider.GOOGLE, auth.getOauthRefreshToken()
                                 );
                                 return externalCalendarConnectionsRepository.saveAndFlush(newConn);
-                            } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                                String rootMessage = e.getMostSpecificCause().getMessage();
-                                if (rootMessage != null && rootMessage.contains("uq_external_calendar_connections_user_provider")) {
-                                    return externalCalendarConnectionsRepository
-                                            .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
-                                            .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
-                                } else {
-                                    throw e;
-                                }
-                            }
-                        });
+                            });
+                        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                            return externalCalendarConnectionsRepository
+                                    .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
+                                    .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
+                        }
+                    });
 
-                ExternalCalendars externalCal = externalCalendarsRepository
-                        .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
-                        .orElseGet(() -> {
-                            try {
+            // LazyInitializationException 방지를 위해 안전한 스코프에서 미리 ID를 뽑아둡니다.
+            connectionId = connection.getExternalCalendarConnectionId();
+
+            externalCalendar = externalCalendarsRepository
+                    .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
+                    .orElseGet(() -> {
+                        try {
+                            return requiresNewTemplate.execute(status -> {
                                 ExternalCalendars newCal = ExternalCalendars.createDefault(
                                         connection, "primary", "Google 캘린더"
                                 );
                                 return externalCalendarsRepository.saveAndFlush(newCal);
-                            } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                                String rootMessage = e.getMostSpecificCause().getMessage();
-                                if (rootMessage != null && rootMessage.contains("uq_external_calendars_connection_calendar")) {
-                                    return externalCalendarsRepository
-                                            .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
-                                            .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
-                                } else {
-                                    throw e;
-                                }
-                            }
-                        });
+                            });
+                        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                            return externalCalendarsRepository
+                                    .findByConnection_User_UserIdAndConnection_ProviderAndProviderExternalCalendarId(userId, Provider.GOOGLE, "primary")
+                                    .orElseThrow(() -> new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500));
+                        }
+                    });
 
-                com.tryna.domain.label.entity.Labels externalLabel = getOrCreateExternalLabel(user, externalCal, userId);
+            com.tryna.domain.label.entity.Labels externalLabel = getOrCreateExternalLabel(requiresNewTemplate, user, externalCalendar, userId);
 
-                return externalCal;
-            });
         } catch (Exception e) {
             markSyncFailed(userId);
             throw e;
         }
-
-        Long connectionId = (externalCalendar != null && externalCalendar.getConnection() != null) ?
-                externalCalendar.getConnection().getExternalCalendarConnectionId() : null;
-
-        com.tryna.domain.label.entity.Labels externalLabel = labelsRepository
-                .findByExternalCalendarAndDeletedAtIsNull(externalCalendar)
-                .orElseThrow(() -> {
-                    markSyncFailed(userId);
-                    return new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
-                });
 
         // 4. 동기화 범위 결정 (연도 단위: 1월 1일 ~ 12월 31일)
         ZoneId seoulZone = ZoneId.of("Asia/Seoul");
@@ -244,6 +234,8 @@ public class CalendarSyncService {
                     if ("cancelled".equals(item.get("status"))) {
                         if (existingEvent != null && existingEvent.getDeletedAt() == null) {
                             existingEvent.deleteSoft();
+                            eventsRepository.saveAndFlush(existingEvent);
+                            log.info("구글 캘린더에서 삭제된 일정 감지, DB 반영 대기: {}", googleEventId);
                         }
                         continue;
                     }
@@ -317,7 +309,9 @@ public class CalendarSyncService {
                                 // 이미 user_events 매핑이 존재하는지 확인 후 없을 때만 생성하면 더욱 완벽합니다!
                                 boolean alreadyMapped = userEventsRepository.existsByUser_UserIdAndEvent_EventId(user.getUserId(), newEvent.getEventId());
                                 if (!alreadyMapped) {
-                                    return UserEvents.createOwner(user, newEvent, externalLabel);
+                                    // 주의: externalLabel을 안전하게 조회하여 매핑합니다.
+                                    com.tryna.domain.label.entity.Labels finalLabel = labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCalendar).orElse(null);
+                                    return UserEvents.createOwner(user, newEvent, finalLabel);
                                 }
                                 return null;
                             })
@@ -458,27 +452,30 @@ public class CalendarSyncService {
     /**
      * 동시성 충돌 발생 시에도 안전하게 외부 캘린더 라벨을 조회하거나 생성하는 독립 트랜잭션 메서드
      */
-    private com.tryna.domain.label.entity.Labels getOrCreateExternalLabel(Users user, ExternalCalendars externalCal, Long userId) {
+    private com.tryna.domain.label.entity.Labels getOrCreateExternalLabel(TransactionTemplate requiresNewTemplate, Users user, ExternalCalendars externalCal, Long userId) {
         return labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCal).orElseGet(() -> {
             try {
-                Integer nextSort = labelsRepository
-                        .findTopByUser_UserIdOrderBySortOrderDesc(userId)
-                        .map(label -> label.getSortOrder() + 1)
-                        .orElse(1);
+                // 저장(Insert) 시도만 REQUIRES_NEW 템플릿으로 감싸서 오염(Tainted) 방지
+                return requiresNewTemplate.execute(status -> {
+                    Integer nextSort = labelsRepository
+                            .findTopByUser_UserIdOrderBySortOrderDesc(userId)
+                            .map(label -> label.getSortOrder() + 1)
+                            .orElse(1);
 
-                String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
-                String normalized = calName.trim().toLowerCase(Locale.ROOT);
+                    String calName = externalCal.getName() != null ? externalCal.getName() : "외부 캘린더";
+                    String normalized = calName.trim().toLowerCase(Locale.ROOT);
 
-                com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
-                        user,
-                        externalCal,
-                        calName,
-                        normalized,
-                        LabelColor.BLUE,
-                        nextSort
-                );
+                    com.tryna.domain.label.entity.Labels newLabel = com.tryna.domain.label.entity.Labels.createExternalCalendarLabel(
+                            user,
+                            externalCal,
+                            calName,
+                            normalized,
+                            LabelColor.BLUE,
+                            nextSort
+                    );
 
-                return labelsRepository.saveAndFlush(newLabel);
+                    return labelsRepository.saveAndFlush(newLabel);
+                });
             } catch (org.springframework.dao.DataIntegrityViolationException e) {
                 String rootMessage = e.getMostSpecificCause().getMessage();
                 if (rootMessage != null && rootMessage.contains("uq_labels_external_calendar_active")) {
