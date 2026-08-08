@@ -8,6 +8,7 @@ import com.tryna.domain.auth.enums.Provider;
 import com.tryna.domain.auth.repository.AuthsRepository;
 import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
 import com.tryna.domain.auth.repository.SessionRedisRepository;
+import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.repository.EventAnalysisLogsRepository;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
@@ -79,13 +80,23 @@ public class AuthService {
      * A104: 로그인 필요 여부 확인
      */
     @Transactional(readOnly = true)
-    public PermissionCheckResponse checkPermission(PermissionAction actionType) {
-        if (actionType == null) {
+    public PermissionCheckResponse checkPermission(String actionType) {
+        // 1. 값 누락 검증
+        if (actionType == null || actionType.isBlank()) {
             throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
         }
+
+        // 2. Enum 변환 및 비즈니스 예외 처리
+        PermissionAction action;
+        try {
+            action = PermissionAction.valueOf(actionType.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(AuthErrorCode.A104_PERMISSION_CHECK_400);
+        }
+
         return new PermissionCheckResponse(
-                actionType.isLoginRequired(),
-                actionType.getGuideMessage()
+                action.isLoginRequired(),
+                action.getGuideMessage()
         );
     }
 
@@ -423,7 +434,7 @@ public class AuthService {
         // 2. 조인 의존성이 있는 쿼리를 무조건 먼저 실행 (순서 중요)
         eventAnalysisLogsRepository.deleteByUserId(userId);
         actionItemsRepository.softDeleteByUserId(userId, now);
-        eventsRepository.softDeleteByUserId(userId, now);
+        eventsRepository.softDeleteByUserId(userId, now, EventStatus.DELETED);
 
         // labels를 삭제하기 전에, labels를 참조하고 있는 user_events를 먼저 삭제
         userEventsRepository.deleteByUserId(userId);
