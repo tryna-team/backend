@@ -1,6 +1,8 @@
 package com.tryna.domain.event.service;
 
 import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.enums.ActionItemStatus;
+import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
@@ -28,6 +30,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -41,6 +44,7 @@ public class EventUpdateService {
 
     private static final int MAX_TITLE_LENGTH = 255;
     private static final int MAX_LOCATION_LENGTH = 255;
+    private static final int MAX_SOURCE_TEMPLATE_ID_LENGTH = 100;
     private static final Set<EventStatus> UPDATABLE_STATUSES = Set.of(
             EventStatus.CONFIRMED,
             EventStatus.NEEDS_CONFIRMATION
@@ -112,6 +116,8 @@ public class EventUpdateService {
 
         ActionItemAdjustmentResult adjustmentResult =
                 adjustLinkedActionItems(eventId, previousStartDate, startDate);
+        ActionItemSyncResult actionItemSyncResult =
+                syncActionItems(event, request.actionItems(), false);
 
         eventsRepository.flush();
 
@@ -119,8 +125,8 @@ public class EventUpdateService {
                 event,
                 UpdateScope.SINGLE,
                 1,
-                adjustmentResult.adjustedActionItemCount(),
-                adjustmentResult.requiresActionItemReview(),
+                adjustmentResult.adjustedActionItemCount() + actionItemSyncResult.changedActionItemCount(),
+                adjustmentResult.requiresActionItemReview() || actionItemSyncResult.requiresActionItemReview(),
                 label
         );
     }
@@ -201,13 +207,14 @@ public class EventUpdateService {
 
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, false, null);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItems(
-                        event,
-                        modifiedEvent,
-                        occurrenceDate,
-                        modifiedEvent.getStartDate()
-                );
+        ActionItemChangeResult actionItemChangeResult = resolveSplitActionItems(
+                event,
+                modifiedEvent,
+                occurrenceDate,
+                modifiedEvent.getStartDate(),
+                request.actionItems(),
+                false
+        );
 
         recurringEventExceptionsRepository.insertDeletedOccurrenceIfAbsent(
                 event.getEventId(),
@@ -221,8 +228,8 @@ public class EventUpdateService {
                 modifiedEvent,
                 UpdateScope.SINGLE,
                 2,
-                copiedActionItemResult.copiedActionItemCount(),
-                copiedActionItemResult.requiresActionItemReview(),
+                actionItemChangeResult.changedActionItemCount(),
+                actionItemChangeResult.requiresActionItemReview(),
                 label
         );
     }
@@ -245,13 +252,14 @@ public class EventUpdateService {
 
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, true, originalRecurrenceEndDate);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItemsFromOccurrence(
-                        event,
-                        modifiedEvent,
-                        occurrenceDate,
-                        modifiedEvent.getStartDate()
-                );
+        ActionItemChangeResult actionItemChangeResult = resolveSplitActionItems(
+                event,
+                modifiedEvent,
+                occurrenceDate,
+                modifiedEvent.getStartDate(),
+                request.actionItems(),
+                true
+        );
 
         eventsRepository.flush();
 
@@ -259,8 +267,8 @@ public class EventUpdateService {
                 modifiedEvent,
                 UpdateScope.THIS_AND_FUTURE,
                 2,
-                copiedActionItemResult.copiedActionItemCount(),
-                copiedActionItemResult.requiresActionItemReview(),
+                actionItemChangeResult.changedActionItemCount(),
+                actionItemChangeResult.requiresActionItemReview(),
                 label
         );
     }
@@ -306,6 +314,8 @@ public class EventUpdateService {
 
         ActionItemAdjustmentResult adjustmentResult =
                 adjustLinkedActionItems(event.getEventId(), previousStartDate, startDate);
+        ActionItemSyncResult actionItemSyncResult =
+                syncActionItems(event, request.actionItems(), false);
 
         eventsRepository.flush();
 
@@ -313,8 +323,8 @@ public class EventUpdateService {
                 event,
                 UpdateScope.THIS_AND_FUTURE,
                 1,
-                adjustmentResult.adjustedActionItemCount(),
-                adjustmentResult.requiresActionItemReview(),
+                adjustmentResult.adjustedActionItemCount() + actionItemSyncResult.changedActionItemCount(),
+                adjustmentResult.requiresActionItemReview() || actionItemSyncResult.requiresActionItemReview(),
                 label
         );
     }
@@ -366,6 +376,197 @@ public class EventUpdateService {
 
     private void saveNewOwnerEvent(UserEvents sourceUserEvent, Events event, Labels label) {
         userEventsRepository.save(UserEvents.createOwner(sourceUserEvent.getUser(), event, label));
+    }
+
+    private ActionItemChangeResult resolveSplitActionItems(
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetOccurrenceDate,
+            EventUpdateRequest.ActionItems actionItems,
+            boolean thisAndFuture
+    ) {
+        if (actionItems == null) {
+            CopiedActionItemResult copiedResult = thisAndFuture
+                    ? copyLinkedActionItemsFromOccurrence(
+                            sourceEvent,
+                            targetEvent,
+                            sourceOccurrenceDate,
+                            targetOccurrenceDate
+                    )
+                    : copyLinkedActionItems(
+                            sourceEvent,
+                            targetEvent,
+                            sourceOccurrenceDate,
+                            targetOccurrenceDate
+                    );
+            return new ActionItemChangeResult(
+                    copiedResult.copiedActionItemCount(),
+                    copiedResult.requiresActionItemReview()
+            );
+        }
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+        int deletedCount = thisAndFuture
+                ? actionItemsRepository.softDeleteByParentEventIdFromOccurrenceDate(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate,
+                        deletedAt
+                )
+                : actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate,
+                        deletedAt
+                );
+        ActionItemSyncResult syncResult = syncActionItems(targetEvent, actionItems, true);
+
+        return new ActionItemChangeResult(
+                deletedCount + syncResult.changedActionItemCount(),
+                syncResult.requiresActionItemReview()
+        );
+    }
+
+    private ActionItemSyncResult syncActionItems(
+            Events event,
+            EventUpdateRequest.ActionItems actionItems,
+            boolean createOnly
+    ) {
+        if (actionItems == null) {
+            return new ActionItemSyncResult(0, false);
+        }
+
+        List<EventUpdateRequest.Item> requestedItems =
+                actionItems.items() == null ? List.of() : actionItems.items();
+        List<Long> deletedActionItemIds =
+                actionItems.deletedActionItemIds() == null ? List.of() : actionItems.deletedActionItemIds();
+        validateActionItemSyncRequest(requestedItems, deletedActionItemIds);
+
+        int changedCount = 0;
+        if (!deletedActionItemIds.isEmpty() && !createOnly) {
+            validateOwnedDeletedActionItems(event.getEventId(), deletedActionItemIds);
+            changedCount += actionItemsRepository.softDeleteByParentEventIdAndActionItemIdIn(
+                    event.getEventId(),
+                    deletedActionItemIds,
+                    LocalDateTime.now()
+            );
+        }
+
+        Set<Long> deletedIds = new HashSet<>(deletedActionItemIds);
+        List<ActionItems> newActionItems = new ArrayList<>();
+
+        for (EventUpdateRequest.Item item : requestedItems) {
+            if (item.actionItemId() == null || createOnly) {
+                newActionItems.add(createActionItem(event, item));
+                continue;
+            }
+
+            if (deletedIds.contains(item.actionItemId())) {
+                continue;
+            }
+
+            ActionItems actionItem = findOwnedActionItem(event.getEventId(), item.actionItemId());
+            actionItem.updateDetails(
+                    item.title().trim(),
+                    item.itemType(),
+                    item.occurrenceDate(),
+                    item.displayDate(),
+                    item.displayTime(),
+                    item.offsetDays(),
+                    item.createdBy(),
+                    normalizeBlank(item.sourceTemplateId())
+            );
+            updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            changedCount++;
+        }
+
+        if (!newActionItems.isEmpty()) {
+            actionItemsRepository.saveAll(newActionItems);
+            changedCount += newActionItems.size();
+        }
+
+        return new ActionItemSyncResult(changedCount, false);
+    }
+
+    private void validateActionItemSyncRequest(
+            List<EventUpdateRequest.Item> items,
+            List<Long> deletedActionItemIds
+    ) {
+        Set<Long> seenDeletedIds = new HashSet<>();
+        for (Long deletedActionItemId : deletedActionItemIds) {
+            if (deletedActionItemId == null || !seenDeletedIds.add(deletedActionItemId)) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+        }
+
+        Set<Long> seenItemIds = new HashSet<>();
+        for (EventUpdateRequest.Item item : items) {
+            if (item == null
+                    || item.title() == null
+                    || item.title().isBlank()
+                    || item.title().length() > MAX_TITLE_LENGTH
+                    || item.itemType() == null
+                    || item.occurrenceDate() == null
+                    || item.createdBy() == null
+                    || isInvalidActionItemStatus(item.actionItemStatus())
+                    || isInvalidSourceTemplateId(item.sourceTemplateId())) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+
+            if (item.actionItemId() != null
+                    && (!seenItemIds.add(item.actionItemId()) || seenDeletedIds.contains(item.actionItemId()))) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+        }
+    }
+
+    private boolean isInvalidActionItemStatus(ActionItemStatus status) {
+        return status != null
+                && status != ActionItemStatus.PENDING
+                && status != ActionItemStatus.COMPLETED;
+    }
+
+    private boolean isInvalidSourceTemplateId(String sourceTemplateId) {
+        return sourceTemplateId != null && sourceTemplateId.length() > MAX_SOURCE_TEMPLATE_ID_LENGTH;
+    }
+
+    private void validateOwnedDeletedActionItems(Long eventId, List<Long> deletedActionItemIds) {
+        for (Long actionItemId : deletedActionItemIds) {
+            findOwnedActionItem(eventId, actionItemId);
+        }
+    }
+
+    private ActionItems findOwnedActionItem(Long eventId, Long actionItemId) {
+        ActionItems actionItem = actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(actionItemId)
+                .orElseThrow(() -> new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400));
+
+        if (!Objects.equals(actionItem.getParentEvent().getEventId(), eventId)) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+
+        return actionItem;
+    }
+
+    private ActionItems createActionItem(Events event, EventUpdateRequest.Item item) {
+        ActionItems actionItem = ActionItems.create(
+                event,
+                item.title().trim(),
+                item.itemType(),
+                item.occurrenceDate(),
+                item.displayDate(),
+                item.displayTime(),
+                item.offsetDays(),
+                item.createdBy(),
+                normalizeBlank(item.sourceTemplateId())
+        );
+        updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+
+        return actionItem;
+    }
+
+    private void updateActionItemStatusIfRequested(ActionItems actionItem, ActionItemStatus status) {
+        if (status != null) {
+            actionItem.updateStatus(status);
+        }
     }
 
     private CopiedActionItemResult copyLinkedActionItems(
@@ -1018,6 +1219,18 @@ public class EventUpdateService {
 
     private record CopiedActionItemResult(
             Integer copiedActionItemCount,
+            Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record ActionItemChangeResult(
+            Integer changedActionItemCount,
+            Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record ActionItemSyncResult(
+            Integer changedActionItemCount,
             Boolean requiresActionItemReview
     ) {
     }

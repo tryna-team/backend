@@ -173,7 +173,8 @@ class EventUpdateServiceTest {
                 recurrenceInterval,
                 recurrenceEndDate,
                 "2026-08-10",
-                UpdateScope.SINGLE
+                UpdateScope.SINGLE,
+                null
         );
     }
 

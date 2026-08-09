@@ -137,6 +137,26 @@ public class ActionItems extends BaseEntity {
         this.completedAt = null;
     }
 
+    public void updateDetails(
+            String title,
+            ItemType itemType,
+            LocalDate occurrenceDate,
+            LocalDate displayDate,
+            LocalDateTime displayDatetime,
+            Integer offsetDays,
+            CreatedBy createdBy,
+            String sourceTemplateId
+    ) {
+        this.title = title;
+        this.itemType = itemType;
+        this.occurrenceDate = occurrenceDate;
+        this.displayDate = displayDate;
+        this.displayDatetime = displayDatetime;
+        this.offsetDays = offsetDays;
+        this.createdBy = createdBy;
+        this.sourceTemplateId = sourceTemplateId;
+    }
+
     public boolean adjustDisplayDateByParentStartDate(LocalDate parentStartDate) {
         if (itemType != ItemType.TIMED_ACTION || offsetDays == null || parentStartDate == null) {
             return false;
