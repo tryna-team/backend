@@ -507,6 +507,7 @@ public class EventUpdateService {
                     || item.itemType() == null
                     || item.occurrenceDate() == null
                     || item.createdBy() == null
+                    || hasInvalidDisplayFields(item)
                     || isInvalidActionItemStatus(item.actionItemStatus())
                     || isInvalidSourceTemplateId(item.sourceTemplateId())) {
                 throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
@@ -517,6 +518,18 @@ public class EventUpdateService {
                 throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
             }
         }
+    }
+
+    private boolean hasInvalidDisplayFields(EventUpdateRequest.Item item) {
+        if (item.itemType() == ItemType.TIMED_ACTION) {
+            return item.displayDate() == null;
+        }
+
+        if (item.itemType() == ItemType.UNTIMED_PREP) {
+            return item.displayDate() != null || item.displayTime() != null;
+        }
+
+        return false;
     }
 
     private boolean isInvalidActionItemStatus(ActionItemStatus status) {
