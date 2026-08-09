@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.tryna.domain.action.enums.ActionItemStatus;
+import com.tryna.domain.action.enums.CreatedBy;
+import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
 import com.tryna.domain.event.entity.Events;
@@ -22,6 +25,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -130,6 +134,67 @@ class EventUpdateServiceTest {
         ));
     }
 
+    @Test
+    void actionItemPayloadAcceptsUpdateDeleteAndCreateShape() {
+        EventUpdateRequest.Item existingTimedAction = actionItemRequest(
+                1L,
+                "회의 장소 확인하기",
+                ItemType.TIMED_ACTION,
+                LocalDate.of(2026, 8, 10),
+                LocalDate.of(2026, 8, 9),
+                LocalDateTime.of(2026, 8, 9, 9, 0)
+        );
+        EventUpdateRequest.Item newUntimedPrep = actionItemRequest(
+                null,
+                "자료 준비하기",
+                ItemType.UNTIMED_PREP,
+                LocalDate.of(2026, 8, 10),
+                null,
+                null
+        );
+        EventUpdateRequest.ActionItems actionItems = new EventUpdateRequest.ActionItems(
+                List.of(existingTimedAction, newUntimedPrep),
+                List.of(2L)
+        );
+
+        assertThatCode(() -> invokeValidateActionItemSyncRequest(actionItems))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void timedActionRequiresDisplayDate() {
+        EventUpdateRequest.ActionItems actionItems = new EventUpdateRequest.ActionItems(
+                List.of(actionItemRequest(
+                        null,
+                        "회의 장소 확인하기",
+                        ItemType.TIMED_ACTION,
+                        LocalDate.of(2026, 8, 10),
+                        null,
+                        LocalDateTime.of(2026, 8, 9, 9, 0)
+                )),
+                List.of()
+        );
+
+        assertC107BadRequest(() -> invokeValidateActionItemSyncRequest(actionItems));
+    }
+
+    @Test
+    void untimedPrepRejectsDisplayDateAndDisplayTime() {
+        EventUpdateRequest.ActionItems actionItems = new EventUpdateRequest.ActionItems(
+                List.of(actionItemRequest(
+                        null,
+                        "자료 준비하기",
+                        ItemType.UNTIMED_PREP,
+                        LocalDate.of(2026, 8, 10),
+                        LocalDate.of(2026, 8, 9),
+                        LocalDateTime.of(2026, 8, 9, 9, 0)
+                )),
+                List.of()
+        );
+
+        assertC107BadRequest(() -> invokeValidateActionItemSyncRequest(actionItems));
+    }
+
     private Events weeklyRecurringEvent(int interval) {
         return Events.createInternalEvent(
                 "매주 회의",
@@ -173,7 +238,30 @@ class EventUpdateServiceTest {
                 recurrenceInterval,
                 recurrenceEndDate,
                 "2026-08-10",
-                UpdateScope.SINGLE
+                UpdateScope.SINGLE,
+                null
+        );
+    }
+
+    private EventUpdateRequest.Item actionItemRequest(
+            Long actionItemId,
+            String title,
+            ItemType itemType,
+            LocalDate occurrenceDate,
+            LocalDate displayDate,
+            LocalDateTime displayTime
+    ) {
+        return new EventUpdateRequest.Item(
+                actionItemId,
+                title,
+                itemType,
+                occurrenceDate,
+                displayDate,
+                displayTime,
+                -1,
+                ActionItemStatus.PENDING,
+                CreatedBy.USER,
+                null
         );
     }
 
@@ -186,6 +274,15 @@ class EventUpdateServiceTest {
                 new Class<?>[]{Events.class, EventUpdateRequest.class},
                 sourceEvent,
                 request
+        );
+    }
+
+    private void invokeValidateActionItemSyncRequest(EventUpdateRequest.ActionItems actionItems) {
+        invokePrivate(
+                "validateActionItemSyncRequest",
+                new Class<?>[]{List.class, List.class},
+                actionItems.items(),
+                actionItems.deletedActionItemIds()
         );
     }
 

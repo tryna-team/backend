@@ -48,6 +48,20 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             UPDATE ActionItems a
                SET a.deletedAt = :deletedAt
              WHERE a.parentEvent.eventId = :eventId
+               AND a.actionItemId IN :actionItemIds
+               AND a.deletedAt IS NULL
+            """)
+    int softDeleteByParentEventIdAndActionItemIdIn(
+            @Param("eventId") Long eventId,
+            @Param("actionItemIds") Collection<Long> actionItemIds,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ActionItems a
+               SET a.deletedAt = :deletedAt
+             WHERE a.parentEvent.eventId = :eventId
                AND a.displayDate = :displayDate
                AND a.deletedAt IS NULL
             """)
