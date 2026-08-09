@@ -103,6 +103,8 @@ public interface EventControllerDocs {
                     WEEKLY는 startDate의 요일을 기준으로, MONTHLY/YEARLY는 startDate의 일자를 기준으로 반복 기준을 계산합니다.
                     특정 회차만 수정하는 updateScope=SINGLE에서는 반복 규칙 변경을 허용하지 않습니다.
                     단, 프론트 상태 동기화 목적으로 기존 반복 규칙과 동일한 반복 필드가 함께 전달되는 것은 허용합니다.
+                    recurrenceType을 변경하면서 recurrenceInterval을 생략하면 기존 반복 간격을 재사용합니다.
+                    recurrenceEndDate가 startDate보다 이전이면 400 Bad Request로 거부합니다.
                     
                     수정 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
                     외부 캘린더 원본 일정은 수정하지 않습니다.

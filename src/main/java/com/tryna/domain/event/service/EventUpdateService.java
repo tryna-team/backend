@@ -677,22 +677,6 @@ public class EventUpdateService {
         };
     }
 
-    private RecurrenceDayOfWeek resolveUpdatedRecurrenceDayOfWeek(Events sourceEvent, LocalDate startDate) {
-        if (sourceEvent.getRecurrenceType() == RecurrenceType.WEEKLY && startDate != null) {
-            return toRecurrenceDayOfWeek(startDate);
-        }
-        return sourceEvent.getRecurrenceDayOfWeek();
-    }
-
-    private Integer resolveUpdatedRecurrenceDayOfMonth(Events sourceEvent, LocalDate startDate) {
-        if ((sourceEvent.getRecurrenceType() == RecurrenceType.MONTHLY
-                || sourceEvent.getRecurrenceType() == RecurrenceType.YEARLY)
-                && startDate != null) {
-            return startDate.getDayOfMonth();
-        }
-        return sourceEvent.getRecurrenceDayOfMonth();
-    }
-
     private void validateSingleOccurrenceRecurrenceRequest(Events sourceEvent, EventUpdateRequest request) {
         if (!hasRecurrenceRequest(request)) {
             return;
@@ -751,7 +735,8 @@ public class EventUpdateService {
             return nonRecurringRule();
         }
 
-        return preserveExistingRecurrenceRule(sourceEvent, startDate, fallbackRecurrenceEndDate);
+        LocalDate effectiveStartDate = startDate == null ? sourceEvent.getStartDate() : startDate;
+        return preserveExistingRecurrenceRule(sourceEvent, effectiveStartDate, fallbackRecurrenceEndDate);
     }
 
     private RecurrenceRule resolveRequestedRecurrenceRule(
