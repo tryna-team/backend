@@ -243,8 +243,7 @@ public class EventQueryService {
                 .findInternalEventsByTitleContaining(
                         userId,
                         keyword,
-                        VISIBLE_EVENT_STATUSES,
-                        SourceType.EXTERNAL_CALENDAR
+                        VISIBLE_EVENT_STATUSES
                 );
 
         // 4. 준비/실행 항목 제목이 검색어와 일치한 저장 항목 조회
@@ -252,8 +251,7 @@ public class EventQueryService {
                 .findSearchMatchesByUserIdAndKeyword(
                         userId,
                         keyword,
-                        VISIBLE_EVENT_STATUSES,
-                        SourceType.EXTERNAL_CALENDAR
+                        VISIBLE_EVENT_STATUSES
                 );
 
         // 5. 일정 제목이 직접 매칭된 일정 ID 구성
