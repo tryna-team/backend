@@ -462,11 +462,13 @@ public class ActionItemService {
      *
      * @param userId 현재 인증된 사용자 ID
      * @param eventId 조회할 일정 ID
+    *  @param occurrenceDateText 조회할 반복 일정 해당 날짜
      * @return 일정 상세 내 준비/실행 항목 목록
      */
     public EventActionItemResponse getEventActionItems(
             Long userId,
-            Long eventId
+            Long eventId,
+            String occurrenceDateText
     ) {
         // 1. 일정 존재 여부 확인
         if (!eventsRepository.existsById(eventId)) {
@@ -488,10 +490,21 @@ public class ActionItemService {
             );
         }
 
+        LocalDate occurrenceDate;
+
+        try {
+            occurrenceDate = LocalDate.parse(occurrenceDateText);
+        } catch (DateTimeParseException | NullPointerException e) {
+            throw new BusinessException(
+                    ActionErrorCode.F103_ACTION_ITEM_400
+            );
+        }
+
         // 3. 일정에 연결된 삭제되지 않은 준비/실행 항목 조회
         List<ActionItems> actionItems = actionItemsRepository
-                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
-                        eventId
+                .findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        eventId,
+                        occurrenceDate
                 );
 
         // 4. 조회 결과를 응답 DTO로 변환하여 반환

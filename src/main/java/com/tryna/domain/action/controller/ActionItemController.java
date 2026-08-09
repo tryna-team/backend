@@ -116,7 +116,8 @@ public class ActionItemController implements ActionItemControllerDocs {
     @GetMapping("/events/{eventId}/action-items")
     @Override
     public ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
-            @PathVariable("eventId") Long eventId
+            @PathVariable("eventId") Long eventId,
+            @RequestParam("occurrenceDate") String occurrenceDate
     ) {
         // 1. SecurityContext에서 현재 사용자 ID 추출
         Long userId = extractUserIdFromSecurityContext();
@@ -132,7 +133,8 @@ public class ActionItemController implements ActionItemControllerDocs {
         EventActionItemResponse response =
                 actionItemService.getEventActionItems(
                         userId,
-                        eventId
+                        eventId,
+                        occurrenceDate
                 );
 
         // 4. 공통 응답 형식으로 반환

@@ -50,7 +50,7 @@ public interface ActionItemControllerDocs {
 
     @Operation(
             summary = "F103 일정 상세 내 준비/실행 항목 조회",
-            description = "특정 일정의 상세 화면에 노출할 준비/실행 항목 목록을 조회합니다.",
+            description = "특정 일정의 선택한 회차에 연결된 준비/실행 항목 목록을 조회합니다.",
             operationId = "getEventActionItems"
     )
     ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
@@ -58,7 +58,14 @@ public interface ActionItemControllerDocs {
                     description = "준비/실행 항목을 조회할 일정 ID",
                     required = true
             )
-            @PathVariable("eventId") Long eventId
+            @PathVariable("eventId") Long eventId,
+
+            @Parameter(
+                    description = "조회할 반복 일정 회차 날짜(yyyy-MM-dd)",
+                    required = true,
+                    example = "2026-08-16"
+            )
+            @RequestParam("occurrenceDate") String occurrenceDate
     );
 
     @Operation(
