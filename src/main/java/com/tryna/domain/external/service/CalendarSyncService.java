@@ -470,7 +470,7 @@ public class CalendarSyncService {
                             externalCal,
                             calName,
                             normalized,
-                            LabelColor.BLUE,
+                            LabelColor.GREEN,
                             nextSort
                     );
 
