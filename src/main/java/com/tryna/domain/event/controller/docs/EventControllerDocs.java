@@ -98,6 +98,13 @@ public interface EventControllerDocs {
                     이 경우 선택 회차는 기존 반복 일정에서 제외하고, 수정된 단일 일정으로 새로 저장합니다.
                     반복 일정의 선택 회차 및 이후 회차를 수정할 때는 updateScope=THIS_AND_FUTURE와 occurrenceDate를 함께 전달합니다.
                     이 경우 기존 반복 일정은 선택 회차 전날까지로 종료하고, 수정된 반복 일정을 새로 저장합니다.
+                    반복 유형 변경은 일반 일정 또는 updateScope=THIS_AND_FUTURE에서 처리합니다.
+                    recurrenceType은 DAILY, WEEKLY, MONTHLY, YEARLY, NONE을 사용할 수 있으며,
+                    WEEKLY는 startDate의 요일을 기준으로, MONTHLY/YEARLY는 startDate의 일자를 기준으로 반복 기준을 계산합니다.
+                    특정 회차만 수정하는 updateScope=SINGLE에서는 반복 규칙 변경을 허용하지 않습니다.
+                    단, 프론트 상태 동기화 목적으로 기존 반복 규칙과 동일한 반복 필드가 함께 전달되는 것은 허용합니다.
+                    recurrenceType을 변경하면서 recurrenceInterval을 생략하면 기존 반복 간격을 재사용합니다.
+                    recurrenceEndDate가 startDate보다 이전이면 400 Bad Request로 거부합니다.
                     
                     수정 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
                     외부 캘린더 원본 일정은 수정하지 않습니다.
