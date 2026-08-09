@@ -272,6 +272,22 @@ public class Events extends BaseEntity {
         this.recurrenceDayOfMonth = recurrenceDayOfMonth;
     }
 
+    public void updateRecurrenceRule(
+            Boolean isRecurring,
+            RecurrenceType recurrenceType,
+            Integer recurrenceInterval,
+            RecurrenceDayOfWeek recurrenceDayOfWeek,
+            Integer recurrenceDayOfMonth,
+            LocalDateTime recurrenceEndDate
+    ) {
+        this.isRecurring = isRecurring;
+        this.recurrenceType = recurrenceType;
+        this.recurrenceInterval = recurrenceInterval;
+        this.recurrenceDayOfWeek = recurrenceDayOfWeek;
+        this.recurrenceDayOfMonth = recurrenceDayOfMonth;
+        this.recurrenceEndDate = recurrenceEndDate;
+    }
+
     public static Events createExternalEvent(
             ExternalCalendars externalCalendar,
             String externalEventId,
