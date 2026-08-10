@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,13 +27,13 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "C103 일정 생성 미리보기",
-            description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다.",
+            description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다. draftRevision은 프론트 디바운싱 요청 순서를 구분하기 위한 값이며, 요청값을 응답에 그대로 반환합니다. tempEventId는 저장 전 일정 작성 흐름을 식별하는 임시 ID이며, 최초 요청에서는 생략하고 이후 같은 작성 흐름에서는 기존 값을 전달합니다.",
             operationId = "parseEvent"
     )
     @SecurityRequirement(name = "bearerAuth")
     ApiResponse<EventParseResponse> parseEvent(
             Authentication authentication,
-            @RequestBody EventParseRequest request
+            @Valid @RequestBody EventParseRequest request
     );
 
     @Operation(
@@ -98,6 +99,13 @@ public interface EventControllerDocs {
                     이 경우 선택 회차는 기존 반복 일정에서 제외하고, 수정된 단일 일정으로 새로 저장합니다.
                     반복 일정의 선택 회차 및 이후 회차를 수정할 때는 updateScope=THIS_AND_FUTURE와 occurrenceDate를 함께 전달합니다.
                     이 경우 기존 반복 일정은 선택 회차 전날까지로 종료하고, 수정된 반복 일정을 새로 저장합니다.
+                    반복 유형 변경은 일반 일정 또는 updateScope=THIS_AND_FUTURE에서 처리합니다.
+                    recurrenceType은 DAILY, WEEKLY, MONTHLY, YEARLY, NONE을 사용할 수 있으며,
+                    WEEKLY는 startDate의 요일을 기준으로, MONTHLY/YEARLY는 startDate의 일자를 기준으로 반복 기준을 계산합니다.
+                    특정 회차만 수정하는 updateScope=SINGLE에서는 반복 규칙 변경을 허용하지 않습니다.
+                    단, 프론트 상태 동기화 목적으로 기존 반복 규칙과 동일한 반복 필드가 함께 전달되는 것은 허용합니다.
+                    recurrenceType을 변경하면서 recurrenceInterval을 생략하면 기존 반복 간격을 재사용합니다.
+                    recurrenceEndDate가 startDate보다 이전이면 400 Bad Request로 거부합니다.
                     
                     수정 대상은 현재 사용자가 OWNER로 연결된 내부 일정이어야 합니다.
                     외부 캘린더 원본 일정은 수정하지 않습니다.
@@ -112,9 +120,15 @@ public interface EventControllerDocs {
                     날짜를 제거해 보정할 수 없는 경우 requiresActionItemReview=true를 반환합니다.
                     반복 일정 회차를 새 일정으로 분리하는 경우 기존 준비/실행 항목은 새 일정에도 복사합니다.
                     
-                    준비/실행 항목의 내용 수정, 삭제, 직접 추가, 완료 처리는 본 API가 담당하지 않습니다.
-                    수정 화면에서 준비/실행 항목 변경이 발생한 경우 Action Items API를 별도로 호출합니다.
-                    본 API는 일정 정보 수정에 따른 기존 시간형 실행 항목 날짜 보정까지만 처리합니다.
+                    actionItems가 생략되면 준비/실행 항목 목록은 직접 수정하지 않고,
+                    일정 정보 수정에 따른 기존 시간형 실행 항목 날짜 보정 또는 반복 회차 분리 시 항목 복사만 처리합니다.
+                    actionItems가 전달되면 같은 트랜잭션 안에서 준비/실행 항목의 수정, 삭제, 직접 추가를 함께 처리합니다.
+                    actionItems.items의 actionItemId가 있으면 기존 항목을 수정하고,
+                    actionItemId가 없으면 새 항목으로 추가합니다.
+                    actionItems.deletedActionItemIds에 포함된 항목은 삭제 처리합니다.
+                    반복 일정 회차를 새 일정으로 분리하면서 actionItems를 전달한 경우,
+                    기존 회차 항목은 삭제하고 전달된 항목 목록을 새 일정에 다시 저장합니다.
+                    준비/실행 항목 상태만 빠르게 변경하는 경우에는 기존 Action Items 상태 변경 API를 사용할 수 있습니다.
                     """,
             operationId = "updateEvent"
     )

@@ -1,15 +1,16 @@
 package com.tryna.domain.action.dto;
 
+import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Schema(description = "F103 일정 상세 내 준비/실행 항목 조회 응답 DTO")
 public record EventActionItemResponse(
@@ -22,13 +23,6 @@ public record EventActionItemResponse(
 
 ) {
 
-    /**
-     * 준비/실행 항목 엔티티 목록을 F103 응답 DTO로 변환합니다.
-     *
-     * @param eventId 일정 ID
-     * @param actionItems 일정에 연결된 준비/실행 항목 목록
-     * @return 일정 상세 내 준비/실행 항목 응답
-     */
     public static EventActionItemResponse from(
             Long eventId,
             List<ActionItems> actionItems
@@ -41,9 +35,24 @@ public record EventActionItemResponse(
         );
     }
 
-    /**
-     * 일정 상세 화면에 표시할 준비/실행 항목 하나를 표현합니다.
-     */
+    public static EventActionItemResponse fromOccurrence(
+            Long eventId,
+            List<ActionItems> actionItems,
+            LocalDate occurrenceDate,
+            Map<Long, ActionItemOccurrenceStates> statesByActionItemId
+    ) {
+        return new EventActionItemResponse(
+                eventId,
+                actionItems.stream()
+                        .map(actionItem -> Item.fromOccurrence(
+                                actionItem,
+                                occurrenceDate,
+                                statesByActionItemId.get(actionItem.getActionItemId())
+                        ))
+                        .toList()
+        );
+    }
+
     @Schema(description = "일정에 연결된 준비/실행 항목")
     public record Item(
 
@@ -56,8 +65,7 @@ public record EventActionItemResponse(
             @Schema(description = "항목 유형", example = "TIMED_ACTION")
             ItemType itemType,
 
-            @Schema(description = "반복 일정의 실제 회차 날짜. 반복 일정이 아니면 일정 시작 날짜", example = "2026-08-25")
-            @NotNull(message = "회차 날짜는 필수입니다.")
+            @Schema(description = "항목이 속한 일정 회차 날짜", example = "2026-08-25")
             LocalDate occurrenceDate,
 
             @Schema(description = "캘린더 표시 날짜", example = "2026-07-15")
@@ -78,21 +86,12 @@ public record EventActionItemResponse(
             @Schema(description = "추천 원본 템플릿 ID", example = "gift_prepare_001")
             String sourceTemplateId,
 
-            @Schema(
-                    description = "완료 처리 일시. 미완료 상태이면 null",
-                    example = "2026-07-11T03:00:00"
-            )
+            @Schema(description = "완료 처리 일시. 미완료 상태이면 null", example = "2026-07-11T03:00:00")
             LocalDateTime completedAt
 
     ) {
 
-        /**
-         * ActionItems 엔티티를 F103 응답 항목으로 변환합니다.
-         *
-         * @param actionItem 준비/실행 항목 엔티티
-         * @return 일정 상세 화면에 표시할 준비/실행 항목
-         */
-        private static Item from(ActionItems actionItem) {
+        public static Item from(ActionItems actionItem) {
             return new Item(
                     actionItem.getActionItemId(),
                     actionItem.getTitle(),
@@ -106,6 +105,69 @@ public record EventActionItemResponse(
                     actionItem.getSourceTemplateId(),
                     actionItem.getCompletedAt()
             );
+        }
+
+        public static Item fromOccurrence(
+                ActionItems actionItem,
+                LocalDate occurrenceDate,
+                ActionItemOccurrenceStates state
+        ) {
+            LocalDate displayDate = resolveDisplayDate(actionItem, occurrenceDate);
+            LocalDateTime displayTime = resolveDisplayTime(actionItem, displayDate);
+
+            return new Item(
+                    actionItem.getActionItemId(),
+                    actionItem.getTitle(),
+                    actionItem.getItemType(),
+                    occurrenceDate,
+                    displayDate,
+                    displayTime,
+                    actionItem.getOffsetDays(),
+                    resolveStatus(actionItem, state),
+                    actionItem.getCreatedBy(),
+                    actionItem.getSourceTemplateId(),
+                    resolveCompletedAt(actionItem, state)
+            );
+        }
+
+        private static LocalDate resolveDisplayDate(ActionItems actionItem, LocalDate occurrenceDate) {
+            if (actionItem.getItemType() == ItemType.TIMED_ACTION
+                    && actionItem.getOffsetDays() != null
+                    && occurrenceDate != null) {
+                return occurrenceDate.plusDays(actionItem.getOffsetDays());
+            }
+
+            return actionItem.getDisplayDate();
+        }
+
+        private static LocalDateTime resolveDisplayTime(ActionItems actionItem, LocalDate displayDate) {
+            if (actionItem.getDisplayDatetime() == null || displayDate == null) {
+                return actionItem.getDisplayDatetime();
+            }
+
+            return LocalDateTime.of(displayDate, actionItem.getDisplayDatetime().toLocalTime());
+        }
+
+        private static ActionItemStatus resolveStatus(
+                ActionItems actionItem,
+                ActionItemOccurrenceStates state
+        ) {
+            if (state != null) {
+                return state.getActionItemStatus();
+            }
+
+            return actionItem.getActionItemStatus();
+        }
+
+        private static LocalDateTime resolveCompletedAt(
+                ActionItems actionItem,
+                ActionItemOccurrenceStates state
+        ) {
+            if (state != null) {
+                return state.getCompletedAt();
+            }
+
+            return actionItem.getCompletedAt();
         }
     }
 }

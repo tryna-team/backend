@@ -3,7 +3,6 @@ package com.tryna.domain.action.repository;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.event.enums.EventStatus;
-import com.tryna.domain.event.enums.SourceType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -40,6 +39,20 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             """)
     int softDeleteByParentEventId(
             @Param("eventId") Long eventId,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ActionItems a
+               SET a.deletedAt = :deletedAt
+             WHERE a.parentEvent.eventId = :eventId
+               AND a.actionItemId IN :actionItemIds
+               AND a.deletedAt IS NULL
+            """)
+    int softDeleteByParentEventIdAndActionItemIdIn(
+            @Param("eventId") Long eventId,
+            @Param("actionItemIds") Collection<Long> actionItemIds,
             @Param("deletedAt") LocalDateTime deletedAt
     );
 
@@ -133,6 +146,9 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
      * 현재 사용자의 일정에 연결된 항목 중
      * 선택한 날짜에 표시할 시간형 실행 항목을 조회합니다.
      *
+     * 반복 일정의 offset 기반 항목은 조회 시점에 동적으로 계산하므로
+     * 이 쿼리에서는 원본 displayDate가 직접 일치하는 항목만 조회합니다.
+     *
      * @param userId 현재 사용자 ID
      * @param date 조회 날짜
      * @param itemType 항목 유형
@@ -146,6 +162,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
              WHERE ue.user.userId = :userId
                AND a.displayDate = :date
                AND a.itemType = :itemType
+               AND (e.isRecurring = false OR a.offsetDays IS NULL)
                AND a.deletedAt IS NULL
              ORDER BY a.displayDatetime ASC, a.actionItemId ASC
             """)
@@ -153,6 +170,35 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("userId") Long userId,
             @Param("date") LocalDate date,
             @Param("itemType") ItemType itemType
+    );
+
+    /**
+     * 반복 일정에 연결된 시간형 실행 항목 후보를 조회합니다.
+     *
+     * 실제 조회일에 노출 가능한 회차인지는 서비스에서
+     * offsetDays와 반복 규칙을 함께 계산해 최종 필터링합니다.
+     */
+    @Query("""
+            SELECT a
+              FROM ActionItems a
+              JOIN FETCH a.parentEvent e
+              JOIN UserEvents ue ON ue.event = e
+             WHERE ue.user.userId = :userId
+               AND e.isRecurring = true
+               AND e.startDate <= :date
+               AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :dateStart)
+               AND e.eventStatus IN :eventStatuses
+               AND a.itemType = :itemType
+               AND a.offsetDays IS NOT NULL
+               AND a.deletedAt IS NULL
+             ORDER BY a.actionItemId ASC
+            """)
+    List<ActionItems> findRecurringTimedActionItemsByUserId(
+            @Param("userId") Long userId,
+            @Param("date") LocalDate date,
+            @Param("dateStart") LocalDateTime dateStart,
+            @Param("itemType") ItemType itemType,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     // 회원 탈퇴 시 전체 준비 항목 벌크 삭제용 (User 도메인 탈퇴 로직에서 사용)
@@ -183,7 +229,6 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
      * @param userId 현재 사용자 ID
      * @param keyword 검색 키워드
      * @param eventStatuses 검색 가능한 일정 상태
-     * @param excludedSourceType 검색에서 제외할 일정 출처 유형
      * @return 제목이 검색어와 일치한 준비/실행 항목 목록
      */
     @Query("""
@@ -193,7 +238,6 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
               JOIN UserEvents ue ON ue.event = e
              WHERE ue.user.userId = :userId
                AND e.eventStatus IN :eventStatuses
-               AND e.sourceType <> :excludedSourceType
                AND a.deletedAt IS NULL
                AND LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
              ORDER BY a.actionItemId ASC
@@ -201,8 +245,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     List<ActionItems> findSearchMatchesByUserIdAndKeyword(
             @Param("userId") Long userId,
             @Param("keyword") String keyword,
-            @Param("eventStatuses") Collection<EventStatus> eventStatuses,
-            @Param("excludedSourceType") SourceType excludedSourceType
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     /**

@@ -6,6 +6,7 @@ import java.util.List;
 public record EventParseResponse(
         String tempEventId,
         String eventTitle,
+        Integer draftRevision,
         String startDate,
         DateSource dateSource,
         String endDate,

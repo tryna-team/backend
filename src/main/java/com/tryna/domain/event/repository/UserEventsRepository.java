@@ -190,7 +190,6 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
      * @param userId 현재 사용자 ID
      * @param keyword 검색 키워드
      * @param eventStatuses 검색 가능한 일정 상태
-     * @param excludedSourceType 검색에서 제외할 일정 출처 유형
      * @return 일정 제목이 검색어와 일치한 일정 목록
      */
     @Query("""
@@ -199,14 +198,12 @@ public interface UserEventsRepository extends JpaRepository<UserEvents, Long> {
               JOIN ue.event e
              WHERE ue.user.userId = :userId
                AND e.eventStatus IN :eventStatuses
-               AND e.sourceType <> :excludedSourceType
                AND LOWER(e.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """)
     List<Events> findInternalEventsByTitleContaining(
             @Param("userId") Long userId,
             @Param("keyword") String keyword,
-            @Param("eventStatuses") Collection<EventStatus> eventStatuses,
-            @Param("excludedSourceType") SourceType excludedSourceType
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     /**

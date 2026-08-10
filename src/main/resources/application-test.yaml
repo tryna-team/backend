@@ -4,10 +4,18 @@ spring:
     # V1 마이그레이션은 PostgreSQL 전용 문법(partial index, array 등)을 사용하므로 H2에서는 비활성화한다.
     enabled: false
   datasource:
-    url: jdbc:h2:mem:tryna;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    # 테스트는 라우팅 대상 두 곳 모두 같은 인메모리 H2를 바라보게 하여
+    # 운영과 동일한 write/read DataSource 구조로 부트스트랩되는지만 검증한다.
+    write:
+      url: jdbc:h2:mem:tryna;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      driver-class-name: org.h2.Driver
+      username: sa
+      password:
+    read:
+      url: jdbc:h2:mem:tryna;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      driver-class-name: org.h2.Driver
+      username: sa
+      password:
   jpa:
     hibernate:
       ddl-auto: create-drop

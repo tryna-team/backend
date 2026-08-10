@@ -1,10 +1,16 @@
 package com.tryna.domain.recommendation.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tryna.domain.recommendation.dto.RecommendationDTO;
 import com.tryna.domain.recommendation.enums.SuggestionStatus;
+import com.tryna.domain.recommendation.repository.RecommendationRevisionRedisRepository;
+import com.tryna.global.exception.BusinessException;
+import com.tryna.global.exception.RecommendationErrorCode;
 import com.tryna.infra.brain.BrainClient;
+import com.tryna.infra.brain.dto.BrainErrorResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -12,6 +18,7 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
@@ -21,6 +28,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class RecommendationService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String RECOMMENDATION_PATH =
             "/api/v1/recommendations";
     private static final String ERROR_RESPONSE_BODY_MISSING =
@@ -37,10 +45,18 @@ public class RecommendationService {
             "D100_BRAIN_INVALID_RESPONSE";
 
     private final BrainClient brainClient;
+    private final RecommendationRevisionRedisRepository revisionRepository;
 
     public RecommendationDTO.RecommendationResDTO recommend(
             RecommendationDTO.RecommendationReqDTO request
     ) {
+
+        if (!registerLatestRevision(request)) {
+            throw new BusinessException(
+                    RecommendationErrorCode.STALE_DRAFT_REVISION_409
+            );
+        }
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -84,6 +100,25 @@ public class RecommendationService {
             }
 
             return body;
+        } catch (HttpClientErrorException.Conflict e) {
+            if (isStaleRevisionResponse(e)) {
+                log.info(
+                        "Stale Brain recommendation response discarded. " +
+                                "tempEventId={}, draftRevision={}",
+                        request.tempEventId(),
+                        request.draftRevision()
+                );
+
+                throw new BusinessException(
+                        RecommendationErrorCode.STALE_DRAFT_REVISION_409
+                );
+            }
+
+            return fallbackResponse(
+                    request,
+                    ERROR_CLIENT,
+                    "추천 항목을 불러오지 못했습니다."
+            );
         } catch (HttpClientErrorException e) {
             log.error(
                     "Brain recommendation client error. " +
@@ -149,6 +184,49 @@ public class RecommendationService {
                     ERROR_INVALID_RESPONSE,
                     "추천 서버 응답을 처리하지 못했습니다."
             );
+        }
+    }
+
+    private boolean isStaleRevisionResponse(
+            HttpClientErrorException.Conflict exception
+    ) {
+        try {
+            BrainErrorResponse errorResponse = OBJECT_MAPPER.readValue(
+                    exception.getResponseBodyAsByteArray(),
+                    BrainErrorResponse.class
+            );
+
+            return RecommendationErrorCode.STALE_DRAFT_REVISION_409
+                    .getCode()
+                    .equals(errorResponse.code());
+        } catch (IOException e) {
+            log.warn(
+                    "Failed to parse Brain conflict response. status={}",
+                    exception.getStatusCode(),
+                    e
+            );
+            return false;
+        }
+    }
+
+    private boolean registerLatestRevision(
+            RecommendationDTO.RecommendationReqDTO request
+    ) {
+        try {
+            return revisionRepository.saveIfLatest(
+                    request.tempEventId(),
+                    request.draftRevision()
+            );
+        } catch (DataAccessException e) {
+            log.warn(
+                    "Latest draft revision update failed; continuing request. " +
+                            "tempEventId={}, draftRevision={}",
+                    request.tempEventId(),
+                    request.draftRevision(),
+                    e
+            );
+
+            return true;
         }
     }
 

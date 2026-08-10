@@ -10,6 +10,7 @@ import com.tryna.domain.event.service.EventUpdateService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +32,7 @@ public class EventController implements EventControllerDocs {
     @PostMapping("/parse")
     public ApiResponse<EventParseResponse> parseEvent(
             Authentication authentication,
-            @RequestBody EventParseRequest request
+            @Valid @RequestBody EventParseRequest request
     ) {
         extractUserId(authentication);
         EventParseResponse response = eventParseService.parseEvent(request);

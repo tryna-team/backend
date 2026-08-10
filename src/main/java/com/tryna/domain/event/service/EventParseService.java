@@ -5,7 +5,6 @@ import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.EventErrorCode;
 import com.tryna.infra.brain.BrainClient;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -28,12 +27,13 @@ public class EventParseService {
 
     public EventParseResponse parseEvent(EventParseRequest request) {
         validateEventTitle(request);
+        EventParseRequest canonicalRequest = canonicalizeRequest(request);
 
         try {
             ResponseEntity<EventParseResponse> response = brainClient.exchange(
                     EVENT_PREVIEW_PATH,
                     HttpMethod.POST,
-                    createRequestEntity(request),
+                    createRequestEntity(canonicalRequest),
                     EventParseResponse.class
             );
 
@@ -42,32 +42,58 @@ public class EventParseService {
                 throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
             }
 
-            return withTempEventId(body);
+            return withTempEventId(canonicalRequest, body);
         } catch (RestClientException e) {
             log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
     }
 
-    private EventParseResponse withTempEventId(EventParseResponse response) {
-        return new EventParseResponse(
-                "tmp_" + UUID.randomUUID(),
-                response.eventTitle(),
-                response.startDate(),
-                response.dateSource(),
-                response.endDate(),
-                response.startTime(),
-                response.endTime(),
-                response.placeCandidate(),
-                response.toEmbedding(),
-                response.isAllDayCandidate(),
-                response.needsConfirmation(),
-                response.warnings()
+    private EventParseResponse withTempEventId(EventParseRequest request, EventParseResponse response) {
+        validateResponseDraftRevision(request, response);
+        validateResponseTempEventId(request, response);
+        return response;
+    }
+
+    private EventParseRequest canonicalizeRequest(EventParseRequest request) {
+        return new EventParseRequest(
+                normalizeTempEventId(request.tempEventId()),
+                request.eventTitle(),
+                request.draftRevision(),
+                request.selectedDate()
         );
+    }
+
+    private String normalizeTempEventId(String tempEventId) {
+        if (!StringUtils.hasText(tempEventId)) {
+            return null;
+        }
+        return tempEventId.trim();
+    }
+
+    private void validateResponseTempEventId(EventParseRequest request, EventParseResponse response) {
+        if (!StringUtils.hasText(response.tempEventId())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
+
+        if (StringUtils.hasText(request.tempEventId())
+                && !response.tempEventId().equals(request.tempEventId())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
+    }
+
+    private void validateResponseDraftRevision(EventParseRequest request, EventParseResponse response) {
+        if (response.draftRevision() == null || !response.draftRevision().equals(request.draftRevision())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
     }
 
     private void validateEventTitle(EventParseRequest request) {
         if (request == null || !StringUtils.hasText(request.eventTitle())) {
+            throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
+        }
+
+        if (request.draftRevision() == null || request.draftRevision() < 0) {
             throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
         }
     }

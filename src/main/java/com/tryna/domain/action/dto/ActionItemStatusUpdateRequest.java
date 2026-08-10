@@ -4,14 +4,16 @@ import com.tryna.domain.action.enums.ActionItemStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
-@Schema(description = "E106 준비/실행 항목 상태 변경 요청 DTO")
+import java.time.LocalDate;
+
+@Schema(description = "E106 action item status update request")
 public record ActionItemStatusUpdateRequest(
 
-        @Schema(
-                description = "변경할 준비/실행 항목 상태. 완료 처리 시 COMPLETED, 완료 취소 시 PENDING",
-                example = "COMPLETED"
-        )
-        @NotNull(message = "변경할 준비/실행 항목 상태는 필수입니다.")
+        @Schema(description = "Recurring occurrence date to update. Required only when updating a recurring event occurrence.", example = "2026-08-25")
+        LocalDate occurrenceDate,
+
+        @Schema(description = "Status to apply", example = "COMPLETED")
+        @NotNull(message = "Action item status is required.")
         ActionItemStatus actionItemStatus
 
 ) {

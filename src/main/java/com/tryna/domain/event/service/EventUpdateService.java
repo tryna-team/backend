@@ -1,6 +1,8 @@
 package com.tryna.domain.event.service;
 
 import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.enums.ActionItemStatus;
+import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
@@ -28,6 +30,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -41,6 +44,7 @@ public class EventUpdateService {
 
     private static final int MAX_TITLE_LENGTH = 255;
     private static final int MAX_LOCATION_LENGTH = 255;
+    private static final int MAX_SOURCE_TEMPLATE_ID_LENGTH = 100;
     private static final Set<EventStatus> UPDATABLE_STATUSES = Set.of(
             EventStatus.CONFIRMED,
             EventStatus.NEEDS_CONFIRMATION
@@ -82,6 +86,8 @@ public class EventUpdateService {
         LocalTime endTime = parseTime(request.endTime());
         boolean isAllDay = resolveAllDay(request.isAllDay(), startTime);
         validateTimePolicy(startDate, startTime, endDate, endTime, isAllDay);
+        RecurrenceRule recurrenceRule =
+                resolveUpdateRecurrenceRule(event, request, startDate, event.getRecurrenceEndDate());
 
         EventStatus status = startDate == null
                 ? EventStatus.NEEDS_CONFIRMATION
@@ -98,22 +104,30 @@ public class EventUpdateService {
                 normalizeBlank(request.location()),
                 status
         );
+        event.updateRecurrenceRule(
+                recurrenceRule.isRecurring(),
+                recurrenceRule.recurrenceType(),
+                recurrenceRule.recurrenceInterval(),
+                recurrenceRule.recurrenceDayOfWeek(),
+                recurrenceRule.recurrenceDayOfMonth(),
+                recurrenceRule.recurrenceEndDate()
+        );
         userEvent.changeLabel(label);
 
         ActionItemAdjustmentResult adjustmentResult =
                 adjustLinkedActionItems(eventId, previousStartDate, startDate);
+        ActionItemSyncResult actionItemSyncResult =
+                syncActionItems(event, request.actionItems(), false);
 
         eventsRepository.flush();
 
-        return new EventUpdateResponse(
-                event.getEventId(),
+        return buildUpdateResponse(
+                event,
                 UpdateScope.SINGLE,
-                event.getEventStatus(),
                 1,
-                adjustmentResult.adjustedActionItemCount(),
-                adjustmentResult.requiresActionItemReview(),
-                resolveLabelId(label),
-                event.getUpdatedAt()
+                adjustmentResult.adjustedActionItemCount() + actionItemSyncResult.changedActionItemCount(),
+                adjustmentResult.requiresActionItemReview() || actionItemSyncResult.requiresActionItemReview(),
+                label
         );
     }
 
@@ -188,17 +202,19 @@ public class EventUpdateService {
             EventUpdateRequest request,
             LocalDate occurrenceDate
     ) {
+        validateSingleOccurrenceRecurrenceRequest(event, request);
         validateSplitStartDate(request, occurrenceDate, event.getRecurrenceEndDate());
 
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, false, null);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItems(
-                        event,
-                        modifiedEvent,
-                        occurrenceDate,
-                        modifiedEvent.getStartDate()
-                );
+        ActionItemChangeResult actionItemChangeResult = resolveSplitActionItems(
+                event,
+                modifiedEvent,
+                occurrenceDate,
+                modifiedEvent.getStartDate(),
+                request.actionItems(),
+                false
+        );
 
         recurringEventExceptionsRepository.insertDeletedOccurrenceIfAbsent(
                 event.getEventId(),
@@ -208,15 +224,13 @@ public class EventUpdateService {
 
         eventsRepository.flush();
 
-        return new EventUpdateResponse(
-                modifiedEvent.getEventId(),
+        return buildUpdateResponse(
+                modifiedEvent,
                 UpdateScope.SINGLE,
-                modifiedEvent.getEventStatus(),
                 2,
-                copiedActionItemResult.copiedActionItemCount(),
-                copiedActionItemResult.requiresActionItemReview(),
-                resolveLabelId(label),
-                modifiedEvent.getUpdatedAt()
+                actionItemChangeResult.changedActionItemCount(),
+                actionItemChangeResult.requiresActionItemReview(),
+                label
         );
     }
 
@@ -238,25 +252,24 @@ public class EventUpdateService {
 
         Events modifiedEvent = createModifiedEvent(event, request, occurrenceDate, true, originalRecurrenceEndDate);
         saveNewOwnerEvent(userEvent, modifiedEvent, label);
-        CopiedActionItemResult copiedActionItemResult =
-                copyLinkedActionItemsFromOccurrence(
-                        event,
-                        modifiedEvent,
-                        occurrenceDate,
-                        modifiedEvent.getStartDate()
-                );
+        ActionItemChangeResult actionItemChangeResult = resolveSplitActionItems(
+                event,
+                modifiedEvent,
+                occurrenceDate,
+                modifiedEvent.getStartDate(),
+                request.actionItems(),
+                true
+        );
 
         eventsRepository.flush();
 
-        return new EventUpdateResponse(
-                modifiedEvent.getEventId(),
+        return buildUpdateResponse(
+                modifiedEvent,
                 UpdateScope.THIS_AND_FUTURE,
-                modifiedEvent.getEventStatus(),
                 2,
-                copiedActionItemResult.copiedActionItemCount(),
-                copiedActionItemResult.requiresActionItemReview(),
-                resolveLabelId(label),
-                modifiedEvent.getUpdatedAt()
+                actionItemChangeResult.changedActionItemCount(),
+                actionItemChangeResult.requiresActionItemReview(),
+                label
         );
     }
 
@@ -272,6 +285,8 @@ public class EventUpdateService {
         LocalTime endTime = parseTime(request.endTime());
         boolean isAllDay = resolveAllDay(request.isAllDay(), startTime);
         validateTimePolicy(startDate, startTime, endDate, endTime, isAllDay);
+        RecurrenceRule recurrenceRule =
+                resolveUpdateRecurrenceRule(event, request, startDate, event.getRecurrenceEndDate());
 
         EventStatus status = startDate == null
                 ? EventStatus.NEEDS_CONFIRMATION
@@ -288,25 +303,29 @@ public class EventUpdateService {
                 normalizeBlank(request.location()),
                 status
         );
-        event.updateRecurrenceAnchors(
-                resolveUpdatedRecurrenceDayOfWeek(event, startDate),
-                resolveUpdatedRecurrenceDayOfMonth(event, startDate)
+        event.updateRecurrenceRule(
+                recurrenceRule.isRecurring(),
+                recurrenceRule.recurrenceType(),
+                recurrenceRule.recurrenceInterval(),
+                recurrenceRule.recurrenceDayOfWeek(),
+                recurrenceRule.recurrenceDayOfMonth(),
+                recurrenceRule.recurrenceEndDate()
         );
 
         ActionItemAdjustmentResult adjustmentResult =
                 adjustLinkedActionItems(event.getEventId(), previousStartDate, startDate);
+        ActionItemSyncResult actionItemSyncResult =
+                syncActionItems(event, request.actionItems(), false);
 
         eventsRepository.flush();
 
-        return new EventUpdateResponse(
-                event.getEventId(),
+        return buildUpdateResponse(
+                event,
                 UpdateScope.THIS_AND_FUTURE,
-                event.getEventStatus(),
                 1,
-                adjustmentResult.adjustedActionItemCount(),
-                adjustmentResult.requiresActionItemReview(),
-                resolveLabelId(label),
-                event.getUpdatedAt()
+                adjustmentResult.adjustedActionItemCount() + actionItemSyncResult.changedActionItemCount(),
+                adjustmentResult.requiresActionItemReview() || actionItemSyncResult.requiresActionItemReview(),
+                label
         );
     }
 
@@ -326,6 +345,9 @@ public class EventUpdateService {
         LocalDate resolvedStartDate = startDate == null ? occurrenceDate : startDate;
         LocalDate resolvedEndDate = endDate;
         validateTimePolicy(resolvedStartDate, startTime, resolvedEndDate, endTime, isAllDay);
+        RecurrenceRule recurrenceRule = recurring
+                ? resolveUpdateRecurrenceRule(sourceEvent, request, resolvedStartDate, recurrenceEndDate)
+                : nonRecurringRule();
         EventStatus status = resolvedStartDate == null
                 ? EventStatus.NEEDS_CONFIRMATION
                 : EventStatus.CONFIRMED;
@@ -339,12 +361,12 @@ public class EventUpdateService {
                 resolvedEndDate,
                 combine(resolvedEndDate, endTime),
                 isAllDay,
-                recurring,
-                recurring ? sourceEvent.getRecurrenceType() : RecurrenceType.NONE,
-                recurring ? sourceEvent.getRecurrenceInterval() : null,
-                recurring ? resolveUpdatedRecurrenceDayOfWeek(sourceEvent, resolvedStartDate) : RecurrenceDayOfWeek.NONE,
-                recurring ? resolveUpdatedRecurrenceDayOfMonth(sourceEvent, resolvedStartDate) : null,
-                recurring ? recurrenceEndDate : null,
+                recurrenceRule.isRecurring(),
+                recurrenceRule.recurrenceType(),
+                recurrenceRule.recurrenceInterval(),
+                recurrenceRule.recurrenceDayOfWeek(),
+                recurrenceRule.recurrenceDayOfMonth(),
+                recurrenceRule.recurrenceEndDate(),
                 normalizeBlank(request.location()),
                 sourceEvent.getEventType(),
                 SourceType.USER_MANUAL_EDIT,
@@ -354,6 +376,210 @@ public class EventUpdateService {
 
     private void saveNewOwnerEvent(UserEvents sourceUserEvent, Events event, Labels label) {
         userEventsRepository.save(UserEvents.createOwner(sourceUserEvent.getUser(), event, label));
+    }
+
+    private ActionItemChangeResult resolveSplitActionItems(
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetOccurrenceDate,
+            EventUpdateRequest.ActionItems actionItems,
+            boolean thisAndFuture
+    ) {
+        if (actionItems == null) {
+            CopiedActionItemResult copiedResult = thisAndFuture
+                    ? copyLinkedActionItemsFromOccurrence(
+                            sourceEvent,
+                            targetEvent,
+                            sourceOccurrenceDate,
+                            targetOccurrenceDate
+                    )
+                    : copyLinkedActionItems(
+                            sourceEvent,
+                            targetEvent,
+                            sourceOccurrenceDate,
+                            targetOccurrenceDate
+                    );
+            return new ActionItemChangeResult(
+                    copiedResult.copiedActionItemCount(),
+                    copiedResult.requiresActionItemReview()
+            );
+        }
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+        int deletedCount = thisAndFuture
+                ? actionItemsRepository.softDeleteByParentEventIdFromOccurrenceDate(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate,
+                        deletedAt
+                )
+                : actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate,
+                        deletedAt
+                );
+        ActionItemSyncResult syncResult = syncActionItems(targetEvent, actionItems, true);
+
+        return new ActionItemChangeResult(
+                deletedCount + syncResult.changedActionItemCount(),
+                syncResult.requiresActionItemReview()
+        );
+    }
+
+    private ActionItemSyncResult syncActionItems(
+            Events event,
+            EventUpdateRequest.ActionItems actionItems,
+            boolean createOnly
+    ) {
+        if (actionItems == null) {
+            return new ActionItemSyncResult(0, false);
+        }
+
+        List<EventUpdateRequest.Item> requestedItems =
+                actionItems.items() == null ? List.of() : actionItems.items();
+        List<Long> deletedActionItemIds =
+                actionItems.deletedActionItemIds() == null ? List.of() : actionItems.deletedActionItemIds();
+        validateActionItemSyncRequest(requestedItems, deletedActionItemIds);
+
+        int changedCount = 0;
+        if (!deletedActionItemIds.isEmpty() && !createOnly) {
+            validateOwnedDeletedActionItems(event.getEventId(), deletedActionItemIds);
+            changedCount += actionItemsRepository.softDeleteByParentEventIdAndActionItemIdIn(
+                    event.getEventId(),
+                    deletedActionItemIds,
+                    LocalDateTime.now()
+            );
+        }
+
+        Set<Long> deletedIds = new HashSet<>(deletedActionItemIds);
+        List<ActionItems> newActionItems = new ArrayList<>();
+
+        for (EventUpdateRequest.Item item : requestedItems) {
+            if (item.actionItemId() == null || createOnly) {
+                newActionItems.add(createActionItem(event, item));
+                continue;
+            }
+
+            if (deletedIds.contains(item.actionItemId())) {
+                continue;
+            }
+
+            ActionItems actionItem = findOwnedActionItem(event.getEventId(), item.actionItemId());
+            actionItem.updateDetails(
+                    item.title().trim(),
+                    item.itemType(),
+                    item.occurrenceDate(),
+                    item.displayDate(),
+                    item.displayTime(),
+                    item.offsetDays(),
+                    item.createdBy(),
+                    normalizeBlank(item.sourceTemplateId())
+            );
+            updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            changedCount++;
+        }
+
+        if (!newActionItems.isEmpty()) {
+            actionItemsRepository.saveAll(newActionItems);
+            changedCount += newActionItems.size();
+        }
+
+        return new ActionItemSyncResult(changedCount, false);
+    }
+
+    private void validateActionItemSyncRequest(
+            List<EventUpdateRequest.Item> items,
+            List<Long> deletedActionItemIds
+    ) {
+        Set<Long> seenDeletedIds = new HashSet<>();
+        for (Long deletedActionItemId : deletedActionItemIds) {
+            if (deletedActionItemId == null || !seenDeletedIds.add(deletedActionItemId)) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+        }
+
+        Set<Long> seenItemIds = new HashSet<>();
+        for (EventUpdateRequest.Item item : items) {
+            if (item == null
+                    || item.title() == null
+                    || item.title().isBlank()
+                    || item.title().length() > MAX_TITLE_LENGTH
+                    || item.itemType() == null
+                    || item.occurrenceDate() == null
+                    || item.createdBy() == null
+                    || hasInvalidDisplayFields(item)
+                    || isInvalidActionItemStatus(item.actionItemStatus())
+                    || isInvalidSourceTemplateId(item.sourceTemplateId())) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+
+            if (item.actionItemId() != null
+                    && (!seenItemIds.add(item.actionItemId()) || seenDeletedIds.contains(item.actionItemId()))) {
+                throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+            }
+        }
+    }
+
+    private boolean hasInvalidDisplayFields(EventUpdateRequest.Item item) {
+        if (item.itemType() == ItemType.TIMED_ACTION) {
+            return item.displayDate() == null;
+        }
+
+        if (item.itemType() == ItemType.UNTIMED_PREP) {
+            return item.displayDate() != null || item.displayTime() != null;
+        }
+
+        return false;
+    }
+
+    private boolean isInvalidActionItemStatus(ActionItemStatus status) {
+        return status != null
+                && status != ActionItemStatus.PENDING
+                && status != ActionItemStatus.COMPLETED;
+    }
+
+    private boolean isInvalidSourceTemplateId(String sourceTemplateId) {
+        return sourceTemplateId != null && sourceTemplateId.length() > MAX_SOURCE_TEMPLATE_ID_LENGTH;
+    }
+
+    private void validateOwnedDeletedActionItems(Long eventId, List<Long> deletedActionItemIds) {
+        for (Long actionItemId : deletedActionItemIds) {
+            findOwnedActionItem(eventId, actionItemId);
+        }
+    }
+
+    private ActionItems findOwnedActionItem(Long eventId, Long actionItemId) {
+        ActionItems actionItem = actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(actionItemId)
+                .orElseThrow(() -> new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400));
+
+        if (!Objects.equals(actionItem.getParentEvent().getEventId(), eventId)) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+
+        return actionItem;
+    }
+
+    private ActionItems createActionItem(Events event, EventUpdateRequest.Item item) {
+        ActionItems actionItem = ActionItems.create(
+                event,
+                item.title().trim(),
+                item.itemType(),
+                item.occurrenceDate(),
+                item.displayDate(),
+                item.displayTime(),
+                item.offsetDays(),
+                item.createdBy(),
+                normalizeBlank(item.sourceTemplateId())
+        );
+        updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+
+        return actionItem;
+    }
+
+    private void updateActionItemStatusIfRequested(ActionItems actionItem, ActionItemStatus status) {
+        if (status != null) {
+            actionItem.updateStatus(status);
+        }
     }
 
     private CopiedActionItemResult copyLinkedActionItems(
@@ -665,20 +891,236 @@ public class EventUpdateService {
         };
     }
 
-    private RecurrenceDayOfWeek resolveUpdatedRecurrenceDayOfWeek(Events sourceEvent, LocalDate startDate) {
-        if (sourceEvent.getRecurrenceType() == RecurrenceType.WEEKLY && startDate != null) {
-            return toRecurrenceDayOfWeek(startDate);
+    private void validateSingleOccurrenceRecurrenceRequest(Events sourceEvent, EventUpdateRequest request) {
+        if (!hasRecurrenceRequest(request)) {
+            return;
         }
-        return sourceEvent.getRecurrenceDayOfWeek();
+
+        boolean matchesCurrentRule =
+                matchesCurrentIsRecurring(sourceEvent, request.isRecurring())
+                        && matchesCurrentRecurrenceType(sourceEvent, request.recurrenceType())
+                        && matchesCurrentRecurrenceInterval(sourceEvent, request.recurrenceInterval())
+                        && matchesCurrentRecurrenceEndDate(sourceEvent, request.recurrenceEndDate());
+
+        if (!matchesCurrentRule) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
     }
 
-    private Integer resolveUpdatedRecurrenceDayOfMonth(Events sourceEvent, LocalDate startDate) {
-        if ((sourceEvent.getRecurrenceType() == RecurrenceType.MONTHLY
-                || sourceEvent.getRecurrenceType() == RecurrenceType.YEARLY)
-                && startDate != null) {
-            return startDate.getDayOfMonth();
+    private boolean matchesCurrentIsRecurring(Events sourceEvent, Boolean requestedIsRecurring) {
+        return requestedIsRecurring == null || Objects.equals(requestedIsRecurring, sourceEvent.getIsRecurring());
+    }
+
+    private boolean matchesCurrentRecurrenceType(Events sourceEvent, RecurrenceType requestedType) {
+        return requestedType == null || requestedType == sourceEvent.getRecurrenceType();
+    }
+
+    private boolean matchesCurrentRecurrenceInterval(Events sourceEvent, Integer requestedInterval) {
+        return requestedInterval == null || Objects.equals(requestedInterval, resolveExistingInterval(sourceEvent));
+    }
+
+    private boolean matchesCurrentRecurrenceEndDate(Events sourceEvent, String requestedEndDate) {
+        if (requestedEndDate == null) {
+            return true;
         }
-        return sourceEvent.getRecurrenceDayOfMonth();
+
+        LocalDateTime parsedEndDate = parseRecurrenceEndDate(requestedEndDate);
+        LocalDate currentEndDate = sourceEvent.getRecurrenceEndDate() == null
+                ? null
+                : sourceEvent.getRecurrenceEndDate().toLocalDate();
+        LocalDate requestedDate = parsedEndDate == null
+                ? null
+                : parsedEndDate.toLocalDate();
+
+        return Objects.equals(requestedDate, currentEndDate);
+    }
+
+    private RecurrenceRule resolveUpdateRecurrenceRule(
+            Events sourceEvent,
+            EventUpdateRequest request,
+            LocalDate startDate,
+            LocalDateTime fallbackRecurrenceEndDate
+    ) {
+        if (hasRecurrenceRequest(request)) {
+            return resolveRequestedRecurrenceRule(sourceEvent, request, startDate, fallbackRecurrenceEndDate);
+        }
+
+        if (!Boolean.TRUE.equals(sourceEvent.getIsRecurring())) {
+            return nonRecurringRule();
+        }
+
+        LocalDate effectiveStartDate = startDate == null ? sourceEvent.getStartDate() : startDate;
+        return preserveExistingRecurrenceRule(sourceEvent, effectiveStartDate, fallbackRecurrenceEndDate);
+    }
+
+    private RecurrenceRule resolveRequestedRecurrenceRule(
+            Events sourceEvent,
+            EventUpdateRequest request,
+            LocalDate startDate,
+            LocalDateTime fallbackRecurrenceEndDate
+    ) {
+        RecurrenceType requestedType = request.recurrenceType();
+        boolean hasRecurringType = requestedType != null && requestedType != RecurrenceType.NONE;
+
+        if (Boolean.FALSE.equals(request.isRecurring()) && hasRecurringType) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+
+        boolean isRecurring =
+                Boolean.TRUE.equals(request.isRecurring())
+                        || hasRecurringType
+                        || (requestedType == null
+                        && Boolean.TRUE.equals(sourceEvent.getIsRecurring())
+                        && (request.recurrenceInterval() != null || request.recurrenceEndDate() != null));
+
+        if (!isRecurring || requestedType == RecurrenceType.NONE) {
+            return nonRecurringRule();
+        }
+
+        RecurrenceType recurrenceType = requestedType == null
+                ? sourceEvent.getRecurrenceType()
+                : requestedType;
+        validateSupportedRecurrenceType(recurrenceType);
+        validateRecurringStartDate(startDate);
+
+        int interval = request.recurrenceInterval() == null
+                ? resolveExistingInterval(sourceEvent)
+                : request.recurrenceInterval();
+        validateRecurrenceInterval(interval);
+
+        LocalDateTime recurrenceEndDate = request.recurrenceEndDate() == null
+                ? fallbackRecurrenceEndDate
+                : parseRecurrenceEndDate(request.recurrenceEndDate());
+        validateRecurrenceEndDate(startDate, recurrenceEndDate);
+
+        return buildRecurringRule(recurrenceType, interval, startDate, recurrenceEndDate);
+    }
+
+    private RecurrenceRule preserveExistingRecurrenceRule(
+            Events sourceEvent,
+            LocalDate startDate,
+            LocalDateTime recurrenceEndDate
+    ) {
+        RecurrenceType recurrenceType = sourceEvent.getRecurrenceType();
+        validateSupportedRecurrenceType(recurrenceType);
+        validateRecurringStartDate(startDate);
+
+        int interval = resolveExistingInterval(sourceEvent);
+        validateRecurrenceInterval(interval);
+        validateRecurrenceEndDate(startDate, recurrenceEndDate);
+
+        return buildRecurringRule(recurrenceType, interval, startDate, recurrenceEndDate);
+    }
+
+    private RecurrenceRule buildRecurringRule(
+            RecurrenceType recurrenceType,
+            Integer recurrenceInterval,
+            LocalDate startDate,
+            LocalDateTime recurrenceEndDate
+    ) {
+        RecurrenceDayOfWeek dayOfWeek = RecurrenceDayOfWeek.NONE;
+        Integer dayOfMonth = null;
+
+        if (recurrenceType == RecurrenceType.WEEKLY) {
+            dayOfWeek = toRecurrenceDayOfWeek(startDate);
+        }
+
+        if (recurrenceType == RecurrenceType.MONTHLY || recurrenceType == RecurrenceType.YEARLY) {
+            dayOfMonth = startDate.getDayOfMonth();
+        }
+
+        return new RecurrenceRule(
+                true,
+                recurrenceType,
+                recurrenceInterval,
+                dayOfWeek,
+                dayOfMonth,
+                recurrenceEndDate
+        );
+    }
+
+    private RecurrenceRule nonRecurringRule() {
+        return new RecurrenceRule(
+                false,
+                RecurrenceType.NONE,
+                null,
+                RecurrenceDayOfWeek.NONE,
+                null,
+                null
+        );
+    }
+
+    private boolean hasRecurrenceRequest(EventUpdateRequest request) {
+        return request.isRecurring() != null
+                || request.recurrenceType() != null
+                || request.recurrenceInterval() != null
+                || request.recurrenceEndDate() != null;
+    }
+
+    private void validateSupportedRecurrenceType(RecurrenceType recurrenceType) {
+        if (recurrenceType == null
+                || recurrenceType == RecurrenceType.NONE
+                || recurrenceType == RecurrenceType.CUSTOM) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+    }
+
+    private void validateRecurringStartDate(LocalDate startDate) {
+        if (startDate == null) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+    }
+
+    private int resolveExistingInterval(Events sourceEvent) {
+        return sourceEvent.getRecurrenceInterval() == null
+                ? 1
+                : sourceEvent.getRecurrenceInterval();
+    }
+
+    private void validateRecurrenceInterval(Integer interval) {
+        if (interval == null || interval < 1) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+    }
+
+    private LocalDateTime parseRecurrenceEndDate(String value) {
+        LocalDate recurrenceEndDate = parseDate(value);
+        if (recurrenceEndDate == null) {
+            return null;
+        }
+        return recurrenceEndDate.atStartOfDay();
+    }
+
+    private void validateRecurrenceEndDate(LocalDate startDate, LocalDateTime recurrenceEndDate) {
+        if (recurrenceEndDate != null && recurrenceEndDate.toLocalDate().isBefore(startDate)) {
+            throw new BusinessException(EventErrorCode.C107_EVENT_UPDATE_400);
+        }
+    }
+
+    private EventUpdateResponse buildUpdateResponse(
+            Events event,
+            UpdateScope updateScope,
+            Integer affectedEventCount,
+            Integer adjustedActionItemCount,
+            Boolean requiresActionItemReview,
+            Labels label
+    ) {
+        return new EventUpdateResponse(
+                event.getEventId(),
+                updateScope,
+                event.getEventStatus(),
+                affectedEventCount,
+                adjustedActionItemCount,
+                requiresActionItemReview,
+                event.getIsRecurring(),
+                event.getRecurrenceType(),
+                event.getRecurrenceInterval(),
+                event.getRecurrenceDayOfWeek(),
+                event.getRecurrenceDayOfMonth(),
+                event.getRecurrenceEndDate(),
+                resolveLabelId(label),
+                event.getUpdatedAt()
+        );
     }
 
     private Long resolveLabelId(Labels label) {
@@ -791,6 +1233,28 @@ public class EventUpdateService {
     private record CopiedActionItemResult(
             Integer copiedActionItemCount,
             Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record ActionItemChangeResult(
+            Integer changedActionItemCount,
+            Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record ActionItemSyncResult(
+            Integer changedActionItemCount,
+            Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record RecurrenceRule(
+            Boolean isRecurring,
+            RecurrenceType recurrenceType,
+            Integer recurrenceInterval,
+            RecurrenceDayOfWeek recurrenceDayOfWeek,
+            Integer recurrenceDayOfMonth,
+            LocalDateTime recurrenceEndDate
     ) {
     }
 
