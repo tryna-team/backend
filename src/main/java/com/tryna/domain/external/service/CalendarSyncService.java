@@ -14,6 +14,7 @@ import com.tryna.domain.external.entity.ExternalCalendarConnections;
 import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
 import com.tryna.domain.external.repository.ExternalCalendarsRepository;
+import com.tryna.domain.reminder.repository.RemindersRepository;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.AuthErrorCode;
@@ -24,7 +25,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -56,13 +56,15 @@ public class CalendarSyncService {
     private final ExternalCalendarsRepository externalCalendarsRepository;
     private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
     private final com.tryna.domain.label.repository.LabelsRepository labelsRepository;
+    private final RemindersRepository remindersRepository;
     private final DefaultLabelService defaultLabelService;
 
     private final PlatformTransactionManager transactionManager;
 
     /**
      * B105: 외부 캘린더 일정 조회 및 표시 (연도 단위 동기화)
-     * @param userId 유저 ID
+     *
+     * @param userId     유저 ID
      * @param targetYear 동기화할 연도 (null인 경우 기본값: 현재 연도)
      */
     public void syncGoogleCalendar(Long userId, Integer targetYear) {
@@ -91,7 +93,8 @@ public class CalendarSyncService {
             requiresNewTemplate.execute(status -> {
                 externalCalendarConnectionsRepository.findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
                         .ifPresent(conn -> {
-                            conn.updateSyncStatus(LocalDateTime.now(), "IN_PROGRESS");
+                            // IN_PROGRESS 상태 기록 시, 기존의 성공 시간(lastSyncedAt)을 날리지 않고 그대로 유지
+                            conn.updateSyncStatus(conn.getLastSyncedAt(), "IN_PROGRESS");
                             externalCalendarConnectionsRepository.saveAndFlush(conn);
                         });
                 return null;
@@ -124,15 +127,15 @@ public class CalendarSyncService {
         }
 
         // 3. 연동 정보 부트스트랩 수행 (동시성 충돌 방어 적용)
-        // JPA Rollback-only 오염 방지를 위해 저장(Insert) 시도만 별도의 미니 트랜잭션으로 격리합니다.
         TransactionTemplate requiresNewTemplate = new TransactionTemplate(transactionManager);
         requiresNewTemplate.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
         ExternalCalendars externalCalendar;
         Long connectionId;
+        ExternalCalendarConnections connection;
 
         try {
-            ExternalCalendarConnections connection = externalCalendarConnectionsRepository
+            connection = externalCalendarConnectionsRepository
                     .findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
                     .orElseGet(() -> {
                         try {
@@ -191,144 +194,182 @@ public class CalendarSyncService {
 
         // 5. 구글 API 통신 및 DB 업데이트
         try {
-            Map<String, Object> eventsData = googleCalendarClient.fetchEvents(accessToken, timeMin, timeMax);
+            // 1. 마지막으로 동기화했던 시간을 꺼냄
+            LocalDateTime currentLastSyncedAt = connection.getLastSyncedAt();
 
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> items = (List<Map<String, Object>>) eventsData.get("items");
+            // 2. 지금 조회하려는 연도(예: 2025년)에 우리 DB 일정이 하나라도 있나?
+            boolean hasEventsForThisYear = hasEventsInYear(externalCalendar, syncYear);
 
-            if (items == null || items.isEmpty()) {
-                log.info("구글 캘린더에 동기화할 일정이 없습니다. (조회 연도: {}년)", syncYear);
-                if (connectionId != null) {
-                    externalCalendarConnectionsRepository.findById(connectionId).ifPresent(conn -> {
-                        conn.updateSyncStatus(LocalDateTime.now(), "SUCCESS");
-                        externalCalendarConnectionsRepository.save(conn);
+            // 3. 하나도 없다면? (처음 2025년 달력을 본 것)
+            if (!hasEventsForThisYear) {
+                currentLastSyncedAt = null;     // 마지막 동기화 시간 무시하고 전체를 가져옴
+                log.info("해당 연도({})에 저장된 일정이 없어 Full Sync로 전환합니다.", syncYear);
+            }
+
+            List<Map<String, Object>> fetchedItems = new ArrayList<>();
+
+            // 1. 구글 요청 직전의 시점을 Asia/Seoul 기준으로 정확히 캡처 (Request-start watermark)
+            LocalDateTime initialWatermark = ZonedDateTime.now(seoulZone).toLocalDateTime();
+            LocalDateTime fallbackWatermark = null;
+            boolean isFallback = false;
+
+            try {
+                fetchedItems = fetchAllPages(accessToken, currentLastSyncedAt, timeMin, timeMax);
+            } catch (BusinessException e) {
+                // 410 Gone (기준 시간 만료) 방어: Full Sync로 전환 (기존 성공 커서 보존)
+                if (e.getErrorCode() == ExternalEventErrorCode.B105_EXTERNAL_EVENT_410) {
+                    log.info("동기화 기준 시간이 너무 오래되어 Full Sync로 재시도합니다. userId: {}", userId);
+
+                    transactionTemplate.executeWithoutResult(status -> {
+                        // 기존 성공 커서를 날리지 않고 유지만 한 채 IN_PROGRESS 상태 갱신
+                        connection.updateSyncStatus(connection.getLastSyncedAt(), "IN_PROGRESS");
+                        externalCalendarConnectionsRepository.saveAndFlush(connection);
                     });
+
+                    // Full Sync 시점의 새로운 요청 시작 커서 캡처
+                    fallbackWatermark = ZonedDateTime.now(seoulZone).toLocalDateTime();
+                    isFallback = true;
+
+                    try {
+                        fetchedItems = fetchAllPages(accessToken, null, timeMin, timeMax);
+                    } catch (Exception ex) {
+                        throw ex instanceof BusinessException ? (BusinessException) ex : new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_500);
+                    }
+                } else {
+                    throw e;
                 }
-                return;
             }
 
-            if (items.size() > MAX_SYNC_ITEMS_LIMIT) {
-                log.warn("외부 캘린더 일정이 허용 수량을 초과했습니다. (요청 수: {}개, 최대 허용: {}개)", items.size(), MAX_SYNC_ITEMS_LIMIT);
-                throw new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_400);
-            }
+            // 람다식 내에서 안전하게 참조할 수 있도록 final(또는 effectively final) 변수로 확정
+            final List<Map<String, Object>> allItems = fetchedItems;
+            final LocalDateTime requestStartWatermark = isFallback ? fallbackWatermark : initialWatermark;
+            final ExternalCalendars targetCalendar = externalCalendar;
+            final Long currentUserId = userId;
 
-            transactionTemplate.executeWithoutResult(status -> {
-                List<String> googleEventIds = items.stream()
-                        .map(item -> (String) item.get("id"))
-                        .toList();
-
-                // 삭제된 것까지 포함해서 기존 이벤트들을 전부 맵핑
-                Map<String, Events> existingEventsMap = new HashMap<>();
-                for (String googleEventId : googleEventIds) {
-                    eventsRepository.findIncludingDeletedByUserIdAndExternalEventId(
-                            user.getUserId(), googleEventId
-                    ).ifPresent(event -> existingEventsMap.put(googleEventId, event));
-                }
-
-                List<Events> eventsToSave = new java.util.ArrayList<>();
-
-                for (Map<String, Object> item : items) {
-                    String googleEventId = (String) item.get("id");
-                    Events existingEvent = existingEventsMap.get(googleEventId);
-
-                    if ("cancelled".equals(item.get("status"))) {
-                        if (existingEvent != null && existingEvent.getDeletedAt() == null) {
-                            existingEvent.deleteSoft();
-                            eventsRepository.saveAndFlush(existingEvent);
-                            log.info("구글 캘린더에서 삭제된 일정 감지, DB 반영 대기: {}", googleEventId);
-                        }
-                        continue;
-                    }
-
-                    String summary = (String) item.get("summary");
-                    if (summary == null || summary.isBlank()) {
-                        summary = "제목 없음";
-                    }
-
-                    String description = (String) item.get("description");
-                    String location = (String) item.get("location");
-
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> start = (Map<String, String>) item.get("start");
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> end = (Map<String, String>) item.get("end");
-
-                    boolean isAllDay = start.containsKey("date");
-                    LocalDate startDate;
-                    LocalDateTime startDatetime = null;
-                    LocalDate endDate;
-                    LocalDateTime endDatetime = null;
-
-                    if (isAllDay) {
-                        startDate = LocalDate.parse(start.get("date"));
-                        endDate = LocalDate.parse(end.get("date")).minusDays(1);
-                    } else {
-                        startDatetime = ZonedDateTime.parse(start.get("dateTime"))
-                                .withZoneSameInstant(ZoneId.of("Asia/Seoul"))
-                                .toLocalDateTime();
-                        startDate = startDatetime.toLocalDate();
-
-                        endDatetime = ZonedDateTime.parse(end.get("dateTime"))
-                                .withZoneSameInstant(ZoneId.of("Asia/Seoul"))
-                                .toLocalDateTime();
-                        endDate = endDatetime.toLocalDate();
-                    }
-
-                    if (existingEvent != null) {
-                        // 기존 이벤트가 존재할 경우
-                        if (existingEvent.getDeletedAt() != null) {
-                            // 연동 해제로 잠들어 있던 일정 -> 새로운 externalCalendar와 함께 되살리기(Resurrect)
-                            existingEvent.resurrectExternalEvent(externalCalendar, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
-                            eventsToSave.add(existingEvent);
-                        } else {
-                            // 케이스 B: 평소처럼 살아있는 기존 일정 -> 내용만 최신으로 업데이트
-                            existingEvent.updateExternalEvent(summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
-                        }
-                    } else {
-                        // 케이스 C: 완전 신규 일정 -> 새로 생성
-                        Events newEvent = Events.createExternalEvent(
-                                externalCalendar, googleEventId, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime
-                        );
-                        eventsToSave.add(newEvent);
-                    }
-                }
-
-                if (!eventsToSave.isEmpty()) {
-                    // 새로 생성이거나 되살아난 이벤트들 저장
-                    eventsRepository.saveAll(eventsToSave);
-
-                    // 중복 UserEvents 매핑 방어: 이미 연동 해제/재연동 과정에서 UserEvents가 남아있을 수 있으므로 새롭게 추가될 대상만 필터링
-                    List<Events> trulyNewEvents = eventsToSave.stream()
-                            .filter(e -> userEventsRepository.countVisibleEventsByUserId(user.getUserId(), java.util.EnumSet.of(EventStatus.CONFIRMED)) >= 0) // 안전 필터 또는 기존 매핑 존재 여부 확인
+            if (allItems.isEmpty()) {
+                log.info("구글 캘린더에 동기화할 일정(변경분)이 없습니다. (조회 연도: {}년)", syncYear);
+            } else {
+                transactionTemplate.executeWithoutResult(status -> {
+                    List<String> googleEventIds = allItems.stream()
+                            .map(item -> (String) item.get("id"))
                             .toList();
 
-                    // 신규 생성된 이벤트들에 대해서만 UserEvents(OWNER) 매핑 생성
-                    List<UserEvents> newUserEvents = eventsToSave.stream()
-                            .filter(event -> event.getCreatedAt() != null && event.getDeletedAt() == null) // 새로 만들어진 것들 위주로 체크
-                            .map(newEvent -> {
-                                // 이미 user_events 매핑이 존재하는지 확인 후 없을 때만 생성하면 더욱 완벽합니다!
-                                boolean alreadyMapped = userEventsRepository.existsByUser_UserIdAndEvent_EventId(user.getUserId(), newEvent.getEventId());
-                                if (!alreadyMapped) {
-                                    // 주의: externalLabel을 안전하게 조회하여 매핑합니다.
-                                    com.tryna.domain.label.entity.Labels finalLabel = labelsRepository.findByExternalCalendarAndDeletedAtIsNull(externalCalendar).orElse(null);
-                                    return UserEvents.createOwner(user, newEvent, finalLabel);
+                    List<Events> existingEvents = eventsRepository.findAllIncludingDeletedByUserIdAndExternalEventIdIn(
+                            currentUserId,
+                            googleEventIds
+                    );
+
+                    Map<String, Events> existingEventsMap = existingEvents.stream()
+                            .collect(Collectors.toMap(
+                                    Events::getExternalEventId,
+                                    event -> event,
+                                    (existing, replacement) -> existing
+                            ));
+
+                    List<Events> eventsToSave = new java.util.ArrayList<>();
+
+                    for (Map<String, Object> item : allItems) {
+                        String googleEventId = (String) item.get("id");
+                        Events existingEvent = existingEventsMap.get(googleEventId);
+
+                        if ("cancelled".equals(item.get("status"))) {
+                            if (existingEvent != null) {
+                                // 1. 아직 Soft Delete 되지 않았다면 처리
+                                if (existingEvent.getDeletedAt() == null) {
+                                    existingEvent.deleteSoft();
+                                    eventsRepository.saveAndFlush(existingEvent);
                                 }
-                                return null;
-                            })
-                            .filter(Objects::nonNull)
-                            .toList();
 
-                    if (!newUserEvents.isEmpty()) {
-                        userEventsRepository.saveAll(newUserEvents);
+                                // 2. 기존 이벤트 존재 여부와 무관하게 연관된 리마인드 물리 삭제 (Hard Delete) 보장
+                                remindersRepository.deleteByEventIdCascade(existingEvent.getEventId());
+                                log.info("구글 캘린더에서 삭제된 일정 감지 및 리마인드 정리 완료: {}", googleEventId);
+                            }
+                            continue;
+                        }
+
+                        String summary = (String) item.get("summary");
+                        if (summary == null || summary.isBlank()) {
+                            summary = "제목 없음";
+                        }
+
+                        String description = (String) item.get("description");
+                        String location = (String) item.get("location");
+
+                        @SuppressWarnings("unchecked")
+                        Map<String, String> start = (Map<String, String>) item.get("start");
+                        @SuppressWarnings("unchecked")
+                        Map<String, String> end = (Map<String, String>) item.get("end");
+
+                        boolean isAllDay = start.containsKey("date");
+                        LocalDate startDate;
+                        LocalDateTime startDatetime = null;
+                        LocalDate endDate;
+                        LocalDateTime endDatetime = null;
+
+                        if (isAllDay) {
+                            startDate = LocalDate.parse(start.get("date"));
+                            endDate = LocalDate.parse(end.get("date")).minusDays(1);
+                        } else {
+                            startDatetime = ZonedDateTime.parse(start.get("dateTime"))
+                                    .withZoneSameInstant(seoulZone)
+                                    .toLocalDateTime();
+                            startDate = startDatetime.toLocalDate();
+
+                            endDatetime = ZonedDateTime.parse(end.get("dateTime"))
+                                    .withZoneSameInstant(seoulZone)
+                                    .toLocalDateTime();
+                            endDate = endDatetime.toLocalDate();
+                        }
+
+                        if (existingEvent != null) {
+                            // 기존 이벤트가 존재할 경우 (재연동으로 되살리기 포함)
+                            if (existingEvent.getDeletedAt() != null) {
+                                // 연동 해제로 잠들어 있던 일정 -> 새로운 externalCalendar와 함께 되살리기(Resurrect)
+                                existingEvent.resurrectExternalEvent(targetCalendar, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
+                                eventsToSave.add(existingEvent);
+                            } else {
+                                // 케이스 B: 평소처럼 살아있는 기존 일정 -> 내용만 최신으로 업데이트
+                                existingEvent.updateExternalEvent(summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime);
+                            }
+                        } else {
+                            // 케이스 C: 완전 신규 일정 -> 새로 생성
+                            Events newEvent = Events.createExternalEvent(
+                                    targetCalendar, googleEventId, summary, description, location, isAllDay, startDate, startDatetime, endDate, endDatetime
+                            );
+                            eventsToSave.add(newEvent);
+                        }
                     }
-                }
-            });
 
-            log.info("구글 캘린더 일정 동기화 완료 (조회 범위: {} ~ {}, 총 {}개 처리)", timeMin, timeMax, items.size());
+                    if (!eventsToSave.isEmpty()) {
+                        // 새로 생성이거나 되살아난 이벤트들 저장
+                        eventsRepository.saveAll(eventsToSave);
+
+                        List<UserEvents> newUserEvents = eventsToSave.stream()
+                                .filter(event -> event.getCreatedAt() != null && event.getDeletedAt() == null)
+                                .map(newEvent -> {
+                                    boolean alreadyMapped = userEventsRepository.existsByUser_UserIdAndEvent_EventId(user.getUserId(), newEvent.getEventId());
+                                    if (!alreadyMapped) {
+                                        com.tryna.domain.label.entity.Labels finalLabel = labelsRepository.findByExternalCalendarAndDeletedAtIsNull(targetCalendar).orElse(null);
+                                        return UserEvents.createOwner(user, newEvent, finalLabel);
+                                    }
+                                    return null;
+                                })
+                                .filter(Objects::nonNull)
+                                .toList();
+
+                        if (!newUserEvents.isEmpty()) {
+                            userEventsRepository.saveAll(newUserEvents);
+                        }
+                    }
+                });
+            }
+
+            // 2. 동기화 및 반영이 완벽히 끝난 후, 요청 시작 시 캡처해 둔 `requestStartWatermark`를 lastSyncedAt으로 안전하게 기록
+            log.info("구글 캘린더 일정 동기화 완료 (조회 범위: {} ~ {}, 총 {}개 처리)", timeMin, timeMax, allItems.size());
 
             if (connectionId != null) {
                 externalCalendarConnectionsRepository.findById(connectionId).ifPresent(conn -> {
-                    conn.updateSyncStatus(LocalDateTime.now(), "SUCCESS");
+                    conn.updateSyncStatus(requestStartWatermark, "SUCCESS");
                     externalCalendarConnectionsRepository.save(conn);
                 });
             }
@@ -344,6 +385,33 @@ public class CalendarSyncService {
     }
 
     /**
+     * 페이지네이션 토큰을 반복 순회하며 모든 페이지의 이벤트를 가져오고, 전체 누적 개수에 대해 제한을 검증합니다.
+     */
+    private List<Map<String, Object>> fetchAllPages(String accessToken, LocalDateTime syncToken, ZonedDateTime timeMin, ZonedDateTime timeMax) {
+        List<Map<String, Object>> allItems = new ArrayList<>();
+        String pageToken = null;
+
+        do {
+            Map<String, Object> eventsData = googleCalendarClient.fetchEvents(accessToken, syncToken, timeMin, timeMax, pageToken);
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> items = (List<Map<String, Object>>) eventsData.get("items");
+            if (items != null) {
+                allItems.addAll(items);
+            }
+
+            if (allItems.size() > MAX_SYNC_ITEMS_LIMIT) {
+                log.warn("외부 캘린더 일정이 허용 수량을 초과했습니다. (누적 수: {}개, 최대 허용: {}개)", allItems.size(), MAX_SYNC_ITEMS_LIMIT);
+                throw new BusinessException(ExternalEventErrorCode.B105_EXTERNAL_EVENT_400);
+            }
+
+            pageToken = (String) eventsData.get("nextPageToken");
+        } while (pageToken != null);
+
+        return allItems;
+    }
+
+    /**
      * 동기화 실패 상태를 독립 트랜잭션(REQUIRES_NEW)으로 안전하게 DB에 즉시 저장합니다.
      */
     private void markSyncFailed(Long userId) {
@@ -354,7 +422,7 @@ public class CalendarSyncService {
             requiresNewTemplate.executeWithoutResult(status -> {
                 externalCalendarConnectionsRepository.findByUser_UserIdAndProvider(userId, Provider.GOOGLE)
                         .ifPresent(conn -> {
-                            conn.updateSyncStatus(LocalDateTime.now(), "FAILED");
+                            conn.updateSyncStatus(conn.getLastSyncedAt(), "FAILED");
                             externalCalendarConnectionsRepository.saveAndFlush(conn);
                         });
             });
@@ -486,5 +554,20 @@ public class CalendarSyncService {
                 }
             }
         });
+    }
+
+    /**
+     * 해당 연도에 사용자의 가시적인 일정이 존재하는지 확인합니다.
+     */
+    private boolean hasEventsInYear(ExternalCalendars externalCalendar, Integer year) {
+        LocalDate startDate = LocalDate.of(year, 1, 1);
+        LocalDate endDate = LocalDate.of(year, 12, 31);
+
+        return eventsRepository.existsByExternalCalendarAndDateRange(
+                externalCalendar,
+                startDate,
+                endDate,
+                EnumSet.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        );
     }
 }
