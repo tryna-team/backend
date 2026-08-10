@@ -6,6 +6,12 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 public record EventParseRequest(
+        @Schema(
+                description = "C103 미리보기/추천 흐름에서 사용하는 임시 일정 ID. 최초 요청에서는 null 또는 생략하고, 이후 같은 작성 흐름에서는 기존 값을 전달합니다.",
+                example = "tmp_75c44199-81f2-4761-b47d-887976267bce"
+        )
+        String tempEventId,
+
         String eventTitle,
 
         @Schema(
