@@ -5,7 +5,6 @@ import com.tryna.domain.event.dto.EventParseResponse;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.EventErrorCode;
 import com.tryna.infra.brain.BrainClient;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -51,22 +50,19 @@ public class EventParseService {
 
     private EventParseResponse withTempEventId(EventParseRequest request, EventParseResponse response) {
         validateResponseDraftRevision(request, response);
+        validateResponseTempEventId(request, response);
+        return response;
+    }
 
-        return new EventParseResponse(
-                "tmp_" + UUID.randomUUID(),
-                response.eventTitle(),
-                response.draftRevision(),
-                response.startDate(),
-                response.dateSource(),
-                response.endDate(),
-                response.startTime(),
-                response.endTime(),
-                response.placeCandidate(),
-                response.toEmbedding(),
-                response.isAllDayCandidate(),
-                response.needsConfirmation(),
-                response.warnings()
-        );
+    private void validateResponseTempEventId(EventParseRequest request, EventParseResponse response) {
+        if (!StringUtils.hasText(response.tempEventId())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
+
+        if (StringUtils.hasText(request.tempEventId())
+                && !response.tempEventId().equals(request.tempEventId().trim())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
     }
 
     private void validateResponseDraftRevision(EventParseRequest request, EventParseResponse response) {
@@ -91,5 +87,3 @@ public class EventParseService {
         return new HttpEntity<>(request, headers);
     }
 }
-
-
