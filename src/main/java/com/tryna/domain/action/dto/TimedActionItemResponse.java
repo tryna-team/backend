@@ -1,5 +1,6 @@
 package com.tryna.domain.action.dto;
 
+import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.CreatedBy;
@@ -21,13 +22,6 @@ public record TimedActionItemResponse(
 
 ) {
 
-    /**
-     * 시간형 실행 항목 엔티티 목록을 F104 응답 DTO로 변환합니다.
-     *
-     * @param date 조회한 날짜
-     * @param actionItems 시간형 실행 항목 목록
-     * @return 캘린더 내 시간형 실행 항목 조회 응답
-     */
     public static TimedActionItemResponse from(
             LocalDate date,
             List<ActionItems> actionItems
@@ -40,9 +34,13 @@ public record TimedActionItemResponse(
         );
     }
 
-    /**
-     * 캘린더에 표시할 시간형 실행 항목 하나를 표현합니다.
-     */
+    public static TimedActionItemResponse of(
+            LocalDate date,
+            List<Item> items
+    ) {
+        return new TimedActionItemResponse(date, items);
+    }
+
     @Schema(description = "캘린더에 표시할 시간형 실행 항목")
     public record Item(
 
@@ -52,7 +50,7 @@ public record TimedActionItemResponse(
             @Schema(description = "연결된 일정 ID", example = "1")
             Long parentEventId,
 
-            @Schema(description = "반복 일정의 실제 회차 날짜", example = "2026-08-25")
+            @Schema(description = "항목이 속한 일정 회차 날짜", example = "2026-08-25")
             LocalDate occurrenceDate,
 
             @Schema(description = "연결된 일정 제목", example = "엄마 생신")
@@ -76,33 +74,40 @@ public record TimedActionItemResponse(
             @Schema(description = "항목 생성 주체", example = "SYSTEM")
             CreatedBy createdBy,
 
-            @Schema(
-                    description = "완료 처리 일시. 미완료 상태이면 null",
-                    example = "2026-07-01T18:30:12"
-            )
+            @Schema(description = "완료 처리 일시. 미완료 상태이면 null", example = "2026-07-01T18:30:12")
             LocalDateTime completedAt
 
     ) {
 
-        /**
-         * ActionItems 엔티티를 F104 응답 항목으로 변환합니다.
-         *
-         * API에서는 displayTime을 사용하고,
-         * 엔티티와 DB에서는 displayDatetime을 유지합니다.
-         */
-        private static Item from(ActionItems actionItem) {
+        public static Item from(ActionItems actionItem) {
+            return fromOccurrence(
+                    actionItem,
+                    actionItem.getOccurrenceDate(),
+                    actionItem.getDisplayDate(),
+                    actionItem.getDisplayDatetime(),
+                    null
+            );
+        }
+
+        public static Item fromOccurrence(
+                ActionItems actionItem,
+                LocalDate occurrenceDate,
+                LocalDate displayDate,
+                LocalDateTime displayTime,
+                ActionItemOccurrenceStates state
+        ) {
             return new Item(
                     actionItem.getActionItemId(),
                     actionItem.getParentEvent().getEventId(),
-                    actionItem.getOccurrenceDate(),
+                    occurrenceDate,
                     actionItem.getParentEvent().getTitle(),
                     actionItem.getTitle(),
                     actionItem.getItemType(),
-                    actionItem.getDisplayDate(),
-                    actionItem.getDisplayDatetime(),
-                    actionItem.getActionItemStatus(),
+                    displayDate,
+                    displayTime,
+                    state == null ? actionItem.getActionItemStatus() : state.getActionItemStatus(),
                     actionItem.getCreatedBy(),
-                    actionItem.getCompletedAt()
+                    state == null ? actionItem.getCompletedAt() : state.getCompletedAt()
             );
         }
     }
