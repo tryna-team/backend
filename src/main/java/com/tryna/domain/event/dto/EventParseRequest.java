@@ -4,6 +4,8 @@ import java.time.LocalDate;
 
 public record EventParseRequest(
         String eventTitle,
+        Integer draftRevision,
         LocalDate selectedDate
 ) {
 }
+

@@ -53,6 +53,7 @@ public class EventParseService {
         return new EventParseResponse(
                 "tmp_" + UUID.randomUUID(),
                 response.eventTitle(),
+                response.draftRevision(),
                 response.startDate(),
                 response.dateSource(),
                 response.endDate(),
@@ -70,6 +71,10 @@ public class EventParseService {
         if (request == null || !StringUtils.hasText(request.eventTitle())) {
             throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
         }
+
+        if (request.draftRevision() == null || request.draftRevision() < 0) {
+            throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
+        }
     }
 
     private HttpEntity<EventParseRequest> createRequestEntity(EventParseRequest request) {
@@ -78,3 +83,5 @@ public class EventParseService {
         return new HttpEntity<>(request, headers);
     }
 }
+
+

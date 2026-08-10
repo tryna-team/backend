@@ -26,7 +26,7 @@ public interface EventControllerDocs {
 
     @Operation(
             summary = "C103 일정 생성 미리보기",
-            description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다.",
+            description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다. draftRevision은 프론트 디바운싱 요청 순서를 구분하기 위한 값이며, 요청값을 응답에 그대로 반환합니다.",
             operationId = "parseEvent"
     )
     @SecurityRequirement(name = "bearerAuth")
