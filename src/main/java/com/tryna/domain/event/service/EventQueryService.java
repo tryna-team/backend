@@ -881,10 +881,12 @@ public class EventQueryService {
                 return false;
             }
 
-            // 2. 마지막 동기화 시간 체크
+            // 2. 마지막 동기화 시간 체크 (서버 JVM 기본 타임존 대신 서비스 표준 타임존(Asia/Seoul) 기준 현재 시간 사용)
             LocalDateTime lastSyncedAt = conn.getLastSyncedAt();
+            LocalDateTime nowInServiceZone = LocalDateTime.now(SERVICE_ZONE);
+
             // 동기화 기록이 없거나, 마지막 동기화로부터 10초가 지난 경우에만 true
-            return lastSyncedAt == null || lastSyncedAt.plusSeconds(10).isBefore(LocalDateTime.now());
+            return lastSyncedAt == null || lastSyncedAt.plusSeconds(10).isBefore(nowInServiceZone);
         }).orElse(false); // 연동 정보가 없으면 발행하지 않음
 
         if (shouldSync) {
