@@ -27,12 +27,13 @@ public class EventParseService {
 
     public EventParseResponse parseEvent(EventParseRequest request) {
         validateEventTitle(request);
+        EventParseRequest canonicalRequest = canonicalizeRequest(request);
 
         try {
             ResponseEntity<EventParseResponse> response = brainClient.exchange(
                     EVENT_PREVIEW_PATH,
                     HttpMethod.POST,
-                    createRequestEntity(request),
+                    createRequestEntity(canonicalRequest),
                     EventParseResponse.class
             );
 
@@ -41,7 +42,7 @@ public class EventParseService {
                 throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
             }
 
-            return withTempEventId(request, body);
+            return withTempEventId(canonicalRequest, body);
         } catch (RestClientException e) {
             log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
@@ -54,13 +55,29 @@ public class EventParseService {
         return response;
     }
 
+    private EventParseRequest canonicalizeRequest(EventParseRequest request) {
+        return new EventParseRequest(
+                normalizeTempEventId(request.tempEventId()),
+                request.eventTitle(),
+                request.draftRevision(),
+                request.selectedDate()
+        );
+    }
+
+    private String normalizeTempEventId(String tempEventId) {
+        if (!StringUtils.hasText(tempEventId)) {
+            return null;
+        }
+        return tempEventId.trim();
+    }
+
     private void validateResponseTempEventId(EventParseRequest request, EventParseResponse response) {
         if (!StringUtils.hasText(response.tempEventId())) {
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
 
         if (StringUtils.hasText(request.tempEventId())
-                && !response.tempEventId().equals(request.tempEventId().trim())) {
+                && !response.tempEventId().equals(request.tempEventId())) {
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
     }

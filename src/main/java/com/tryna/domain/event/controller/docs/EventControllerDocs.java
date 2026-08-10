@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 public interface EventControllerDocs {
 
     @Operation(
-            summary = "C102 일정 기본 정보 1차 파싱",
+            summary = "C103 일정 생성 미리보기",
             description = "사용자가 입력한 일정 원문을 분석하여 날짜, 시간, 장소, 임베딩 토큰 등 미리보기 후보값을 조회합니다. draftRevision은 프론트 디바운싱 요청 순서를 구분하기 위한 값이며, 요청값을 응답에 그대로 반환합니다. tempEventId는 저장 전 일정 작성 흐름을 식별하는 임시 ID이며, 최초 요청에서는 생략하고 이후 같은 작성 흐름에서는 기존 값을 전달합니다.",
             operationId = "parseEvent"
     )
