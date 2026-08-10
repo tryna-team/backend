@@ -42,17 +42,20 @@ public class EventParseService {
                 throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
             }
 
-            return withTempEventId(body);
+            return withTempEventId(request, body);
         } catch (RestClientException e) {
             log.warn("Brain event preview API request failed. path={}", EVENT_PREVIEW_PATH, e);
             throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
         }
     }
 
-    private EventParseResponse withTempEventId(EventParseResponse response) {
+    private EventParseResponse withTempEventId(EventParseRequest request, EventParseResponse response) {
+        validateResponseDraftRevision(request, response);
+
         return new EventParseResponse(
                 "tmp_" + UUID.randomUUID(),
                 response.eventTitle(),
+                response.draftRevision(),
                 response.startDate(),
                 response.dateSource(),
                 response.endDate(),
@@ -66,8 +69,18 @@ public class EventParseService {
         );
     }
 
+    private void validateResponseDraftRevision(EventParseRequest request, EventParseResponse response) {
+        if (response.draftRevision() == null || !response.draftRevision().equals(request.draftRevision())) {
+            throw new BusinessException(EventErrorCode.C102_EVENT_PARSE_500);
+        }
+    }
+
     private void validateEventTitle(EventParseRequest request) {
         if (request == null || !StringUtils.hasText(request.eventTitle())) {
+            throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
+        }
+
+        if (request.draftRevision() == null || request.draftRevision() < 0) {
             throw new BusinessException(EventErrorCode.C101_EVENT_INPUT_400);
         }
     }
@@ -78,3 +91,5 @@ public class EventParseService {
         return new HttpEntity<>(request, headers);
     }
 }
+
+
