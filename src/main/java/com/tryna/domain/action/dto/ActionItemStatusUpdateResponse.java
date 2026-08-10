@@ -4,52 +4,50 @@ import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Schema(description = "E106 준비/실행 항목 상태 변경 응답 DTO")
+@Schema(description = "E106 action item status update response")
 public record ActionItemStatusUpdateResponse(
 
-        @Schema(
-                description = "상태가 변경된 준비/실행 항목 ID",
-                example = "1"
-        )
+        @Schema(description = "Action item ID", example = "1")
         Long actionItemId,
 
-        @Schema(
-                description = "준비/실행 항목이 연결된 일정 ID",
-                example = "2"
-        )
+        @Schema(description = "Parent event ID", example = "10")
         Long parentEventId,
 
-        @Schema(
-                description = "변경된 준비/실행 항목 상태",
-                example = "COMPLETED"
-        )
+        @Schema(description = "Occurrence date whose status was updated", example = "2026-08-25")
+        LocalDate occurrenceDate,
+
+        @Schema(description = "Updated status", example = "COMPLETED")
         ActionItemStatus actionItemStatus,
 
-        @Schema(
-                description = "완료 처리 일시. PENDING으로 되돌린 경우 null입니다.",
-                example = "2026-07-11T02:00:00"
-        )
+        @Schema(description = "Completed datetime. Null when status is PENDING.", example = "2026-08-25T09:00:00")
         LocalDateTime completedAt
 
 ) {
 
-    /**
-     * 상태 변경이 완료된 ActionItems 엔티티를
-     * E106 응답 DTO로 변환합니다.
-     *
-     * @param actionItem 상태가 변경된 준비/실행 항목
-     * @return E106 상태 변경 응답
-     */
+    public static ActionItemStatusUpdateResponse from(ActionItems actionItem) {
+        return from(
+                actionItem,
+                actionItem.getOccurrenceDate(),
+                actionItem.getActionItemStatus(),
+                actionItem.getCompletedAt()
+        );
+    }
+
     public static ActionItemStatusUpdateResponse from(
-            ActionItems actionItem
+            ActionItems actionItem,
+            LocalDate occurrenceDate,
+            ActionItemStatus actionItemStatus,
+            LocalDateTime completedAt
     ) {
         return new ActionItemStatusUpdateResponse(
                 actionItem.getActionItemId(),
                 actionItem.getParentEvent().getEventId(),
-                actionItem.getActionItemStatus(),
-                actionItem.getCompletedAt()
+                occurrenceDate,
+                actionItemStatus,
+                completedAt
         );
     }
 }
