@@ -16,6 +16,42 @@ public enum AlarmErrorCode implements ErrorCode {
             "알람 약관에 미동의 되어 있습니다."
     ),
 
+    F100_ALARM_404(
+            HttpStatus.NOT_FOUND,
+            "F100_ALARM_404",
+            "알람을 찾을 수 없습니다."
+    ),
+
+    F100_ALARMLIST_400_1(
+            HttpStatus.BAD_REQUEST,
+            "F100_ALARMLIST_400_1",
+            "요청한 size 값이 유효한 범위(1~100)를 벗어났습니다."
+    ),
+
+    F100_ALARMLIST_400_2(
+            HttpStatus.BAD_REQUEST,
+            "F100_ALARMLIST_400_2",
+            "잘못된 형식의 cursor 값입니다. 올바른 커서 문자열을 전달해주세요."
+    ),
+
+    F100_ALARMLIST_400_3(
+            HttpStatus.BAD_REQUEST,
+            "F100_ALARMLIST_400_3",
+            "요청 파라미터의 타입이 올바르지 않습니다."
+    ),
+
+    F100_ALARMLIST_409(
+            HttpStatus.CONFLICT,
+            "F100_ALARMLIST_409",
+            "현재 알람 목록을 조회할 수 없는 사용자 상태(예: 탈퇴 처리 중)입니다."
+    ),
+
+    F100_ALARMLIST_500(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "F100_ALARMLIST_500",
+            "알람 목록 조회 중 서버 내부 에러가 발생하였습니다."
+    ),
+
     F100_PUSH_TOKEN_400(
             HttpStatus.BAD_REQUEST,
             "F100_PUSH_TOKEN_400",

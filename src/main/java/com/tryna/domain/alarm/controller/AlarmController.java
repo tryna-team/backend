@@ -3,10 +3,13 @@ package com.tryna.domain.alarm.controller;
 import com.tryna.domain.alarm.controller.docs.AlarmControllerDocs;
 import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
 import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
+import com.tryna.domain.alarm.dto.AlarmDetailResponse;
+import com.tryna.domain.alarm.dto.AlarmListResponse;
 import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
 import com.tryna.domain.alarm.dto.AlarmStateResponse;
 import com.tryna.domain.alarm.dto.EventReminderResponse;
 import com.tryna.domain.alarm.service.AlarmPushTokenService;
+import com.tryna.domain.alarm.service.AlarmQueryService;
 import com.tryna.domain.alarm.service.AlarmStateService;
 import com.tryna.domain.alarm.service.AlarmTermService;
 import com.tryna.domain.reminder.service.AlarmReminderScheduleService;
@@ -17,11 +20,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -32,6 +37,7 @@ public class AlarmController implements AlarmControllerDocs {
     private final AlarmTermService alarmTermService;
     private final AlarmPushTokenService alarmPushTokenService;
     private final AlarmStateService alarmStateService;
+    private final AlarmQueryService alarmQueryService;
     private final AlarmReminderScheduleService alarmReminderScheduleService;
 
     @PostMapping("/term")
@@ -83,6 +89,41 @@ public class AlarmController implements AlarmControllerDocs {
 
         return ResponseEntity.ok(
                 ApiResponse.success("F100_ALARM_STATE_200", message, response)
+        );
+    }
+
+    @GetMapping("/my")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmListResponse>> getMyAlarms(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmListResponse response = alarmQueryService.getMyAlarms(userId, size, cursor);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARMLIST_200", "알람 목록 조회에 성공했습니다.", response)
+        );
+    }
+
+    @GetMapping("/{reminderId}")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmDetailResponse>> getAlarm(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long reminderId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmDetailResponse response = alarmQueryService.getAlarm(userId, reminderId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_200", "알람 단건 조회에 성공했습니다.", response)
         );
     }
 

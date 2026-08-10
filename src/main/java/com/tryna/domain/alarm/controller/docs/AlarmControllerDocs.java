@@ -2,6 +2,8 @@ package com.tryna.domain.alarm.controller.docs;
 
 import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
 import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
+import com.tryna.domain.alarm.dto.AlarmDetailResponse;
+import com.tryna.domain.alarm.dto.AlarmListResponse;
 import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
 import com.tryna.domain.alarm.dto.AlarmStateResponse;
 import com.tryna.domain.alarm.dto.EventReminderResponse;
@@ -15,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Tag(name = "Alarms", description = "알람 약관 및 발송 설정 API")
 public interface AlarmControllerDocs {
@@ -57,6 +60,32 @@ public interface AlarmControllerDocs {
     @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
             @Parameter(hidden = true) @AuthenticationPrincipal Long userId
+    );
+
+    @Operation(
+            summary = "F100 알람 목록 조회",
+            description = """
+                    로그인한 사용자의 알람 목록을 updated_at 최신순으로 커서 페이징 조회합니다.
+                    size 기본값은 10이며, 허용 범위는 1~100입니다.
+                    """,
+            operationId = "getMyAlarms"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmListResponse>> getMyAlarms(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
+            @Parameter(description = "한 번에 가져올 데이터 개수 (기본값 10)") @RequestParam(required = false) Integer size,
+            @Parameter(description = "이전 응답의 nextCursor 값") @RequestParam(required = false) String cursor
+    );
+
+    @Operation(
+            summary = "F100 알람 단건 조회",
+            description = "로그인한 사용자 소유의 알람(reminder) 단건을 조회합니다.",
+            operationId = "getAlarm"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmDetailResponse>> getAlarm(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회할 알람 ID") @PathVariable Long reminderId
     );
 
     @Operation(

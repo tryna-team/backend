@@ -69,6 +69,8 @@ public class GlobalExceptionHandler {
             errorCode = LabelErrorCode.B108_LABEL_CREATE_400;
         } else if ("/api/v1/alarms/push-token".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
             errorCode = AlarmErrorCode.F100_PUSH_TOKEN_400;
+        } else if (requestUri.startsWith("/api/v1/alarms/my") && "GET".equalsIgnoreCase(method)) {
+            errorCode = AlarmErrorCode.F100_ALARMLIST_400_3;
         }
 
         return ResponseEntity
