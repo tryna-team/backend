@@ -1,6 +1,8 @@
 package com.tryna.domain.auth.service;
 
-import com.tryna.domain.label.service.DefaultLabelService;
+import com.tryna.domain.label.entity.Labels;
+import com.tryna.domain.label.enums.LabelColor;
+import com.tryna.domain.label.repository.LabelsRepository;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.repository.UserRepository;
@@ -10,13 +12,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 @Service
 @RequiredArgsConstructor
 public class GuestSignupService {
 
     private final UserRepository userRepository;
     private final UserSettingsRepository userSettingsRepository;
-    private final DefaultLabelService defaultLabelService;
+    private final LabelsRepository labelsRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Users registerNewGuest(String guestId) {
@@ -28,8 +32,16 @@ public class GuestSignupService {
         UserSettings settings = UserSettings.createDefault(targetUser);
         userSettingsRepository.save(settings);
 
-        // 3. 기본 라벨 생성 (유저, 설정과 함께 무조건 한 세트로 커밋/롤백되도록 원자성 보장)
-        defaultLabelService.createDefaultLabel(targetUser);
+        // 3. Labels 엔티티의 정적 팩토리 메서드(createDefault)를 활용한 기본 라벨 생성
+        String defaultLabelName = "기본";
+        Labels defaultLabel = Labels.createDefault(
+                targetUser,
+                defaultLabelName,
+                defaultLabelName.toLowerCase(Locale.ROOT),
+                LabelColor.GREEN,
+                1
+        );
+        labelsRepository.save(defaultLabel);
 
         return targetUser;
     }

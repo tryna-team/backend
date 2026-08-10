@@ -9,10 +9,8 @@ import com.tryna.domain.external.enums.ConnectionStatus;
 import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
 import com.tryna.domain.user.dto.*;
 import com.tryna.domain.user.entity.Users;
-import com.tryna.domain.user.entity.UserSettings;
 import com.tryna.domain.user.enums.UserRole;
 import com.tryna.domain.user.repository.UserRepository;
-import com.tryna.domain.user.repository.UserSettingsRepository;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.exception.UserErrorCode;
 import com.tryna.global.security.jwt.JwtTokenProvider;
@@ -21,9 +19,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.dao.DataIntegrityViolationException;
-
-import com.tryna.domain.label.service.DefaultLabelService;
 
 import java.util.List;
 import java.util.Optional;

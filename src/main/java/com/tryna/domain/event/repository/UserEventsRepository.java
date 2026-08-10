@@ -9,8 +9,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-import com.tryna.domain.event.enums.SourceType;
-import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.domain.label.entity.Labels;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;

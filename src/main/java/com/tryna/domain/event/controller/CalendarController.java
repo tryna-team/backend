@@ -4,18 +4,12 @@ import com.tryna.domain.event.controller.docs.CalendarControllerDocs;
 import com.tryna.domain.event.dto.CalendarDateEventsResponse;
 import com.tryna.domain.event.dto.CalendarMainResponse;
 import com.tryna.domain.event.service.EventQueryService;
-import com.tryna.domain.external.CalendarSyncRequestedEvent;
-import com.tryna.domain.external.service.CalendarSyncService;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeParseException;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,7 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class CalendarController implements CalendarControllerDocs {
 
     private final EventQueryService eventQueryService;
-    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     @GetMapping("/main")
