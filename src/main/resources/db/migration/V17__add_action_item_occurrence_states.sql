@@ -1,4 +1,4 @@
-﻿CREATE TABLE action_item_occurrence_states (
+CREATE TABLE action_item_occurrence_states (
     action_item_occurrence_state_id BIGSERIAL PRIMARY KEY,
     action_item_id BIGINT NOT NULL,
     occurrence_date DATE NOT NULL,

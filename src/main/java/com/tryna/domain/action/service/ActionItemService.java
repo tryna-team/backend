@@ -299,22 +299,26 @@ public class ActionItemService {
             throw new BusinessException(CommonErrorCode.COMMON_403);
         }
 
-        LocalDate occurrenceDate = resolveOccurrenceDate(
-                actionItem.getParentEvent(),
-                request.occurrenceDate() == null ? actionItem.getOccurrenceDate() : request.occurrenceDate()
-        );
+        boolean recurringParent = Boolean.TRUE.equals(actionItem.getParentEvent().getIsRecurring());
+        LocalDate occurrenceDate = request.occurrenceDate() == null
+                ? actionItem.getOccurrenceDate()
+                : request.occurrenceDate();
 
-        if (!isValidOccurrenceDate(actionItem.getParentEvent(), occurrenceDate)) {
+        if (occurrenceDate == null) {
             throw new BusinessException(ActionErrorCode.E106_ACTION_ITEM_400);
         }
 
-        if (Boolean.TRUE.equals(actionItem.getParentEvent().getIsRecurring())) {
-            ActionItemOccurrenceStates occurrenceState = actionItemOccurrenceStatesRepository
-                    .findByActionItem_ActionItemIdAndOccurrenceDate(actionItemId, occurrenceDate)
-                    .orElseGet(() -> ActionItemOccurrenceStates.create(actionItem, occurrenceDate));
+        if ((recurringParent || request.occurrenceDate() != null)
+                && !isValidOccurrenceDate(actionItem.getParentEvent(), occurrenceDate)) {
+            throw new BusinessException(ActionErrorCode.E106_ACTION_ITEM_400);
+        }
 
-            occurrenceState.updateStatus(requestedStatus);
-            actionItemOccurrenceStatesRepository.save(occurrenceState);
+        if (recurringParent) {
+            ActionItemOccurrenceStates occurrenceState = findOrCreateOccurrenceState(
+                    actionItem,
+                    occurrenceDate,
+                    requestedStatus
+            );
 
             return ActionItemStatusUpdateResponse.from(
                     actionItem,
@@ -326,6 +330,24 @@ public class ActionItemService {
 
         actionItem.updateStatus(requestedStatus);
         return ActionItemStatusUpdateResponse.from(actionItem, occurrenceDate, actionItem.getActionItemStatus(), actionItem.getCompletedAt());
+    }
+
+    private ActionItemOccurrenceStates findOrCreateOccurrenceState(
+            ActionItems actionItem,
+            LocalDate occurrenceDate,
+            ActionItemStatus requestedStatus
+    ) {
+        actionItemOccurrenceStatesRepository.insertPendingStateIfAbsent(
+                actionItem.getActionItemId(),
+                occurrenceDate
+        );
+
+        ActionItemOccurrenceStates state = actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdAndOccurrenceDate(actionItem.getActionItemId(), occurrenceDate)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.COMMON_500));
+
+        state.updateStatus(requestedStatus);
+        return actionItemOccurrenceStatesRepository.save(state);
     }
 
     public EventActionItemResponse getEventActionItems(
@@ -415,9 +437,13 @@ public class ActionItemService {
     }
 
     private LocalDate parseOccurrenceDate(String dateText, ActionErrorCode errorCode) {
+        if (dateText == null) {
+            throw new BusinessException(errorCode);
+        }
+
         try {
             return LocalDate.parse(dateText);
-        } catch (DateTimeParseException | NullPointerException e) {
+        } catch (DateTimeParseException e) {
             throw new BusinessException(errorCode);
         }
     }

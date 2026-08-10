@@ -18,7 +18,7 @@ import java.util.Optional;
 
 public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> {
 
-    // ?④굔 以鍮???ぉ(???? ??젣??(ActionItem ?꾨찓?몄뿉???ъ슜)
+    // 단건 준비 항목(할 일) 삭제용 (ActionItem 도메인에서 사용)
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ActionItems a
@@ -86,20 +86,20 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * ??젣?섏? ?딆? 以鍮??ㅽ뻾 ??ぉ??ID濡?議고쉶?⑸땲??
+     * 삭제되지 않은 준비/실행 항목을 ID로 조회합니다.
      *
-     * @param actionItemId 以鍮??ㅽ뻾 ??ぉ ID
-     * @return ??젣?섏? ?딆? 以鍮??ㅽ뻾 ??ぉ
+     * @param actionItemId 준비/실행 항목 ID
+     * @return 삭제되지 않은 준비/실행 항목
      */
     Optional<ActionItems> findByActionItemIdAndDeletedAtIsNull(
             Long actionItemId
     );
 
     /**
-     * ?뱀젙 諛섎났 ?쇱젙?먯꽌 湲곗? ?뚯감 ?댄썑??以鍮??ㅽ뻾 ??ぉ??議고쉶?⑸땲??
+     * 특정 반복 일정에서 기준 회차 이후의 준비/실행 항목을 조회합니다.
      *
-     * THIS_AND_FUTURE ?섏젙 ??湲곗? ?뚯감 ?댄썑????ぉ??
-     * ??諛섎났 ?쒕━利덈줈 蹂듭궗?섍린 ?꾪빐 ?ъ슜?⑸땲??
+     * THIS_AND_FUTURE 수정 시 기준 회차 이후의 항목을
+     * 새 반복 시리즈로 복사하기 위해 사용합니다.
      */
     List<ActionItems>
     findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
@@ -108,13 +108,13 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * ?뱀젙 ?쇱젙???곌껐????젣?섏? ?딆? 以鍮??ㅽ뻾 ??ぉ??議고쉶?⑸땲??
+     * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
      *
-     * ?쇱젙 ?곸꽭 ?붾㈃?먯꽌 ?쇱젙???쒖꽌濡??쒖떆?????덈룄濡?
-     * ?쒖떆 ?좎쭨, ?쒖떆 ?쇱떆, ??ぉ ID ?쒖쑝濡??뺣젹?⑸땲??
+     * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
+     * 표시 날짜, 표시 일시, 항목 ID 순으로 정렬합니다.
      *
-     * @param eventId ?쇱젙 ID
-     * @return ?쇱젙???곌껐??以鍮??ㅽ뻾 ??ぉ 紐⑸줉
+     * @param eventId 일정 ID
+     * @return 일정에 연결된 준비/실행 항목 목록
      */
     @EntityGraph(attributePaths = "parentEvent")
     List<ActionItems>
@@ -123,14 +123,14 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * ?뱀젙 ?쇱젙???곌껐????젣?섏? ?딆? 以鍮??ㅽ뻾 ??ぉ??議고쉶?⑸땲??
+     * 특정 일정에 연결된 삭제되지 않은 준비/실행 항목을 조회합니다.
      *
-     * ?쇱젙 ?곸꽭 ?붾㈃?먯꽌 ?쇱젙???쒖꽌濡??쒖떆?????덈룄濡?
-     * ?쒖떆 ?좎쭨, ?쒖떆 ?쇱떆, ??ぉ ID ?쒖쑝濡??뺣젹?⑸땲??
+     * 일정 상세 화면에서 일정한 순서로 표시할 수 있도록
+     * 표시 날짜, 표시 일시, 항목 ID 순으로 정렬합니다.
      *
-     * @param eventId ?쇱젙 ID
-     * @param occurrenceDate 諛섎났 ?뚯감 ?뚯냽 ?좎쭨
-     * @return ?쇱젙???곌껐??以鍮??ㅽ뻾 ??ぉ 紐⑸줉
+     * @param eventId 일정 ID
+     * @param occurrenceDate 반복 회차 소속 날짜
+     * @return 일정에 연결된 준비/실행 항목 목록
      */
     @EntityGraph(attributePaths = "parentEvent")
     List<ActionItems>
@@ -144,13 +144,16 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * ?꾩옱 ?ъ슜?먯쓽 ?쇱젙???곌껐????ぉ 以?
-     * ?좏깮???좎쭨???쒖떆???쒓컙???ㅽ뻾 ??ぉ??議고쉶?⑸땲??
+     * 현재 사용자의 일정에 연결된 항목 중
+     * 선택한 날짜에 표시할 시간형 실행 항목을 조회합니다.
      *
-     * @param userId ?꾩옱 ?ъ슜??ID
-     * @param date 議고쉶 ?좎쭨
-     * @param itemType ??ぉ ?좏삎
-     * @return ?쒓컙???ㅽ뻾 ??ぉ 紐⑸줉
+     * 반복 일정의 offset 기반 항목은 조회 시점에 동적으로 계산하므로
+     * 이 쿼리에서는 원본 displayDate가 직접 일치하는 항목만 조회합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param date 조회 날짜
+     * @param itemType 항목 유형
+     * @return 시간형 실행 항목 목록
      */
     @Query("""
             SELECT a
@@ -169,6 +172,13 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("date") LocalDate date,
             @Param("itemType") ItemType itemType
     );
+
+    /**
+     * 반복 일정에 연결된 시간형 실행 항목 후보를 조회합니다.
+     *
+     * 실제 조회일에 노출 가능한 회차인지는 서비스에서
+     * offsetDays와 반복 규칙을 함께 계산해 최종 필터링합니다.
+     */
     @Query("""
             SELECT a
               FROM ActionItems a
@@ -186,7 +196,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("itemType") ItemType itemType
     );
 
-    // ?뚯썝 ?덊눜 ???꾩껜 以鍮???ぉ 踰뚰겕 ??젣??(User ?꾨찓???덊눜 濡쒖쭅?먯꽌 ?ъ슜)
+    // 회원 탈퇴 시 전체 준비 항목 벌크 삭제용 (User 도메인 탈퇴 로직에서 사용)
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ActionItems a
@@ -205,16 +215,16 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * ?꾩옱 ?ъ슜?먯쓽 Tryna ?대? ?쇱젙???곌껐??以鍮??ㅽ뻾 ??ぉ 以?
-     * ?쒕ぉ??寃?됱뼱媛 ?ы븿????ぉ??議고쉶?⑸땲??
+     * 현재 사용자의 Tryna 내부 일정에 연결된 준비/실행 항목 중
+     * 제목에 검색어가 포함된 항목을 조회합니다.
      *
-     * ??젣????ぉ, ?몃? 罹섎┛???쇱젙???곌껐????ぉ,
-     * 寃??寃곌낵???몄텧?섏? ?딅뒗 ?곹깭???쇱젙???곌껐????ぉ? ?쒖쇅?⑸땲??
+     * 삭제된 항목, 외부 캘린더 일정에 연결된 항목,
+     * 검색 결과에 노출하지 않는 상태의 일정에 연결된 항목은 제외합니다.
      *
-     * @param userId ?꾩옱 ?ъ슜??ID
-     * @param keyword 寃???ㅼ썙??
-     * @param eventStatuses 寃??媛?ν븳 ?쇱젙 ?곹깭
-     * @return ?쒕ぉ??寃?됱뼱? ?쇱튂??以鍮??ㅽ뻾 ??ぉ 紐⑸줉
+     * @param userId 현재 사용자 ID
+     * @param keyword 검색 키워드
+     * @param eventStatuses 검색 가능한 일정 상태
+     * @return 제목이 검색어와 일치한 준비/실행 항목 목록
      */
     @Query("""
             SELECT a
@@ -234,10 +244,10 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * 諛섎났 ?쇱젙???뱀젙 ?뚯감???랁븳 以鍮??ㅽ뻾 ??ぉ??soft delete ?⑸땲??
+     * 반복 일정의 특정 회차에 속한 준비/실행 항목을 soft delete 합니다.
      *
-     * SINGLE ?쇱젙 ?섏젙 ???먮낯 ?뚯감????ぉ??
-     * 以묐났 ?몄텧?섏? ?딅룄濡?泥섎━?섍린 ?꾪빐 ?ъ슜?⑸땲??
+     * SINGLE 일정 수정 후 원본 회차의 항목이
+     * 중복 노출되지 않도록 처리하기 위해 사용합니다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -254,10 +264,10 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
-     * 諛섎났 ?쇱젙??湲곗? ?뚯감 ?댄썑 以鍮??ㅽ뻾 ??ぉ??紐⑤몢 soft delete ?⑸땲??
+     * 반복 일정의 기준 회차 이후 준비/실행 항목을 모두 soft delete 합니다.
      *
-     * THIS_AND_FUTURE ?쇱젙 ?섏젙 ??湲곗〈 ?쒕━利덉쓽 ?댄썑 ?뚯감 ??ぉ??
-     * ???쒕━利덉쓽 蹂듭궗 ??ぉ怨?以묐났?섏? ?딅룄濡?泥섎━?⑸땲??
+     * THIS_AND_FUTURE 일정 수정 후 기존 시리즈의 이후 회차 항목이
+     * 새 시리즈의 복사 항목과 중복되지 않도록 처리합니다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -273,4 +283,3 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("deletedAt") LocalDateTime deletedAt
     );
 }
-
