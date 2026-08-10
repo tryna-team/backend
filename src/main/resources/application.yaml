@@ -16,3 +16,6 @@ oauth2:
   google:
     token-url: https://oauth2.googleapis.com/token
     calendar-url: https://www.googleapis.com/calendar/v3/calendars/primary/events
+
+firebase:
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
