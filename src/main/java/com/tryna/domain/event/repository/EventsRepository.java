@@ -135,17 +135,17 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
             @Param("deletedAt") LocalDateTime deletedAt
     );
 
-    // 재연동 시 캘린더 ID가 바뀌었거나 NULL이 되었어도, 유저 ID와 구글 이벤트 ID로 삭제된(DELETED) 기존 일정까지 포함하여 단건 조회 (Native Query로 @SQLRestriction 간섭 우회)
+    // 유저 ID와 외부 이벤트 ID 목록으로 삭제된(DELETED) 기존 일정까지 포함하여 한 번에 조회 (Native Query)
     @Query(value = """
             SELECT e.* 
               FROM events e
               JOIN user_events ue ON ue.event_id = e.event_id
              WHERE ue.user_id = :userId
-               AND e.external_event_id = :externalEventId
+               AND e.external_event_id IN (:externalEventIds)
                AND e.source_type = 'EXTERNAL_CALENDAR'
             """, nativeQuery = true)
-    Optional<Events> findIncludingDeletedByUserIdAndExternalEventId(
+    List<Events> findAllIncludingDeletedByUserIdAndExternalEventIdIn(
             @Param("userId") Long userId,
-            @Param("externalEventId") String externalEventId
+            @Param("externalEventIds") Collection<String> externalEventIds
     );
 }

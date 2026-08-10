@@ -28,7 +28,13 @@ public class GoogleCalendarClient {
     @Value("${oauth2.google.calendar-url}")
     private String calendarApiUrl;
 
+    // 기존 4개 파라미터 호출을 위한 편의 메서드 (호환성 유지)
     public Map<String, Object> fetchEvents(String accessToken, LocalDateTime lastSyncedAt, ZonedDateTime timeMin, ZonedDateTime timeMax) {
+        return fetchEvents(accessToken, lastSyncedAt, timeMin, timeMax, null);
+    }
+
+    // 5개 파라미터 (pageToken 지원)를 받는 핵심 메서드
+    public Map<String, Object> fetchEvents(String accessToken, LocalDateTime lastSyncedAt, ZonedDateTime timeMin, ZonedDateTime timeMax, String pageToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         HttpEntity<Void> request = new HttpEntity<>(headers);
@@ -46,6 +52,12 @@ public class GoogleCalendarClient {
         } else {
             // 최초 동기화
             uriTemplate += "&orderBy=startTime";
+        }
+
+        // 페이지네이션 토큰이 존재하면 쿼리 파라미터 추가
+        if (pageToken != null && !pageToken.isBlank()) {
+            uriTemplate += "&pageToken={pageToken}";
+            uriVariables.add(pageToken);
         }
 
         try {

@@ -225,7 +225,7 @@ public class EventQueryService {
      * 준비/실행 항목만 매칭된 경우 부모 일정은 별도의 EVENT 결과로 반환하지 않고,
      * ACTION_ITEM 결과에 부모 일정 정보를 포함합니다.
      *
-     * @param userId 현재 인증된 사용자 ID
+     * @param userId       현재 인증된 사용자 ID
      * @param keywordValue 검색 키워드
      * @return 일정 및 준비/실행 항목 키워드 검색 결과
      */
@@ -838,9 +838,17 @@ public class EventQueryService {
      * 캘린더 메인 조회 + 10초 쿨다운 조건부 동기화 이벤트 발행
      */
     @Transactional
-    public CalendarMainResponse getCalendarMainWithSyncCheck(Long userId, Integer year, Integer month, String selectedDate) {
+    public CalendarMainResponse getCalendarMainWithSyncCheck(Long userId, Integer year, Integer month, String selectedDateValue) {
+        // 1. 모든 파라미터(유저, 연월, 선택된 날짜) 검증을 동기화 이벤트 발행 전에 모두 수행
+        validateUserId(userId);
+        validateYearMonth(year, month, EventErrorCode.B101_CALENDAR_MAIN_400);
+        LocalDate selectedDate = parseDate(selectedDateValue, EventErrorCode.B101_CALENDAR_MAIN_400);
+        validateSelectedDateInMonth(year, month, selectedDate);
+
+        // 2. 검증을 모두 통과한 안전한 상태에서만 동기화 이벤트 발행
         publishSyncEventIfNeeded(userId, year);
-        return getCalendarMain(userId, year, month, selectedDate);
+
+        return getCalendarMain(userId, year, month, selectedDateValue);
     }
 
     /**
@@ -848,15 +856,19 @@ public class EventQueryService {
      */
     @Transactional
     public CalendarDateEventsResponse getDateEventsWithSyncCheck(Long userId, String date) {
+        // 1. 유저 ID 및 날짜 파싱 검증을 이벤트 발행 전에 수행
+        validateUserId(userId);
         LocalDate parsed = parseDate(date, EventErrorCode.B103_CALENDAR_DATE_EVENTS_400);
         int year = parsed.getYear();
 
+        // 2. 검증 통과 후 안전하게 이벤트 발행
         publishSyncEventIfNeeded(userId, year);
+
         return getDateEvents(userId, date);
     }
 
     /**
-     * 마지막 동기화 시점으로부터 3분이 지났거나, 동기화 기록이 없는 경우에만
+     * 마지막 동기화 시점으로부터 10초가 지났거나, 동기화 기록이 없는 경우에만
      * 중복 방지를 위해 동기화 이벤트를 발행합니다.
      */
     private void publishSyncEventIfNeeded(Long userId, Integer year) {
@@ -864,10 +876,16 @@ public class EventQueryService {
                 externalCalendarConnectionsRepository.findByUser_UserIdAndProvider(userId, com.tryna.domain.auth.enums.Provider.GOOGLE);
 
         boolean shouldSync = connectionOpt.map(conn -> {
+            // 1. 현재 동기화가 진행 중이라면 추가 동기화 요청을 막음
+            if ("IN_PROGRESS".equals(conn.getLastSyncStatus())) {
+                return false;
+            }
+
+            // 2. 마지막 동기화 시간 체크
             LocalDateTime lastSyncedAt = conn.getLastSyncedAt();
             // 동기화 기록이 없거나, 마지막 동기화로부터 10초가 지난 경우에만 true
             return lastSyncedAt == null || lastSyncedAt.plusSeconds(10).isBefore(LocalDateTime.now());
-        }).orElse(true); // 연동 정보가 없으면 우선 발행
+        }).orElse(false); // 연동 정보가 없으면 발행하지 않음
 
         if (shouldSync) {
             applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
