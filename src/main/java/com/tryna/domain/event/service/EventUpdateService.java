@@ -2,7 +2,6 @@ package com.tryna.domain.event.service;
 
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
-import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
