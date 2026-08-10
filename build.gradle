@@ -49,6 +49,7 @@ dependencies {
 
 	// Firebase Admin SDK
 	implementation 'com.google.firebase:firebase-admin:9.10.0'
+	implementation 'com.google.auth:google-auth-library-oauth2-http:1.47.0'
 }
 
 tasks.named('jar') {
