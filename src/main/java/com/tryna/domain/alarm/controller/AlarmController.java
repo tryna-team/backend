@@ -4,8 +4,10 @@ import com.tryna.domain.alarm.controller.docs.AlarmControllerDocs;
 import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
 import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
 import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
+import com.tryna.domain.alarm.dto.AlarmStateResponse;
 import com.tryna.domain.alarm.dto.EventReminderResponse;
 import com.tryna.domain.alarm.service.AlarmPushTokenService;
+import com.tryna.domain.alarm.service.AlarmStateService;
 import com.tryna.domain.alarm.service.AlarmTermService;
 import com.tryna.domain.reminder.service.AlarmReminderScheduleService;
 import com.tryna.global.exception.AuthErrorCode;
@@ -29,6 +31,7 @@ public class AlarmController implements AlarmControllerDocs {
 
     private final AlarmTermService alarmTermService;
     private final AlarmPushTokenService alarmPushTokenService;
+    private final AlarmStateService alarmStateService;
     private final AlarmReminderScheduleService alarmReminderScheduleService;
 
     @PostMapping("/term")
@@ -61,6 +64,25 @@ public class AlarmController implements AlarmControllerDocs {
 
         return ResponseEntity.ok(
                 ApiResponse.success("F100_PUSH_TOKEN_200", "푸시 토큰 발급에 성공했습니다.", null)
+        );
+    }
+
+    @PatchMapping("/state")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
+            @AuthenticationPrincipal Long userId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmStateResponse response = alarmStateService.toggleAlarmState(userId);
+        String message = response.alarmState()
+                ? "알람 활성화에 성공했습니다."
+                : "알람 비활성화에 성공했습니다.";
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_STATE_200", message, response)
         );
     }
 

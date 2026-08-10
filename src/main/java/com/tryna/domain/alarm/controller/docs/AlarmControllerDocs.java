@@ -3,6 +3,7 @@ package com.tryna.domain.alarm.controller.docs;
 import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
 import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
 import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
+import com.tryna.domain.alarm.dto.AlarmStateResponse;
 import com.tryna.domain.alarm.dto.EventReminderResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,6 +44,19 @@ public interface AlarmControllerDocs {
     ResponseEntity<ApiResponse<Void>> registerPushToken(
             @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
             @Valid @RequestBody AlarmPushTokenRequest request
+    );
+
+    @Operation(
+            summary = "F100 알람 접근 권한 활성화/비활성화",
+            description = """
+                    사용자의 알람 발송 상태(alarm_state)를 토글합니다.
+                    비활성(false)에서 활성(true)으로 전환하려면 ALARM 약관 동의 이력이 필요합니다.
+                    """,
+            operationId = "toggleAlarmState"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
     );
 
     @Operation(

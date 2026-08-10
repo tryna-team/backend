@@ -10,6 +10,12 @@ public enum AlarmErrorCode implements ErrorCode {
             "알람 약관 동의를 거절했습니다."
     ),
 
+    F100_ALARM_STATE_400(
+            HttpStatus.BAD_REQUEST,
+            "F100_ALARM_STATE_400",
+            "알람 약관에 미동의 되어 있습니다."
+    ),
+
     F100_PUSH_TOKEN_400(
             HttpStatus.BAD_REQUEST,
             "F100_PUSH_TOKEN_400",
