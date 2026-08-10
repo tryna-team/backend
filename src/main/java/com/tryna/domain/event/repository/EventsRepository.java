@@ -15,7 +15,18 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
 
-    List<Events> findByExternalCalendarAndExternalEventIdIn(ExternalCalendars externalCalendar, Collection<String> externalEventIds);
+    @Query(value = """
+            SELECT e.* 
+              FROM events e
+              JOIN user_events ue ON ue.event_id = e.event_id
+             WHERE ue.user_id = :userId
+               AND e.external_event_id IN :externalEventIds
+               AND e.source_type = 'EXTERNAL_CALENDAR'
+            """, nativeQuery = true)
+    List<Events> findAllIncludingDeletedByUserIdAndExternalEventIdIn(
+            @Param("userId") Long userId,
+            @Param("externalEventIds") List<String> externalEventIds
+    );
 
     @Query("""
             SELECT COUNT(e) > 0

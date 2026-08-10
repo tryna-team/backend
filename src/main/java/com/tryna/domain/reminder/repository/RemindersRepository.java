@@ -111,4 +111,13 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
              WHERE r.user.userId = :userId
             """)
     int deleteByUserId(@Param("userId") Long userId);
+
+    // 부모 일정이 Soft Delete 될 때, 해당 일정 및 하위 실행 항목들에 걸려있는 리마인드를 한 번에 물리 삭제
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            DELETE FROM Reminders r
+             WHERE r.targetEvent.eventId = :eventId
+                OR r.targetActionItem.parentEvent.eventId = :eventId
+            """)
+    int deleteByEventIdCascade(@Param("eventId") Long eventId);
 }

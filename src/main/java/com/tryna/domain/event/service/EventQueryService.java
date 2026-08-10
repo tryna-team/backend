@@ -9,7 +9,6 @@ import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.enums.RecurringEventExceptionType;
-import com.tryna.domain.event.enums.SourceType;
 import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.RecurringEventExceptionsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
@@ -834,29 +833,23 @@ public class EventQueryService {
     }
 
     /**
-     * 캘린더 메인 조회 + 연도별 일정 부재 시 동기화 이벤트 발행 (트랜잭션 보장)
+     * 캘린더 메인 조회 + 연도별 최신 동기화 이벤트 발행 (트랜잭션 보장)
      */
     @Transactional
     public CalendarMainResponse getCalendarMainWithSyncCheck(Long userId, Integer year, Integer month, String selectedDate) {
-        boolean hasYearEvents = hasEventsInYear(userId, year);
-        if (!hasYearEvents) {
-            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
-        }
+        applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
         return getCalendarMain(userId, year, month, selectedDate);
     }
 
     /**
-     * 날짜별 일정 조회 + 연도별 일정 부재 시 동기화 이벤트 발행 (트랜잭션 보장)
+     * 날짜별 일정 조회 + 연도별 최신 동기화 이벤트 발행 (트랜잭션 보장)
      */
     @Transactional
     public CalendarDateEventsResponse getDateEventsWithSyncCheck(Long userId, String date) {
-        LocalDate parsed = LocalDate.parse(date);
+        LocalDate parsed = parseDate(date, EventErrorCode.B103_CALENDAR_DATE_EVENTS_400);
         int year = parsed.getYear();
 
-        boolean hasYearEvents = hasEventsInYear(userId, year);
-        if (!hasYearEvents) {
-            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
-        }
+        applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
         return getDateEvents(userId, date);
     }
 }
