@@ -13,7 +13,7 @@ import java.util.Optional;
 
 public interface ActionItemOccurrenceStatesRepository extends JpaRepository<ActionItemOccurrenceStates, Long> {
 
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Modifying(flushAutomatically = true)
     @Query(value = """
             INSERT INTO action_item_occurrence_states (
                 action_item_id,

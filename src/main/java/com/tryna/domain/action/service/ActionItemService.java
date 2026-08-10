@@ -13,6 +13,7 @@ import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemOccurrenceStatesRepository;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.entity.Events;
+import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.repository.EventsRepository;
@@ -142,7 +143,7 @@ public class ActionItemService {
                         return true;
                     }
 
-                    return hasInvalidDisplayFields(item);
+                    return hasInvalidDisplayFields(item, event);
                 });
 
         if (hasInvalidItem) {
@@ -150,9 +151,10 @@ public class ActionItemService {
         }
     }
 
-    private boolean hasInvalidDisplayFields(ActionItemSaveRequest.Item item) {
+    private boolean hasInvalidDisplayFields(ActionItemSaveRequest.Item item, Events event) {
         return switch (item.itemType()) {
-            case TIMED_ACTION -> item.displayDate() == null;
+            case TIMED_ACTION -> item.displayDate() == null
+                    || (Boolean.TRUE.equals(event.getIsRecurring()) && item.offsetDays() == null);
             case UNTIMED_PREP -> item.displayDate() != null || item.displayTime() != null;
             case UNRESOLVED -> false;
         };
@@ -370,7 +372,11 @@ public class ActionItemService {
             }
 
             List<ActionItems> actionItems = actionItemsRepository
-                    .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(eventId);
+                    .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(eventId)
+                    .stream()
+                    .filter(item -> item.getOffsetDays() != null
+                            || occurrenceDate.equals(item.getOccurrenceDate()))
+                    .toList();
 
             return EventActionItemResponse.fromOccurrence(
                     eventId,
@@ -405,7 +411,7 @@ public class ActionItemService {
                 .toList());
 
         List<ActionItems> recurringCandidates = actionItemsRepository
-                .findRecurringTimedActionItemsByUserId(userId, ItemType.TIMED_ACTION);
+                .findRecurringTimedActionItemsByUserId(userId, date, date.atStartOfDay(), ItemType.TIMED_ACTION, visibleActionItemEventStatuses());
 
         List<RecurringActionItemOccurrence> recurringOccurrences = recurringCandidates.stream()
                 .map(actionItem -> toRecurringActionItemOccurrence(actionItem, date))
@@ -434,6 +440,10 @@ public class ActionItemService {
                 .toList();
 
         return TimedActionItemResponse.of(date, sortedItems);
+    }
+
+    private List<EventStatus> visibleActionItemEventStatuses() {
+        return List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION);
     }
 
     private LocalDate parseOccurrenceDate(String dateText, ActionErrorCode errorCode) {

@@ -3,7 +3,6 @@ package com.tryna.domain.action.repository;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.event.enums.EventStatus;
-import com.tryna.domain.event.enums.SourceType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -186,6 +185,9 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
               JOIN UserEvents ue ON ue.event = e
              WHERE ue.user.userId = :userId
                AND e.isRecurring = true
+               AND e.startDate <= :date
+               AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :dateStart)
+               AND e.eventStatus IN :eventStatuses
                AND a.itemType = :itemType
                AND a.offsetDays IS NOT NULL
                AND a.deletedAt IS NULL
@@ -193,7 +195,10 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             """)
     List<ActionItems> findRecurringTimedActionItemsByUserId(
             @Param("userId") Long userId,
-            @Param("itemType") ItemType itemType
+            @Param("date") LocalDate date,
+            @Param("dateStart") LocalDateTime dateStart,
+            @Param("itemType") ItemType itemType,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     // 회원 탈퇴 시 전체 준비 항목 벌크 삭제용 (User 도메인 탈퇴 로직에서 사용)
