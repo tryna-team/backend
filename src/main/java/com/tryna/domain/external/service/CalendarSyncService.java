@@ -244,7 +244,10 @@ public class CalendarSyncService {
                             .toList();
 
                     // Batch Select 실행
-                    List<Events> existingEvents = eventsRepository.findAllIncludingDeletedByUserIdAndExternalEventIdIn(user.getUserId(), googleEventIds);
+                    List<Events> existingEvents = eventsRepository.findAllIncludingDeletedByExternalCalendarIdAndExternalEventIdIn(
+                            externalCalendar.getExternalCalendarId(),
+                            googleEventIds
+                    );
 
                     // 중복 키 에러 방어 로직 추가
                     Map<String, Events> existingEventsMap = existingEvents.stream()

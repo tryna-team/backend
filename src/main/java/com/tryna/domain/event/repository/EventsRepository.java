@@ -19,12 +19,12 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
             SELECT e.* 
               FROM events e
               JOIN user_events ue ON ue.event_id = e.event_id
-             WHERE ue.user_id = :userId
+             WHERE e.external_calendar_id = :externalCalendarId
                AND e.external_event_id IN :externalEventIds
                AND e.source_type = 'EXTERNAL_CALENDAR'
             """, nativeQuery = true)
-    List<Events> findAllIncludingDeletedByUserIdAndExternalEventIdIn(
-            @Param("userId") Long userId,
+    List<Events> findAllIncludingDeletedByExternalCalendarIdAndExternalEventIdIn(
+            @Param("externalCalendarId") Long externalCalendarId,
             @Param("externalEventIds") List<String> externalEventIds
     );
 
