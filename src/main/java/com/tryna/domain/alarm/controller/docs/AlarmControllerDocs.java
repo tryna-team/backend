@@ -1,6 +1,9 @@
 package com.tryna.domain.alarm.controller.docs;
 
+import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
+import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
 import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
+import com.tryna.domain.alarm.dto.EventReminderResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -9,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "Alarms", description = "알람 약관 및 발송 설정 API")
@@ -39,5 +43,47 @@ public interface AlarmControllerDocs {
     ResponseEntity<ApiResponse<Void>> registerPushToken(
             @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
             @Valid @RequestBody AlarmPushTokenRequest request
+    );
+
+    @Operation(
+            summary = "F101 일정 리마인드 알람 생성",
+            description = """
+                    일정 최종 저장 직후 호출되어 해당 일정의 리마인드 푸시 알람을 예약합니다.
+                    일정 시작 하루 전(종일 일정은 당일 오전 7시)에 발송되도록 Redis 지연 큐에 스케줄링합니다.
+                    """,
+            operationId = "createEventReminder"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<EventReminderResponse>> createEventReminder(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
+            @Parameter(description = "알람을 예약할 일정 ID") @PathVariable Long eventId
+    );
+
+    @Operation(
+            summary = "F102 준비/실행 항목 리마인드 알람 생성",
+            description = """
+                    일정 최종 저장 직후 호출되어 준비/실행 항목의 리마인드 푸시 알람을 예약합니다.
+                    UNTIMED_PREP은 부모 일정 시작 2시간 전, TIMED_ACTION은 displayTime(없으면 표시일 오전 7시)에 발송됩니다.
+                    """,
+            operationId = "createActionItemReminder"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<ActionItemReminderResponse>> createActionItemReminder(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
+            @Parameter(description = "알람을 예약할 준비/실행 항목 ID") @PathVariable Long actionItemId
+    );
+
+    @Operation(
+            summary = "F100 일정 알람 수정",
+            description = """
+                    일정 수정(C107) 직후 호출되어, 이미 반영된 최신 일정/준비·실행 항목 정보를 기준으로
+                    활성화된 리마인더들의 발송 시각·제목·본문을 다시 계산하고 Redis 지연 큐도 함께 갱신합니다.
+                    """,
+            operationId = "correctEventAlarms"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmCorrectionResponse>> correctEventAlarms(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
+            @Parameter(description = "알람을 보정할 일정 ID") @PathVariable Long eventId
     );
 }
