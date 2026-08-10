@@ -4,6 +4,8 @@ import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.domain.external.enums.ConnectionStatus;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -26,6 +28,23 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
     List<Events> findAllIncludingDeletedByExternalCalendarIdAndExternalEventIdIn(
             @Param("externalCalendarId") Long externalCalendarId,
             @Param("externalEventIds") List<String> externalEventIds
+    );
+
+    @Query("""
+            SELECT COUNT(e) > 0
+              FROM Events e
+             WHERE e.externalCalendar = :externalCalendar
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND COALESCE(e.endDate, e.startDate) >= :startDate
+               AND e.eventStatus IN :eventStatuses
+               AND e.deletedAt IS NULL
+            """)
+    boolean existsByExternalCalendarAndDateRange(
+            @Param("externalCalendar") ExternalCalendars externalCalendar,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     @Query("""

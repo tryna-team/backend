@@ -14,6 +14,7 @@ import com.tryna.domain.event.repository.RecurringEventExceptionsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.external.CalendarSyncRequestedEvent;
 import com.tryna.domain.external.enums.ConnectionStatus;
+import com.tryna.domain.external.repository.ExternalCalendarConnectionsRepository;
 import com.tryna.domain.label.enums.LabelColor;
 import com.tryna.global.exception.AuthErrorCode;
 import com.tryna.global.exception.BusinessException;
@@ -54,6 +55,7 @@ public class EventQueryService {
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
     private final RecurringEventExceptionsRepository recurringEventExceptionsRepository;
+    private final ExternalCalendarConnectionsRepository externalCalendarConnectionsRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     public CalendarMainResponse getCalendarMain(Long userId, Integer year, Integer month, String selectedDateValue) {
@@ -833,23 +835,42 @@ public class EventQueryService {
     }
 
     /**
-     * 캘린더 메인 조회 + 연도별 최신 동기화 이벤트 발행 (트랜잭션 보장)
+     * 캘린더 메인 조회 + 10초 쿨다운 조건부 동기화 이벤트 발행
      */
     @Transactional
     public CalendarMainResponse getCalendarMainWithSyncCheck(Long userId, Integer year, Integer month, String selectedDate) {
-        applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
+        publishSyncEventIfNeeded(userId, year);
         return getCalendarMain(userId, year, month, selectedDate);
     }
 
     /**
-     * 날짜별 일정 조회 + 연도별 최신 동기화 이벤트 발행 (트랜잭션 보장)
+     * 날짜별 일정 조회 + 10초 쿨다운 조건부 동기화 이벤트 발행
      */
     @Transactional
     public CalendarDateEventsResponse getDateEventsWithSyncCheck(Long userId, String date) {
         LocalDate parsed = parseDate(date, EventErrorCode.B103_CALENDAR_DATE_EVENTS_400);
         int year = parsed.getYear();
 
-        applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
+        publishSyncEventIfNeeded(userId, year);
         return getDateEvents(userId, date);
+    }
+
+    /**
+     * 마지막 동기화 시점으로부터 3분이 지났거나, 동기화 기록이 없는 경우에만
+     * 중복 방지를 위해 동기화 이벤트를 발행합니다.
+     */
+    private void publishSyncEventIfNeeded(Long userId, Integer year) {
+        Optional<com.tryna.domain.external.entity.ExternalCalendarConnections> connectionOpt =
+                externalCalendarConnectionsRepository.findByUser_UserIdAndProvider(userId, com.tryna.domain.auth.enums.Provider.GOOGLE);
+
+        boolean shouldSync = connectionOpt.map(conn -> {
+            LocalDateTime lastSyncedAt = conn.getLastSyncedAt();
+            // 동기화 기록이 없거나, 마지막 동기화로부터 10초가 지난 경우에만 true
+            return lastSyncedAt == null || lastSyncedAt.plusSeconds(10).isBefore(LocalDateTime.now());
+        }).orElse(true); // 연동 정보가 없으면 우선 발행
+
+        if (shouldSync) {
+            applicationEventPublisher.publishEvent(new CalendarSyncRequestedEvent(userId, year));
+        }
     }
 }
