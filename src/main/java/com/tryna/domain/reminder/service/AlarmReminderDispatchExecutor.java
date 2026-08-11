@@ -34,6 +34,7 @@ public class AlarmReminderDispatchExecutor {
     private final ActionItemOccurrenceStatesRepository actionItemOccurrenceStatesRepository;
     private final AlarmReminderScheduleService alarmReminderScheduleService;
     private final AlarmDelayedQueueRepository alarmDelayedQueueRepository;
+    private final AlarmReminderQueueRelayService alarmReminderQueueRelayService;
 
     @Transactional
     public void dispatchOne(Long reminderId) {
@@ -190,7 +191,7 @@ public class AlarmReminderDispatchExecutor {
         }
 
         reminder.reschedule(nextScheduledAt, event.getTitle(), alarmReminderScheduleService.buildEventAlarmBody(event));
-        alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
+        alarmReminderQueueRelayService.enqueueSchedule(reminder.getReminderId(), nextScheduledAt);
     }
 
     private void rescheduleActionItemReminder(Reminders reminder) {
@@ -212,7 +213,7 @@ public class AlarmReminderDispatchExecutor {
 
         reminder.reschedule(nextScheduledAt, actionItem.getTitle(),
                 alarmReminderScheduleService.buildActionItemAlarmBody(actionItem));
-        alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
+        alarmReminderQueueRelayService.enqueueSchedule(reminder.getReminderId(), nextScheduledAt);
     }
 
     private LocalDateTime findNextFutureEventReminderTime(Events event, LocalDate currentOccurrenceDate) {
