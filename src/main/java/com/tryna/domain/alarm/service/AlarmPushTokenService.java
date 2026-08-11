@@ -29,7 +29,7 @@ public class AlarmPushTokenService {
             throw new BusinessException(AlarmErrorCode.F100_PUSH_TOKEN_500);
         }
 
-        if (!fcmTokenRedisRepository.findAll(userId).isEmpty()) {
+        if (fcmTokenRedisRepository.findAll(userId).contains(fcmPushToken)) {
             throw new BusinessException(AlarmErrorCode.F100_PUSH_TOKEN_409);
         }
 
