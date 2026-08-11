@@ -28,7 +28,10 @@ import java.util.List;
 public class AlarmDelayedQueueRepository {
 
     private static final String QUEUE_KEY = "alarm:reminder:queue";
+    private static final String RETRY_COUNT_KEY_PREFIX = "alarm:reminder:retry:";
     private static final Duration RE_ENQUEUE_BACKOFF = Duration.ofMinutes(1);
+    private static final Duration RETRY_COUNT_TTL = Duration.ofHours(1);
+    private static final int MAX_RE_ENQUEUE_ATTEMPTS = 5;
 
     private static final RedisScript<List> POP_DUE_SCRIPT = RedisScript.of("""
             local dueItems = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
@@ -48,8 +51,27 @@ public class AlarmDelayedQueueRepository {
         stringRedisTemplate.opsForZSet().remove(QUEUE_KEY, String.valueOf(reminderId));
     }
 
-    public void reEnqueue(Long reminderId) {
+
+    public boolean reEnqueue(Long reminderId) {
+        String retryKey = retryCountKey(reminderId);
+        Long attempts = stringRedisTemplate.opsForValue().increment(retryKey);
+        stringRedisTemplate.expire(retryKey, RETRY_COUNT_TTL);
+
+        if (attempts != null && attempts > MAX_RE_ENQUEUE_ATTEMPTS) {
+            clearRetryCount(reminderId);
+            return false;
+        }
+
         schedule(reminderId, LocalDateTime.now().plus(RE_ENQUEUE_BACKOFF));
+        return true;
+    }
+
+    public void clearRetryCount(Long reminderId) {
+        stringRedisTemplate.delete(retryCountKey(reminderId));
+    }
+
+    private String retryCountKey(Long reminderId) {
+        return RETRY_COUNT_KEY_PREFIX + reminderId;
     }
 
     @SuppressWarnings("unchecked")

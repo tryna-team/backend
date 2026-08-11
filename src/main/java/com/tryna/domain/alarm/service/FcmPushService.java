@@ -63,6 +63,7 @@ public class FcmPushService {
     public enum DeliveryResult {
         SUCCESS,
         TRANSIENT_FAILURE,
+        PERMANENT_FAILURE,
         UNREGISTERED,
         UNAVAILABLE
     }
@@ -72,6 +73,9 @@ public class FcmPushService {
             DeliveryResult result
     ) {
     }
+
+    // FCM sendEachForMulticast는 요청당 최대 500개 토큰만 허용한다.
+    private static final int MAX_TOKENS_PER_BATCH = 500;
 
     public List<TokenDeliveryOutcome> sendToTokens(
             Collection<String> tokens,
@@ -90,6 +94,23 @@ public class FcmPushService {
                     .toList();
         }
 
+        List<String> tokenList = new ArrayList<>(tokens);
+        List<TokenDeliveryOutcome> outcomes = new ArrayList<>(tokenList.size());
+
+        for (int start = 0; start < tokenList.size(); start += MAX_TOKENS_PER_BATCH) {
+            int end = Math.min(start + MAX_TOKENS_PER_BATCH, tokenList.size());
+            outcomes.addAll(sendBatch(tokenList.subList(start, end), title, body, data));
+        }
+
+        return outcomes;
+    }
+
+    private List<TokenDeliveryOutcome> sendBatch(
+            List<String> tokens,
+            String title,
+            String body,
+            Map<String, String> data
+    ) {
         MulticastMessage.Builder messageBuilder = MulticastMessage.builder()
                 .setNotification(Notification.builder()
                         .setTitle(title)
@@ -103,11 +124,10 @@ public class FcmPushService {
 
         try {
             BatchResponse response = FirebaseMessaging.getInstance().sendEachForMulticast(messageBuilder.build());
-            List<String> tokenList = new ArrayList<>(tokens);
-            List<TokenDeliveryOutcome> outcomes = new ArrayList<>(tokenList.size());
+            List<TokenDeliveryOutcome> outcomes = new ArrayList<>(tokens.size());
 
             for (int i = 0; i < response.getResponses().size(); i++) {
-                String token = tokenList.get(i);
+                String token = tokens.get(i);
                 SendResponse sendResponse = response.getResponses().get(i);
 
                 if (sendResponse.isSuccessful()) {
@@ -117,13 +137,7 @@ public class FcmPushService {
 
                 FirebaseMessagingException exception = sendResponse.getException();
                 DeliveryResult result = mapDeliveryResult(exception);
-                if (result == DeliveryResult.UNREGISTERED) {
-                    log.warn("등록 해제된 FCM 토큰입니다. errorCode={}",
-                            exception != null ? exception.getMessagingErrorCode() : null);
-                } else {
-                    log.error("FCM 푸시 발송에 실패했습니다. errorCode={}",
-                            exception != null ? exception.getMessagingErrorCode() : null, exception);
-                }
+                logDeliveryFailure(result, exception);
                 outcomes.add(new TokenDeliveryOutcome(token, result));
             }
 
@@ -159,11 +173,7 @@ public class FcmPushService {
             return DeliveryResult.SUCCESS;
         } catch (FirebaseMessagingException e) {
             DeliveryResult result = mapDeliveryResult(e);
-            if (result == DeliveryResult.UNREGISTERED) {
-                log.warn("등록 해제된 FCM 토큰입니다. errorCode={}", e.getMessagingErrorCode());
-            } else {
-                log.error("FCM 푸시 발송에 실패했습니다. errorCode={}", e.getMessagingErrorCode(), e);
-            }
+            logDeliveryFailure(result, e);
             return result;
         }
     }
@@ -175,11 +185,23 @@ public class FcmPushService {
 
         MessagingErrorCode errorCode = exception.getMessagingErrorCode();
         if (errorCode == MessagingErrorCode.UNREGISTERED
-                || errorCode == MessagingErrorCode.INVALID_ARGUMENT
                 || errorCode == MessagingErrorCode.SENDER_ID_MISMATCH) {
             return DeliveryResult.UNREGISTERED;
         }
+        // INVALID_ARGUMENT는 토큰이 아닌 요청(payload) 문제일 수 있으므로 토큰 등록 해제와 구분한다.
+        if (errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
+            return DeliveryResult.PERMANENT_FAILURE;
+        }
 
         return DeliveryResult.TRANSIENT_FAILURE;
+    }
+
+    private void logDeliveryFailure(DeliveryResult result, FirebaseMessagingException exception) {
+        MessagingErrorCode errorCode = exception != null ? exception.getMessagingErrorCode() : null;
+        switch (result) {
+            case UNREGISTERED -> log.warn("등록 해제된 FCM 토큰입니다. errorCode={}", errorCode);
+            case PERMANENT_FAILURE -> log.warn("FCM 요청 payload가 유효하지 않습니다. errorCode={}", errorCode);
+            default -> log.error("FCM 푸시 발송에 실패했습니다. errorCode={}", errorCode, exception);
+        }
     }
 }

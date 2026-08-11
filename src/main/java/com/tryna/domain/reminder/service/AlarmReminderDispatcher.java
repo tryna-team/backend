@@ -33,7 +33,7 @@ public class AlarmReminderDispatcher {
                 alarmReminderDispatchExecutor.dispatchOne(reminderId);
             } catch (Exception e) {
                 log.error("리마인더 발송 처리 중 오류가 발생했습니다. reminderId={}", reminderId, e);
-                alarmDelayedQueueRepository.reEnqueue(reminderId);
+                alarmReminderDispatchExecutor.handleDispatchFailure(reminderId);
             }
         }
     }

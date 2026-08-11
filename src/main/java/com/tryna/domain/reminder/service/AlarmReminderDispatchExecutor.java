@@ -115,6 +115,10 @@ public class AlarmReminderDispatchExecutor {
                     case SUCCESS -> anySuccess = true;
                     case UNREGISTERED -> fcmTokenRedisRepository.remove(userId, outcome.token());
                     case TRANSIENT_FAILURE, UNAVAILABLE -> shouldRetry = true;
+                    // payload 문제(PERMANENT_FAILURE)는 토큰 자체는 유효할 수 있으므로 토큰을 유지하고 재시도하지 않는다.
+                    case PERMANENT_FAILURE -> log.warn(
+                            "FCM 발송 payload 오류로 토큰을 유지합니다. reminderId={}, token={}",
+                            reminder.getReminderId(), outcome.token());
                 }
             } catch (Exception e) {
                 log.error("FCM 토큰별 발송 결과 처리 중 오류가 발생했습니다. reminderId={}, token={}",
@@ -124,13 +128,26 @@ public class AlarmReminderDispatchExecutor {
         }
 
         if (anySuccess) {
+            alarmDelayedQueueRepository.clearRetryCount(reminder.getReminderId());
             return PushDispatchResult.SENT;
         }
         if (shouldRetry) {
-            alarmDelayedQueueRepository.reEnqueue(reminder.getReminderId());
-            return PushDispatchResult.RETRY;
+            boolean reEnqueued = alarmDelayedQueueRepository.reEnqueue(reminder.getReminderId());
+            if (reEnqueued) {
+                return PushDispatchResult.RETRY;
+            }
+            log.warn("최대 재시도 횟수를 초과하여 리마인더 발송을 중단합니다. reminderId={}", reminder.getReminderId());
         }
         return PushDispatchResult.FAILED;
+    }
+
+
+    @Transactional
+    public void handleDispatchFailure(Long reminderId) {
+        boolean reEnqueued = alarmDelayedQueueRepository.reEnqueue(reminderId);
+        if (!reEnqueued) {
+            remindersRepository.findById(reminderId).ifPresent(Reminders::markFailed);
+        }
     }
 
     private Map<String, String> buildPushData(Reminders reminder) {
@@ -172,7 +189,7 @@ public class AlarmReminderDispatchExecutor {
             return;
         }
 
-        reminder.reschedule(nextScheduledAt, event.getTitle(), reminder.getAlarmBody());
+        reminder.reschedule(nextScheduledAt, event.getTitle(), alarmReminderScheduleService.buildEventAlarmBody(event));
         alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
     }
 
@@ -193,7 +210,8 @@ public class AlarmReminderDispatchExecutor {
             return;
         }
 
-        reminder.reschedule(nextScheduledAt, actionItem.getTitle(), reminder.getAlarmBody());
+        reminder.reschedule(nextScheduledAt, actionItem.getTitle(),
+                alarmReminderScheduleService.buildActionItemAlarmBody(actionItem));
         alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
     }
 
