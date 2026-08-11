@@ -4,6 +4,8 @@ import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.external.entity.ExternalCalendars;
 import com.tryna.domain.external.enums.ConnectionStatus;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -15,7 +17,35 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
 
-    List<Events> findByExternalCalendarAndExternalEventIdIn(ExternalCalendars externalCalendar, Collection<String> externalEventIds);
+    @Query(value = """
+            SELECT e.* 
+              FROM events e
+              JOIN user_events ue ON ue.event_id = e.event_id
+             WHERE e.external_calendar_id = :externalCalendarId
+               AND e.external_event_id IN :externalEventIds
+               AND e.source_type = 'EXTERNAL_CALENDAR'
+            """, nativeQuery = true)
+    List<Events> findAllIncludingDeletedByExternalCalendarIdAndExternalEventIdIn(
+            @Param("externalCalendarId") Long externalCalendarId,
+            @Param("externalEventIds") List<String> externalEventIds
+    );
+
+    @Query("""
+            SELECT COUNT(e) > 0
+              FROM Events e
+             WHERE e.externalCalendar = :externalCalendar
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND COALESCE(e.endDate, e.startDate) >= :startDate
+               AND e.eventStatus IN :eventStatuses
+               AND e.deletedAt IS NULL
+            """)
+    boolean existsByExternalCalendarAndDateRange(
+            @Param("externalCalendar") ExternalCalendars externalCalendar,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
+    );
 
     @Query("""
             SELECT COUNT(e) > 0
@@ -105,17 +135,17 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
             @Param("deletedAt") LocalDateTime deletedAt
     );
 
-    // 재연동 시 캘린더 ID가 바뀌었거나 NULL이 되었어도, 유저 ID와 구글 이벤트 ID로 삭제된(DELETED) 기존 일정까지 포함하여 단건 조회 (Native Query로 @SQLRestriction 간섭 우회)
+    // 유저 ID와 외부 이벤트 ID 목록으로 삭제된(DELETED) 기존 일정까지 포함하여 한 번에 조회 (Native Query)
     @Query(value = """
             SELECT e.* 
               FROM events e
               JOIN user_events ue ON ue.event_id = e.event_id
              WHERE ue.user_id = :userId
-               AND e.external_event_id = :externalEventId
+               AND e.external_event_id IN (:externalEventIds)
                AND e.source_type = 'EXTERNAL_CALENDAR'
             """, nativeQuery = true)
-    Optional<Events> findIncludingDeletedByUserIdAndExternalEventId(
+    List<Events> findAllIncludingDeletedByUserIdAndExternalEventIdIn(
             @Param("userId") Long userId,
-            @Param("externalEventId") String externalEventId
+            @Param("externalEventIds") Collection<String> externalEventIds
     );
 }

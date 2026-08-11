@@ -11,7 +11,7 @@ public record CalendarStatusResponse(
         @Schema(description = "연동된 제공자", example = "GOOGLE")
         String provider,
 
-        @Schema(description = "연동된 기본 캘린더 이름", example = "google 캘린더")
+        @Schema(description = "연동된 기본 캘린더 이름", example = "Google 캘린더")
         String calendarName,
 
         @Schema(description = "백그라운드 동기화 상태", example = "SUCCESS")
