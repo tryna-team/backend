@@ -52,6 +52,7 @@ public class AlarmReminderDispatcher {
                 dispatchOne(reminderId);
             } catch (Exception e) {
                 log.error("리마인더 발송 처리 중 오류가 발생했습니다. reminderId={}", reminderId, e);
+                alarmDelayedQueueRepository.reEnqueue(reminderId);
             }
         }
     }
@@ -142,10 +143,7 @@ public class AlarmReminderDispatcher {
             return PushDispatchResult.SENT;
         }
         if (shouldRetry) {
-            alarmDelayedQueueRepository.schedule(
-                    reminder.getReminderId(),
-                    LocalDateTime.now().plusMinutes(1)
-            );
+            alarmDelayedQueueRepository.reEnqueue(reminder.getReminderId());
             return PushDispatchResult.RETRY;
         }
         return PushDispatchResult.FAILED;

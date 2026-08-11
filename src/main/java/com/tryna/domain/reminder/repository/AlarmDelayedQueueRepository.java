@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Collections;
@@ -27,6 +28,7 @@ import java.util.List;
 public class AlarmDelayedQueueRepository {
 
     private static final String QUEUE_KEY = "alarm:reminder:queue";
+    private static final Duration RE_ENQUEUE_BACKOFF = Duration.ofMinutes(1);
 
     private static final RedisScript<List> POP_DUE_SCRIPT = RedisScript.of("""
             local dueItems = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
@@ -44,6 +46,10 @@ public class AlarmDelayedQueueRepository {
 
     public void cancel(Long reminderId) {
         stringRedisTemplate.opsForZSet().remove(QUEUE_KEY, String.valueOf(reminderId));
+    }
+
+    public void reEnqueue(Long reminderId) {
+        schedule(reminderId, LocalDateTime.now().plus(RE_ENQUEUE_BACKOFF));
     }
 
     @SuppressWarnings("unchecked")
