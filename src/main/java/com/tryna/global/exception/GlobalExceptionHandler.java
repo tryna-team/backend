@@ -67,6 +67,10 @@ public class GlobalExceptionHandler {
         } else if ("/api/v1/labels".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
             // 기존 라벨 에러 처리 병합
             errorCode = LabelErrorCode.B108_LABEL_CREATE_400;
+        } else if ("/api/v1/alarms/push-token".equals(requestUri) && "POST".equalsIgnoreCase(method)) {
+            errorCode = AlarmErrorCode.F100_PUSH_TOKEN_400;
+        } else if (requestUri.startsWith("/api/v1/alarms/my") && "GET".equalsIgnoreCase(method)) {
+            errorCode = AlarmErrorCode.F100_ALARMLIST_400_3;
         }
 
         return ResponseEntity

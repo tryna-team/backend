@@ -95,4 +95,65 @@ public class Reminders extends BaseEntity {
     @Column(name = "alarm_body", nullable = false, length = 255)
     private String alarmBody;
 
+    public static Reminders createForEvent(
+            Users user,
+            Events targetEvent,
+            LocalDateTime scheduledAt,
+            String alarmTitle,
+            String alarmBody
+    ) {
+        Reminders reminder = new Reminders();
+        reminder.user = user;
+        reminder.targetEvent = targetEvent;
+        reminder.targetType = TargetType.EVENT;
+        reminder.scheduledAt = scheduledAt;
+        reminder.alarmTitle = alarmTitle;
+        reminder.alarmBody = alarmBody;
+        return reminder;
+    }
+
+    public static Reminders createForActionItem(
+            Users user,
+            ActionItems targetActionItem,
+            LocalDateTime scheduledAt,
+            String alarmTitle,
+            String alarmBody
+    ) {
+        Reminders reminder = new Reminders();
+        reminder.user = user;
+        reminder.targetActionItem = targetActionItem;
+        reminder.targetType = TargetType.TIMED_ACTION;
+        reminder.scheduledAt = scheduledAt;
+        reminder.alarmTitle = alarmTitle;
+        reminder.alarmBody = alarmBody;
+        return reminder;
+    }
+
+    // 일정/준비·실행 항목 수정에 맞춘 발송 시각·제목·본문 보정, 또는 반복 알람의 다음 주기 재스케줄링에 사용
+    public void reschedule(LocalDateTime scheduledAt, String alarmTitle, String alarmBody) {
+        this.scheduledAt = scheduledAt;
+        this.alarmTitle = alarmTitle;
+        this.alarmBody = alarmBody;
+        this.reminderStatus = ReminderStatus.SCHEDULED;
+    }
+
+    public void markSent() {
+        this.reminderStatus = ReminderStatus.SENT;
+    }
+
+    public void markCanceled() {
+        this.reminderStatus = ReminderStatus.CANCELED;
+    }
+
+    public void markFailed() {
+        this.reminderStatus = ReminderStatus.FAILED;
+    }
+
+    public void markSkipped() {
+        this.reminderStatus = ReminderStatus.SKIPPED;
+    }
+
+    public boolean isScheduled() {
+        return this.reminderStatus == ReminderStatus.SCHEDULED;
+    }
 }
