@@ -29,8 +29,8 @@ public class FcmPushService {
         }
 
         if (FirebaseApp.getApps().isEmpty()) {
-            log.warn("Firebase가 초기화되지 않아 FCM 토큰 형식만 검증합니다.");
-            return TokenValidationResult.VALID;
+            log.warn("Firebase가 초기화되지 않아 FCM 토큰을 검증할 수 없습니다.");
+            return TokenValidationResult.UNAVAILABLE;
         }
 
         Message message = Message.builder()
@@ -54,11 +54,18 @@ public class FcmPushService {
         }
     }
 
+    public enum DeliveryResult {
+        SUCCESS,
+        TRANSIENT_FAILURE,
+        UNREGISTERED,
+        UNAVAILABLE
+    }
+
     // 리마인드 알람 발송 시 재사용할 실제 푸시 발송 메서드
-    public void send(String fcmToken, String title, String body, Map<String, String> data) {
+    public DeliveryResult send(String fcmToken, String title, String body, Map<String, String> data) {
         if (FirebaseApp.getApps().isEmpty()) {
             log.warn("Firebase가 초기화되지 않아 푸시를 발송할 수 없습니다.");
-            return;
+            return DeliveryResult.UNAVAILABLE;
         }
 
         Message.Builder messageBuilder = Message.builder()
@@ -74,8 +81,18 @@ public class FcmPushService {
 
         try {
             FirebaseMessaging.getInstance().send(messageBuilder.build());
+            return DeliveryResult.SUCCESS;
         } catch (FirebaseMessagingException e) {
-            log.error("FCM 푸시 발송에 실패했습니다. errorCode={}", e.getMessagingErrorCode(), e);
+            MessagingErrorCode errorCode = e.getMessagingErrorCode();
+            if (errorCode == MessagingErrorCode.UNREGISTERED
+                    || errorCode == MessagingErrorCode.INVALID_ARGUMENT
+                    || errorCode == MessagingErrorCode.SENDER_ID_MISMATCH) {
+                log.warn("등록 해제된 FCM 토큰입니다. errorCode={}", errorCode);
+                return DeliveryResult.UNREGISTERED;
+            }
+
+            log.error("FCM 푸시 발송에 실패했습니다. errorCode={}", errorCode, e);
+            return DeliveryResult.TRANSIENT_FAILURE;
         }
     }
 }

@@ -68,13 +68,18 @@ public class AlarmReminderDispatcher {
             return;
         }
 
-        boolean sent = sendPush(reminder);
-        if (!sent) {
-            reminder.markFailed();
-            return;
+        PushDispatchResult dispatchResult = sendPush(reminder);
+        switch (dispatchResult) {
+            case SENT -> rescheduleIfRecurring(reminder);
+            case RETRY -> log.warn("FCM 발송 재시도를 예약했습니다. reminderId={}", reminderId);
+            case FAILED -> reminder.markFailed();
         }
+    }
 
-        rescheduleIfRecurring(reminder);
+    private enum PushDispatchResult {
+        SENT,
+        RETRY,
+        FAILED
     }
 
     private boolean isSuppressed(Reminders reminder) {
@@ -107,19 +112,43 @@ public class AlarmReminderDispatcher {
         return false;
     }
 
-    private boolean sendPush(Reminders reminder) {
+    private PushDispatchResult sendPush(Reminders reminder) {
         Long userId = reminder.getUser().getUserId();
         Set<String> tokens = fcmTokenRedisRepository.findAll(userId);
 
         if (tokens.isEmpty()) {
             log.warn("등록된 FCM 토큰이 없어 리마인더를 발송하지 못했습니다. reminderId={}, userId={}",
                     reminder.getReminderId(), userId);
-            return false;
+            return PushDispatchResult.FAILED;
         }
 
         Map<String, String> data = buildPushData(reminder);
-        tokens.forEach(token -> fcmPushService.send(token, reminder.getAlarmTitle(), reminder.getAlarmBody(), data));
-        return true;
+        boolean anySuccess = false;
+        boolean shouldRetry = false;
+
+        for (String token : tokens) {
+            FcmPushService.DeliveryResult result = fcmPushService.send(
+                    token, reminder.getAlarmTitle(), reminder.getAlarmBody(), data
+            );
+
+            switch (result) {
+                case SUCCESS -> anySuccess = true;
+                case UNREGISTERED -> fcmTokenRedisRepository.remove(userId, token);
+                case TRANSIENT_FAILURE, UNAVAILABLE -> shouldRetry = true;
+            }
+        }
+
+        if (anySuccess) {
+            return PushDispatchResult.SENT;
+        }
+        if (shouldRetry) {
+            alarmDelayedQueueRepository.schedule(
+                    reminder.getReminderId(),
+                    LocalDateTime.now().plusMinutes(1)
+            );
+            return PushDispatchResult.RETRY;
+        }
+        return PushDispatchResult.FAILED;
     }
 
     private Map<String, String> buildPushData(Reminders reminder) {
