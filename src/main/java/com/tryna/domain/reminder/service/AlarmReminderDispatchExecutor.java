@@ -117,12 +117,12 @@ public class AlarmReminderDispatchExecutor {
                     case TRANSIENT_FAILURE, UNAVAILABLE -> shouldRetry = true;
                     // payload 문제(PERMANENT_FAILURE)는 토큰 자체는 유효할 수 있으므로 토큰을 유지하고 재시도하지 않는다.
                     case PERMANENT_FAILURE -> log.warn(
-                            "FCM 발송 payload 오류로 토큰을 유지합니다. reminderId={}, token={}",
-                            reminder.getReminderId(), outcome.token());
+                            "FCM 발송 payload 오류로 토큰을 유지합니다. reminderId={}",
+                            reminder.getReminderId());
                 }
             } catch (Exception e) {
-                log.error("FCM 토큰별 발송 결과 처리 중 오류가 발생했습니다. reminderId={}, token={}",
-                        reminder.getReminderId(), outcome.token(), e);
+                log.error("FCM 토큰별 발송 결과 처리 중 오류가 발생했습니다. reminderId={}",
+                        reminder.getReminderId(), e);
                 shouldRetry = true;
             }
         }
