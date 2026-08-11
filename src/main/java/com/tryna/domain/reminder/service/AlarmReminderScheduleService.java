@@ -60,6 +60,8 @@ public class AlarmReminderScheduleService {
 
     @Transactional
     public EventReminderResponse createEventReminder(Long userId, Long eventId) {
+        validateAlarmStateEnabled(userId, AlarmErrorCode.F101_EVENT_ALARM_403);
+
         Events event = eventsRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(AlarmErrorCode.F101_EVENT_ALARM_400_1));
 
@@ -100,6 +102,8 @@ public class AlarmReminderScheduleService {
 
     @Transactional
     public ActionItemReminderResponse createActionItemReminder(Long userId, Long actionItemId) {
+        validateAlarmStateEnabled(userId, AlarmErrorCode.F102_ACTIONITEM_ALARM_403);
+
         ActionItems actionItem = actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(actionItemId)
                 .orElseThrow(() -> new BusinessException(AlarmErrorCode.F102_ACTIONITEM_ALARM_400_1));
 
@@ -193,6 +197,15 @@ public class AlarmReminderScheduleService {
                     reminder.markCanceled();
                     alarmDelayedQueueRepository.cancel(reminder.getReminderId());
                 });
+    }
+
+    private void validateAlarmStateEnabled(Long userId, AlarmErrorCode errorCode) {
+        Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(errorCode));
+
+        if (!user.isAlarmState()) {
+            throw new BusinessException(errorCode);
+        }
     }
 
     private void validateHasPushToken(Long userId, AlarmErrorCode errorCode) {
