@@ -102,15 +102,22 @@ public class AlarmReminderDispatchExecutor {
         boolean anySuccess = false;
         boolean shouldRetry = false;
 
-        for (String token : tokens) {
-            FcmPushService.DeliveryResult result = fcmPushService.send(
-                    token, reminder.getAlarmTitle(), reminder.getAlarmBody(), data
-            );
-
-            switch (result) {
-                case SUCCESS -> anySuccess = true;
-                case UNREGISTERED -> fcmTokenRedisRepository.remove(userId, token);
-                case TRANSIENT_FAILURE, UNAVAILABLE -> shouldRetry = true;
+        for (FcmPushService.TokenDeliveryOutcome outcome : fcmPushService.sendToTokens(
+                tokens,
+                reminder.getAlarmTitle(),
+                reminder.getAlarmBody(),
+                data
+        )) {
+            try {
+                switch (outcome.result()) {
+                    case SUCCESS -> anySuccess = true;
+                    case UNREGISTERED -> fcmTokenRedisRepository.remove(userId, outcome.token());
+                    case TRANSIENT_FAILURE, UNAVAILABLE -> shouldRetry = true;
+                }
+            } catch (Exception e) {
+                log.error("FCM 토큰별 발송 결과 처리 중 오류가 발생했습니다. reminderId={}, token={}",
+                        reminder.getReminderId(), outcome.token(), e);
+                shouldRetry = true;
             }
         }
 
