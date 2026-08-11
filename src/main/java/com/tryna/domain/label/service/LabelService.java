@@ -313,19 +313,26 @@ public class LabelService {
             );
         }
 
+        // 2. null ID 포함 여부 확인 (null은 무시하지 않고 400 에러로 거부)
+        if (request.labelIds().stream().anyMatch(Objects::isNull)) {
+            throw new BusinessException(
+                    LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
+            );
+        }
+
         // -1 이 섞여 들어와도 가볍게 무시하고 순수 유저 라벨만 걸러냅니다.
         List<Long> userLabelIds = request.labelIds().stream()
-                .filter(id -> id != null && id != -1L)
+                .filter(id -> id != -1L)
                 .toList();
 
-        // 2. null ID 포함 여부 확인
+        // 3. 필터링 후 비어 있는지 확인
         if (userLabelIds.isEmpty()) {
             throw new BusinessException(
                     LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
             );
         }
 
-        // 3. 중복 ID 확인
+        // 4. 중복 ID 확인
         Set<Long> uniqueLabelIds = new HashSet<>(userLabelIds);
 
         if (uniqueLabelIds.size() != userLabelIds.size()) {
@@ -334,7 +341,7 @@ public class LabelService {
             );
         }
 
-        // 4. 현재 사용자가 존재하는지 확인
+        // 5. 현재 사용자가 존재하는지 확인
         userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() ->
                         new BusinessException(
@@ -348,28 +355,28 @@ public class LabelService {
                         LabelType.USER
                 );
 
-        // 5. 사용자가 보유한 활성 USER 라벨이 없는 비정상 상태 확인
+        // 6. 사용자가 보유한 활성 USER 라벨이 없는 비정상 상태 확인
         if (userLabels.isEmpty()) {
             throw new BusinessException(
                     LabelErrorCode.B108_LABEL_ORDER_UPDATE_409
             );
         }
 
-        // 6. 전체 요청 갯수가 아닌 필터링된 유저 라벨 갯수(userLabelIds)로 비교합니다.
+        // 7. 전체 요청 갯수가 아닌 필터링된 유저 라벨 갯수(userLabelIds)로 비교합니다.
         if (userLabelIds.size() != userLabels.size()) {
             throw new BusinessException(
                     LabelErrorCode.B108_LABEL_ORDER_UPDATE_400
             );
         }
 
-        // 7. 현재 사용자 라벨을 ID 기준으로 매핑
+        // 8. 현재 사용자 라벨을 ID 기준으로 매핑
         Map<Long, Labels> labelMap = userLabels.stream()
                 .collect(Collectors.toMap(
                         Labels::getLabelId,
                         Function.identity()
                 ));
 
-        // 8. 요청 ID가 현재 사용자의 활성 USER 라벨 전체와 정확히 일치하는지 확인
+        // 9. 요청 ID가 현재 사용자의 활성 USER 라벨 전체와 정확히 일치하는지 확인
         boolean containsUnknownLabel = userLabelIds.stream()
                 .anyMatch(labelId -> !labelMap.containsKey(labelId));
 
@@ -388,7 +395,7 @@ public class LabelService {
             );
         }
 
-        // 9. 기존 기본 라벨의 기본 여부 해제
+        // 10. 기존 기본 라벨의 기본 여부 해제
         userLabels.stream()
                 .filter(label ->
                         Boolean.TRUE.equals(label.getIsDefault())
@@ -404,7 +411,7 @@ public class LabelService {
         int currentSortOrder = 1;
         boolean defaultAssigned = false;
 
-        // 10. 오직 필터링된 일반 유저 라벨(-1 제외)로만 순서를 저장 (NPE 완벽 차단)
+        // 11. 오직 필터링된 일반 유저 라벨(-1 제외)로만 순서를 저장 (NPE 완벽 차단)
         for (Long labelId : userLabelIds) {
             Labels label = labelMap.get(labelId);
             label.updateSortOrder(currentSortOrder);
@@ -418,7 +425,7 @@ public class LabelService {
             currentSortOrder++;
         }
 
-        // 11. 변경사항을 DB에 반영하여 충돌을 현재 트랜잭션 안에서 확인
+        // 12. 변경사항을 DB에 반영하여 충돌을 현재 트랜잭션 안에서 확인
         try {
             labelsRepository.flush();
         } catch (DataIntegrityViolationException e) {
@@ -427,7 +434,7 @@ public class LabelService {
             );
         }
 
-        // 12. 요청 순서대로 응답 반환
+        // 13. 요청 순서대로 응답 반환
         return getLabels(userId);
     }
 
