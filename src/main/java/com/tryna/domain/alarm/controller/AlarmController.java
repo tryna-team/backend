@@ -148,7 +148,7 @@ public class AlarmController implements AlarmControllerDocs {
         ActionItemReminderResponse response = alarmReminderScheduleService.createActionItemReminder(userId, actionItemId);
 
         return ResponseEntity.ok(
-                ApiResponse.success("F102_ACTIONITEM_ALARM_200", "일정 리마인드 알람 전송에 성공했습니다.", response)
+                ApiResponse.success("F102_ACTIONITEM_ALARM_200", "준비/실행 항목 리마인드 알람 예약에 성공했습니다.", response)
         );
     }
 
