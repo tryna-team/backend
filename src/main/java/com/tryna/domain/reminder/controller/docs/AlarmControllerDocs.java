@@ -27,6 +27,7 @@ public interface AlarmControllerDocs {
             description = """
                     ALARM 약관에 동의하고 사용자의 알람 발송 상태(alarm_state)를 활성화합니다.
                     terms 테이블의 ALARM 약관에 대한 user_agreed_terms 이력을 생성합니다.
+                    이미 동의한 사용자가 재요청하면 200과 함께 이미 동의되어 있다는 메시지를 반환합니다.
                     """,
             operationId = "agreeAlarmTerm"
     )
