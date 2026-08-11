@@ -30,10 +30,7 @@ public interface AlarmControllerDocs {
                     """,
             operationId = "agreeAlarmTerm"
     )
-    @SecurityRequirement(name = "bearerAuth")
-    ResponseEntity<ApiResponse<Void>> agreeAlarmTerm(
-            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
-    );
+    ResponseEntity<ApiResponse<Void>> agreeAlarmTerm();
 
     @Operation(
             summary = "F100 FCM 푸시 토큰 발급",
@@ -43,9 +40,7 @@ public interface AlarmControllerDocs {
                     """,
             operationId = "registerPushToken"
     )
-    @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<Void>> registerPushToken(
-            @Parameter(hidden = true) @AuthenticationPrincipal Long userId,
             @Valid @RequestBody AlarmPushTokenRequest request
     );
 

@@ -41,7 +41,9 @@ public class SecurityConfig {
             "/api/v1/guests",
             "/api/v1/auth-sessions/permissions",
             "/api/v1/auth-sessions",
-            "/api/v1/auth-sessions/refresh"
+            "/api/v1/auth-sessions/refresh",
+            "/api/v1/alarms/term",
+            "/api/v1/alarms/push-token"
     };
 
     @Bean

@@ -19,7 +19,9 @@ import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,14 +44,8 @@ public class AlarmController implements AlarmControllerDocs {
 
     @PostMapping("/term")
     @Override
-    public ResponseEntity<ApiResponse<Void>> agreeAlarmTerm(
-            @AuthenticationPrincipal Long userId
-    ) {
-        if (userId == null) {
-            throw new BusinessException(AuthErrorCode.AUTH_401);
-        }
-
-        alarmTermService.agreeAlarmTerm(userId);
+    public ResponseEntity<ApiResponse<Void>> agreeAlarmTerm() {
+        alarmTermService.agreeAlarmTerm(resolveOptionalUserId());
 
         return ResponseEntity.ok(
                 ApiResponse.success("F100_ALARM_TERM_200", "알람 약관 동의에 성공했습니다.", null)
@@ -59,14 +55,9 @@ public class AlarmController implements AlarmControllerDocs {
     @PostMapping("/push-token")
     @Override
     public ResponseEntity<ApiResponse<Void>> registerPushToken(
-            @AuthenticationPrincipal Long userId,
             @Valid @RequestBody AlarmPushTokenRequest request
     ) {
-        if (userId == null) {
-            throw new BusinessException(AuthErrorCode.AUTH_401);
-        }
-
-        alarmPushTokenService.registerPushToken(userId, request.fcmPushToken());
+        alarmPushTokenService.registerPushToken(resolveOptionalUserId(), request.fcmPushToken());
 
         return ResponseEntity.ok(
                 ApiResponse.success("F100_PUSH_TOKEN_200", "푸시 토큰 발급에 성공했습니다.", null)
@@ -176,5 +167,13 @@ public class AlarmController implements AlarmControllerDocs {
         return ResponseEntity.ok(
                 ApiResponse.success("F100_CORRECT_ALARM_200", "알람 수정에 성공했습니다.", response)
         );
+    }
+
+    private Long resolveOptionalUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long userId) {
+            return userId;
+        }
+        return null;
     }
 }
