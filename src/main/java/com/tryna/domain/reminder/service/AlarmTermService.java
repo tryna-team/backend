@@ -27,8 +27,6 @@ public class AlarmTermService {
     /**
      * F100: 알람 약관 동의
      * ALARM 약관 동의 이력을 저장하고 사용자의 alarm_state를 true로 변경합니다.
-     *
-     * @return true면 신규 동의, false면 이미 동의한 상태
      */
     @Transactional
     public boolean agreeAlarmTerm(Long userId) {
