@@ -7,6 +7,7 @@ import com.tryna.domain.user.entity.Users;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
@@ -19,9 +20,9 @@ public class DefaultLabelService {
 
     /**
      * 기본 라벨을 생성합니다.
-     * 외부(예: GuestSignupService)에서 호출 시 동일한 트랜잭션에 합류하여 원자성을 보장합니다.
+     * 부모 트랜잭션의 오염(rollback-only)을 막기 위해 독립 트랜잭션(REQUIRES_NEW)으로 실행합니다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createDefaultLabel(Users user) {
         boolean hasDefaultLabel = labelsRepository.findByUser_UserIdAndIsDefaultTrue(user.getUserId()).isPresent();
         if (hasDefaultLabel) {

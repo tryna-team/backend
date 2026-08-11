@@ -80,12 +80,18 @@ public record TimedActionItemResponse(
     ) {
 
         public static Item from(ActionItems actionItem) {
-            return fromOccurrence(
-                    actionItem,
+            return new Item(
+                    actionItem.getActionItemId(),
+                    actionItem.getParentEvent().getEventId(),
                     actionItem.getOccurrenceDate(),
+                    actionItem.getParentEvent().getTitle(),
+                    actionItem.getTitle(),
+                    actionItem.getItemType(),
                     actionItem.getDisplayDate(),
                     actionItem.getDisplayDatetime(),
-                    null
+                    actionItem.getActionItemStatus(),
+                    actionItem.getCreatedBy(),
+                    actionItem.getCompletedAt()
             );
         }
 
@@ -105,9 +111,9 @@ public record TimedActionItemResponse(
                     actionItem.getItemType(),
                     displayDate,
                     displayTime,
-                    state == null ? actionItem.getActionItemStatus() : state.getActionItemStatus(),
+                    state == null ? ActionItemStatus.PENDING : state.getActionItemStatus(),
                     actionItem.getCreatedBy(),
-                    state == null ? actionItem.getCompletedAt() : state.getCompletedAt()
+                    state == null ? null : state.getCompletedAt()
             );
         }
     }

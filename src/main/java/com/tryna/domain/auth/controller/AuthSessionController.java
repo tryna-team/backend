@@ -2,10 +2,7 @@ package com.tryna.domain.auth.controller;
 
 import com.tryna.domain.auth.controller.docs.AuthSessionControllerDocs;
 import com.tryna.domain.auth.dto.*;
-import com.tryna.domain.auth.enums.PermissionAction;
 import com.tryna.domain.auth.service.AuthService;
-import com.tryna.global.exception.AuthErrorCode;
-import com.tryna.global.exception.BusinessException;
 import com.tryna.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
