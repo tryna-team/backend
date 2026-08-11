@@ -23,6 +23,12 @@ public class FirebaseConfig {
     @Value("${firebase.credentials-base64:}")
     private String credentialsBase64;
 
+    @Value("${firebase.connect-timeout-ms:10000}")
+    private int connectTimeoutMs;
+
+    @Value("${firebase.read-timeout-ms:10000}")
+    private int readTimeoutMs;
+
     @PostConstruct
     public void initialize() {
         if (!StringUtils.hasText(credentialsBase64)) {
@@ -42,6 +48,8 @@ public class FirebaseConfig {
 
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(credentials)
+                    .setConnectTimeout(connectTimeoutMs)
+                    .setReadTimeout(readTimeoutMs)
                     .build();
 
             FirebaseApp.initializeApp(options);

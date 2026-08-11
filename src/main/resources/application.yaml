@@ -19,3 +19,5 @@ oauth2:
 
 firebase:
   credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
+  connect-timeout-ms: 10000
+  read-timeout-ms: 10000
