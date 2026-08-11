@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "alarm_reminder_queue_outbox")
+@Table(name = "reminder_outbox")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AlarmReminderQueueOutbox extends BaseEntity {
