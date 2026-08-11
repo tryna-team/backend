@@ -1,4 +1,4 @@
-package com.tryna.domain.alarm.util;
+package com.tryna.domain.reminder.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

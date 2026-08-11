@@ -1,12 +1,12 @@
-package com.tryna.domain.alarm.controller.docs;
+package com.tryna.domain.reminder.controller.docs;
 
-import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
-import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
-import com.tryna.domain.alarm.dto.AlarmDetailResponse;
-import com.tryna.domain.alarm.dto.AlarmListResponse;
-import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
-import com.tryna.domain.alarm.dto.AlarmStateResponse;
-import com.tryna.domain.alarm.dto.EventReminderResponse;
+import com.tryna.domain.reminder.dto.ActionItemReminderResponse;
+import com.tryna.domain.reminder.dto.AlarmCorrectionResponse;
+import com.tryna.domain.reminder.dto.AlarmDetailResponse;
+import com.tryna.domain.reminder.dto.AlarmListResponse;
+import com.tryna.domain.reminder.dto.AlarmPushTokenRequest;
+import com.tryna.domain.reminder.dto.AlarmStateResponse;
+import com.tryna.domain.reminder.dto.EventReminderResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
