@@ -26,6 +26,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AlarmReminderDispatchExecutor {
 
+    private static final int MAX_OCCURRENCE_ADVANCES = 366;
+
     private final RemindersRepository remindersRepository;
     private final FcmTokenRedisRepository fcmTokenRedisRepository;
     private final FcmPushService fcmPushService;
@@ -163,15 +165,12 @@ public class AlarmReminderDispatchExecutor {
         }
 
         LocalDate currentOccurrenceDate = alarmReminderScheduleService.deriveEventOccurrenceDate(reminder, event);
-        LocalDate nextOccurrenceDate = EventRecurrenceCalculator.nextOccurrenceDateAfter(event, currentOccurrenceDate);
+        LocalDateTime nextScheduledAt = findNextFutureEventReminderTime(event, currentOccurrenceDate);
 
-        if (nextOccurrenceDate == null) {
+        if (nextScheduledAt == null) {
             reminder.markSent();
             return;
         }
-
-        LocalDateTime nextScheduledAt =
-                alarmReminderScheduleService.computeEventReminderTimeForOccurrence(event, nextOccurrenceDate);
 
         reminder.reschedule(nextScheduledAt, event.getTitle(), reminder.getAlarmBody());
         alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
@@ -187,17 +186,59 @@ public class AlarmReminderDispatchExecutor {
         }
 
         LocalDate currentOccurrenceDate = alarmReminderScheduleService.deriveActionItemOccurrenceDate(reminder, actionItem);
-        LocalDate nextOccurrenceDate = EventRecurrenceCalculator.nextOccurrenceDateAfter(parentEvent, currentOccurrenceDate);
+        LocalDateTime nextScheduledAt = findNextFutureActionItemReminderTime(actionItem, currentOccurrenceDate);
 
-        if (nextOccurrenceDate == null) {
+        if (nextScheduledAt == null) {
             reminder.markSent();
             return;
         }
 
-        LocalDateTime nextScheduledAt =
-                alarmReminderScheduleService.computeActionItemReminderTimeForOccurrence(actionItem, nextOccurrenceDate);
-
         reminder.reschedule(nextScheduledAt, actionItem.getTitle(), reminder.getAlarmBody());
         alarmDelayedQueueRepository.schedule(reminder.getReminderId(), nextScheduledAt);
+    }
+
+    private LocalDateTime findNextFutureEventReminderTime(Events event, LocalDate currentOccurrenceDate) {
+        LocalDate occurrenceDate = currentOccurrenceDate;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (int attempt = 0; attempt < MAX_OCCURRENCE_ADVANCES; attempt++) {
+            LocalDate nextOccurrenceDate = EventRecurrenceCalculator.nextOccurrenceDateAfter(event, occurrenceDate);
+            if (nextOccurrenceDate == null) {
+                return null;
+            }
+
+            LocalDateTime scheduledAt =
+                    alarmReminderScheduleService.computeEventReminderTimeForOccurrence(event, nextOccurrenceDate);
+            if (scheduledAt != null && scheduledAt.isAfter(now)) {
+                return scheduledAt;
+            }
+
+            occurrenceDate = nextOccurrenceDate;
+        }
+
+        return null;
+    }
+
+    private LocalDateTime findNextFutureActionItemReminderTime(ActionItems actionItem, LocalDate currentOccurrenceDate) {
+        Events parentEvent = actionItem.getParentEvent();
+        LocalDate occurrenceDate = currentOccurrenceDate;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (int attempt = 0; attempt < MAX_OCCURRENCE_ADVANCES; attempt++) {
+            LocalDate nextOccurrenceDate = EventRecurrenceCalculator.nextOccurrenceDateAfter(parentEvent, occurrenceDate);
+            if (nextOccurrenceDate == null) {
+                return null;
+            }
+
+            LocalDateTime scheduledAt =
+                    alarmReminderScheduleService.computeActionItemReminderTimeForOccurrence(actionItem, nextOccurrenceDate);
+            if (scheduledAt != null && scheduledAt.isAfter(now)) {
+                return scheduledAt;
+            }
+
+            occurrenceDate = nextOccurrenceDate;
+        }
+
+        return null;
     }
 }
