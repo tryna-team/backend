@@ -12,6 +12,7 @@
     import org.springframework.boot.context.event.ApplicationReadyEvent;
     import org.springframework.context.event.EventListener;
     import org.springframework.stereotype.Service;
+    import org.springframework.transaction.annotation.Propagation;
     import org.springframework.transaction.annotation.Transactional;
 
     import java.io.InputStream;
@@ -34,7 +35,7 @@
         private static final String APPLE_HOLIDAY_URL = "https://calendars.icloud.com/holidays/kr_ko.ics";
 
         @EventListener(ApplicationReadyEvent.class)
-        @Transactional
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
         public void syncAppleKoreanHolidays() {
             System.setProperty("net.fortuna.ical4j.parser.relaxed", "true");
             System.setProperty("net.fortuna.ical4j.relaxed.parsing.enabled", "true");
