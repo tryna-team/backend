@@ -341,9 +341,17 @@ public class AlarmReminderScheduleService {
 
         if (actionItem.getItemType() == ItemType.TIMED_ACTION) {
             LocalDate displayDate = scheduledAt.toLocalDate();
-            return actionItem.getOffsetDays() == null
-                    ? actionItem.getOccurrenceDate()
-                    : displayDate.minusDays(actionItem.getOffsetDays());
+            if (actionItem.getOffsetDays() != null) {
+                return displayDate.minusDays(actionItem.getOffsetDays());
+            }
+
+            Events parentEvent = actionItem.getParentEvent();
+            if (parentEvent != null && Boolean.TRUE.equals(parentEvent.getIsRecurring())) {
+                // offsetDays가 없는 반복 TIMED_ACTION은 displayDate가 곧 해당 회차 occurrence다.
+                return displayDate;
+            }
+
+            return actionItem.getOccurrenceDate();
         }
 
         return scheduledAt.plusHours(UNTIMED_PREP_LEAD_HOURS).toLocalDate();
