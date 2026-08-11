@@ -17,19 +17,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventsRepository extends JpaRepository<Events, Long> {
 
-    @Query(value = """
-            SELECT e.* 
-              FROM events e
-              JOIN user_events ue ON ue.event_id = e.event_id
-             WHERE e.external_calendar_id = :externalCalendarId
-               AND e.external_event_id IN :externalEventIds
-               AND e.source_type = 'EXTERNAL_CALENDAR'
-            """, nativeQuery = true)
-    List<Events> findAllIncludingDeletedByExternalCalendarIdAndExternalEventIdIn(
-            @Param("externalCalendarId") Long externalCalendarId,
-            @Param("externalEventIds") List<String> externalEventIds
-    );
-
     @Query("""
             SELECT COUNT(e) > 0
               FROM Events e
@@ -148,4 +135,33 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
             @Param("userId") Long userId,
             @Param("externalEventIds") Collection<String> externalEventIds
     );
+
+    /**
+     * 특정 기간 내의 시스템 공휴일 일정만 단독으로 조회합니다.
+     */
+    @Query("""
+            SELECT e
+              FROM Events e
+             WHERE e.sourceType = com.tryna.domain.event.enums.SourceType.HOLIDAY
+               AND e.startDate IS NOT NULL
+               AND e.startDate <= :endDate
+               AND COALESCE(e.endDate, e.startDate) >= :startDate
+               AND e.deletedAt IS NULL
+            """)
+    List<Events> findHolidaysInRange(
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * 공휴일 중복 삽입 방지를 위해 존재 여부를 확인합니다.
+     */
+    @Query("""
+            SELECT COUNT(e) > 0
+              FROM Events e
+             WHERE e.sourceType = com.tryna.domain.event.enums.SourceType.HOLIDAY
+               AND e.externalEventId = :externalEventId
+               AND e.deletedAt IS NULL
+            """)
+    boolean existsHolidayByExternalEventId(@Param("externalEventId") String externalEventId);
 }

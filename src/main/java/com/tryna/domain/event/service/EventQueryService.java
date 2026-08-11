@@ -51,6 +51,9 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
+    // 가상 라벨 ID 상수 추가
+    private static final Long HOLIDAY_LABEL_ID = -1L;
+
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
@@ -192,6 +195,12 @@ public class EventQueryService {
                 .toList();
 
         occurrences.addAll(recurringOccurrences);
+
+        // 해당 날짜의 공휴일 별도 조회 후 병합
+        List<Events> holidays = eventsRepository.findHolidaysInRange(date, date);
+        holidays.forEach(holiday ->
+                occurrences.add(new EventOccurrence(holiday, holiday.getStartDate(), HOLIDAY_LABEL_ID))
+        );
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
 
@@ -408,6 +417,12 @@ public class EventQueryService {
                 occurrences.add(new EventOccurrence(event, occurrenceDate, labelId));
             }
         }
+
+        // 공휴일 별도 조회 후 병합
+        List<Events> holidays = eventsRepository.findHolidaysInRange(startDate, endDate);
+        holidays.forEach(holiday ->
+                occurrences.add(new EventOccurrence(holiday, holiday.getStartDate(), HOLIDAY_LABEL_ID))
+        );
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
         for (EventOccurrence occurrence : occurrences) {
