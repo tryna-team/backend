@@ -18,15 +18,17 @@ public record AlarmDetailResponse(
 ) {
 
     public static AlarmDetailResponse from(Reminders reminder) {
-        boolean isEvent = reminder.getTargetType() == TargetType.EVENT;
+        var targetEvent = reminder.getTargetEvent();
+        var targetActionItem = reminder.getTargetActionItem();
+
         return new AlarmDetailResponse(
                 reminder.getReminderId(),
                 reminder.getTargetType(),
                 reminder.getScheduledAt(),
                 reminder.getAlarmTitle(),
                 reminder.getAlarmBody(),
-                isEvent ? reminder.getTargetEvent().getEventId() : null,
-                isEvent ? null : reminder.getTargetActionItem().getActionItemId(),
+                targetEvent != null ? targetEvent.getEventId() : null,
+                targetActionItem != null ? targetActionItem.getActionItemId() : null,
                 reminder.getCreatedAt(),
                 reminder.getUpdatedAt()
         );
