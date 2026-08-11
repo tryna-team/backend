@@ -17,18 +17,22 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
 
     Optional<Reminders> findByReminderIdAndUser_UserId(Long reminderId, Long userId);
 
+    List<Reminders> findByUser_UserIdOrderByUpdatedAtDescReminderIdDesc(
+            Long userId,
+            Pageable pageable
+    );
+
     @Query("""
             SELECT r
               FROM Reminders r
              WHERE r.user.userId = :userId
                AND (
-                    :cursorUpdatedAt IS NULL
-                    OR r.updatedAt < :cursorUpdatedAt
+                    r.updatedAt < :cursorUpdatedAt
                     OR (r.updatedAt = :cursorUpdatedAt AND r.reminderId < :cursorReminderId)
                )
              ORDER BY r.updatedAt DESC, r.reminderId DESC
             """)
-    List<Reminders> findByUserIdWithCursor(
+    List<Reminders> findByUserIdBeforeCursor(
             @Param("userId") Long userId,
             @Param("cursorUpdatedAt") LocalDateTime cursorUpdatedAt,
             @Param("cursorReminderId") Long cursorReminderId,

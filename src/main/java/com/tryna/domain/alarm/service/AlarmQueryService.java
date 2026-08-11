@@ -45,12 +45,7 @@ public class AlarmQueryService {
         AlarmCursorCodec.Cursor decodedCursor = decodeCursor(cursor);
 
         try {
-            List<Reminders> fetchedReminders = remindersRepository.findByUserIdWithCursor(
-                    userId,
-                    decodedCursor == null ? null : decodedCursor.updatedAt(),
-                    decodedCursor == null ? null : decodedCursor.reminderId(),
-                    PageRequest.of(0, pageSize + 1)
-            );
+            List<Reminders> fetchedReminders = fetchReminders(userId, pageSize, decodedCursor);
 
             boolean hasNext = fetchedReminders.size() > pageSize;
             List<Reminders> pageReminders = hasNext
@@ -103,5 +98,20 @@ public class AlarmQueryService {
         }
 
         return AlarmCursorCodec.decode(cursor);
+    }
+
+    private List<Reminders> fetchReminders(Long userId, int pageSize, AlarmCursorCodec.Cursor decodedCursor) {
+        PageRequest pageRequest = PageRequest.of(0, pageSize + 1);
+
+        if (decodedCursor == null) {
+            return remindersRepository.findByUser_UserIdOrderByUpdatedAtDescReminderIdDesc(userId, pageRequest);
+        }
+
+        return remindersRepository.findByUserIdBeforeCursor(
+                userId,
+                decodedCursor.updatedAt(),
+                decodedCursor.reminderId(),
+                pageRequest
+        );
     }
 }
