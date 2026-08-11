@@ -123,10 +123,10 @@ public record EventActionItemResponse(
                     displayDate,
                     displayTime,
                     actionItem.getOffsetDays(),
-                    resolveStatus(actionItem, state),
+                    resolveStatus(state),
                     actionItem.getCreatedBy(),
                     actionItem.getSourceTemplateId(),
-                    resolveCompletedAt(actionItem, state)
+                    resolveCompletedAt(state)
             );
         }
 
@@ -149,25 +149,19 @@ public record EventActionItemResponse(
         }
 
         private static ActionItemStatus resolveStatus(
-                ActionItems actionItem,
                 ActionItemOccurrenceStates state
         ) {
-            if (state != null) {
-                return state.getActionItemStatus();
-            }
-
-            return actionItem.getActionItemStatus();
+            return state == null
+                    ? ActionItemStatus.PENDING
+                    : state.getActionItemStatus();
         }
 
         private static LocalDateTime resolveCompletedAt(
-                ActionItems actionItem,
                 ActionItemOccurrenceStates state
         ) {
-            if (state != null) {
-                return state.getCompletedAt();
-            }
-
-            return actionItem.getCompletedAt();
+            return state == null
+                    ? null
+                    : state.getCompletedAt();
         }
     }
 }
