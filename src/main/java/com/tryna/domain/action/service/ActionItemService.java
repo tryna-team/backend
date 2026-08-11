@@ -20,6 +20,7 @@ import com.tryna.domain.event.repository.EventsRepository;
 import com.tryna.domain.event.repository.UserEventsRepository;
 import com.tryna.domain.recommendation.entity.mapping.RecommendationFeedbacks;
 import com.tryna.domain.recommendation.repository.RecommendationFeedbacksRepository;
+import com.tryna.domain.reminder.service.AlarmReminderScheduleService;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.ActionErrorCode;
@@ -53,6 +54,7 @@ public class ActionItemService {
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final UserRepository userRepository;
+    private final AlarmReminderScheduleService alarmReminderScheduleService;
 
     @Transactional
     public ActionItemSaveResponse saveActionItems(
@@ -331,6 +333,12 @@ public class ActionItemService {
         }
 
         actionItem.updateStatus(requestedStatus);
+
+        // 완료 처리된 준비/실행 항목은 예약된 리마인드 알람을 발송하지 않도록 취소한다.
+        if (requestedStatus == ActionItemStatus.COMPLETED) {
+            alarmReminderScheduleService.cancelActionItemReminders(actionItemId);
+        }
+
         return ActionItemStatusUpdateResponse.from(actionItem, occurrenceDate, actionItem.getActionItemStatus(), actionItem.getCompletedAt());
     }
 

@@ -48,6 +48,10 @@ public class Users extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // F100 알람 발송 on/off 상태. ALARM 약관에 동의하지 않은 채로 true일 수 없다.
+    @Column(name = "alarm_state", nullable = false)
+    private boolean alarmState = false;
+
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private UserSettings userSettings;
 
@@ -75,5 +79,10 @@ public class Users extends BaseEntity {
     // 회원 탈퇴 시 계정 Soft Delete 처리용 메서드
     public void deleteSoft() {
         this.deletedAt = LocalDateTime.now();
+    }
+
+    // F100 알람 발송 상태 변경용 메서드 (ALARM 약관 동의 여부 검증은 서비스 계층 책임)
+    public void updateAlarmState(boolean alarmState) {
+        this.alarmState = alarmState;
     }
 }

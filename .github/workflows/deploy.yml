@@ -107,6 +107,7 @@ jobs:
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             CRYPTO_SECRET_KEY=${{ secrets.CRYPTO_SECRET_KEY }}
+            FIREBASE_CREDENTIALS_BASE64=${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
 
       # ECS 배포 (새 리비전 등록 + 서비스 업데이트 + 안정화 대기)
       - name: Deploy to Amazon ECS

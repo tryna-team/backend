@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserAgreedTermsRepository extends JpaRepository<UserAgreedTerms, Long> {
+    boolean existsByUser_UserIdAndTerm_TermId(Long userId, Long termId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             DELETE FROM UserAgreedTerms u

@@ -66,3 +66,6 @@ app:
 brain:
   base-url: ${FASTAPI_BASE_URL}
   api-key: ${INTERNAL_API_KEY}
+
+firebase:
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64}
