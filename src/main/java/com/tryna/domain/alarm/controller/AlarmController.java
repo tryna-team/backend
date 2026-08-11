@@ -131,7 +131,7 @@ public class AlarmController implements AlarmControllerDocs {
         EventReminderResponse response = alarmReminderScheduleService.createEventReminder(userId, eventId);
 
         return ResponseEntity.ok(
-                ApiResponse.success("F101_EVEMT_ALARM_200", "일정 리마인드 알람 전송에 성공했습니다.", response)
+                ApiResponse.success("F101_EVENT_ALARM_200", "일정 리마인드 알람 전송에 성공했습니다.", response)
         );
     }
 
