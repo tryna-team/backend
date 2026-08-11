@@ -160,22 +160,32 @@ public class AlarmReminderScheduleService {
 
         try {
             List<Reminders> correctedReminders = new ArrayList<>();
+            LocalDateTime eventScheduledAt = computeEventReminderTime(event);
+            String eventTitle = event.getTitle();
+            String eventAlarmBody = buildEventAlarmBody(event);
 
             remindersRepository.findAllByTargetEvent_EventIdAndReminderStatus(eventId, ReminderStatus.SCHEDULED)
                     .forEach(reminder -> {
-                        LocalDateTime scheduledAt = computeEventReminderTime(event);
-                        reminder.reschedule(scheduledAt, event.getTitle(), buildEventAlarmBody(event));
-                        alarmDelayedQueueRepository.schedule(reminder.getReminderId(), scheduledAt);
-                        correctedReminders.add(reminder);
+                        if (isFuture(eventScheduledAt)) {
+                            reminder.reschedule(eventScheduledAt, eventTitle, eventAlarmBody);
+                            alarmDelayedQueueRepository.schedule(reminder.getReminderId(), eventScheduledAt);
+                            correctedReminders.add(reminder);
+                        } else {
+                            cancelReminder(reminder);
+                        }
                     });
 
             remindersRepository.findAllByTargetActionItem_ParentEvent_EventIdAndReminderStatus(eventId, ReminderStatus.SCHEDULED)
                     .forEach(reminder -> {
                         ActionItems actionItem = reminder.getTargetActionItem();
                         LocalDateTime scheduledAt = computeActionItemReminderTime(actionItem);
-                        reminder.reschedule(scheduledAt, actionItem.getTitle(), buildActionItemAlarmBody(actionItem));
-                        alarmDelayedQueueRepository.schedule(reminder.getReminderId(), scheduledAt);
-                        correctedReminders.add(reminder);
+                        if (isFuture(scheduledAt)) {
+                            reminder.reschedule(scheduledAt, actionItem.getTitle(), buildActionItemAlarmBody(actionItem));
+                            alarmDelayedQueueRepository.schedule(reminder.getReminderId(), scheduledAt);
+                            correctedReminders.add(reminder);
+                        } else {
+                            cancelReminder(reminder);
+                        }
                     });
 
             return AlarmCorrectionResponse.from(correctedReminders);
@@ -215,9 +225,18 @@ public class AlarmReminderScheduleService {
     }
 
     private void validateFutureSchedule(LocalDateTime scheduledAt, AlarmErrorCode errorCode) {
-        if (scheduledAt == null || !scheduledAt.isAfter(LocalDateTime.now())) {
+        if (!isFuture(scheduledAt)) {
             throw new BusinessException(errorCode);
         }
+    }
+
+    private boolean isFuture(LocalDateTime scheduledAt) {
+        return scheduledAt != null && scheduledAt.isAfter(LocalDateTime.now());
+    }
+
+    private void cancelReminder(Reminders reminder) {
+        reminder.markCanceled();
+        alarmDelayedQueueRepository.cancel(reminder.getReminderId());
     }
 
     private Users findUser(Long userId) {
