@@ -91,6 +91,7 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
             SPRING_PROFILES_ACTIVE=prod
+            JAVA_HEAP_PERCENT=75
             DB_URL=${{ secrets.DB_URL }}
             DB_USERNAME=${{ secrets.DB_USERNAME }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
