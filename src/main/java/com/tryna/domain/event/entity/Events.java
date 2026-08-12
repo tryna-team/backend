@@ -321,4 +321,26 @@ public class Events extends BaseEntity {
         this.eventStatus = EventStatus.CONFIRMED;
         this.deletedAt = null;
     }
+
+    // 공휴일 전용 생성 정적 팩토리 메서드
+    public static Events createHolidayEvent(
+            String title,
+            LocalDate startDate,
+            String externalEventId
+    ) {
+        Events event = new Events();
+        event.title = title;
+        event.sourceText = title;
+        event.startDate = startDate;
+        event.endDate = startDate;
+        event.isAllDay = true;
+        event.isRecurring = false;
+        event.recurrenceType = RecurrenceType.NONE;
+        event.recurrenceDayOfWeek = RecurrenceDayOfWeek.NONE;
+        event.sourceType = SourceType.HOLIDAY;
+        event.eventStatus = EventStatus.CONFIRMED;
+        event.externalEventId = externalEventId;
+        event.provider = Provider.APPLE;
+        return event;
+    }
 }
