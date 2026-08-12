@@ -179,24 +179,20 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
      * offsetDays와 반복 규칙을 함께 계산해 최종 필터링합니다.
      */
     @Query("""
-            SELECT a
-              FROM ActionItems a
-              JOIN FETCH a.parentEvent e
-              JOIN UserEvents ue ON ue.event = e
-             WHERE ue.user.userId = :userId
-               AND e.isRecurring = true
-               AND e.startDate <= :date
-               AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :dateStart)
-               AND e.eventStatus IN :eventStatuses
-               AND a.itemType = :itemType
-               AND a.offsetDays IS NOT NULL
-               AND a.deletedAt IS NULL
-             ORDER BY a.actionItemId ASC
-            """)
+        SELECT a
+          FROM ActionItems a
+          JOIN FETCH a.parentEvent e
+          JOIN UserEvents ue ON ue.event = e
+         WHERE ue.user.userId = :userId
+           AND e.isRecurring = true
+           AND e.eventStatus IN :eventStatuses
+           AND a.itemType = :itemType
+           AND a.offsetDays IS NOT NULL
+           AND a.deletedAt IS NULL
+         ORDER BY a.actionItemId ASC
+        """)
     List<ActionItems> findRecurringTimedActionItemsByUserId(
             @Param("userId") Long userId,
-            @Param("date") LocalDate date,
-            @Param("dateStart") LocalDateTime dateStart,
             @Param("itemType") ItemType itemType,
             @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
