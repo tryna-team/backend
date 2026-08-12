@@ -137,6 +137,11 @@ public class ActionItems extends BaseEntity {
         this.completedAt = null;
     }
 
+    public void restoreStatus(ActionItemStatus status, LocalDateTime completedAt) {
+        this.actionItemStatus = status;
+        this.completedAt = status == ActionItemStatus.COMPLETED ? completedAt : null;
+    }
+
     public void updateDetails(
             String title,
             ItemType itemType,
