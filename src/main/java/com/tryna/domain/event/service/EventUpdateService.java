@@ -462,13 +462,18 @@ public class EventUpdateService {
 
         Set<Long> deletedIds = new HashSet<>(deletedActionItemIds);
         List<ActionItems> newActionItems = new ArrayList<>();
-        List<RequestedActionItemCreation> requestedCreations = new ArrayList<>();
+        boolean recurringEvent = Boolean.TRUE.equals(event.getIsRecurring());
+        List<RequestedActionItemStatus> requestedStatuses = new ArrayList<>();
 
         for (EventUpdateRequest.Item item : requestedItems) {
             if (item.actionItemId() == null || createOnly) {
                 ActionItems newActionItem = createActionItem(event, item);
                 newActionItems.add(newActionItem);
-                requestedCreations.add(new RequestedActionItemCreation(newActionItem, item));
+                if (recurringEvent) {
+                    collectRequestedOccurrenceStatus(requestedStatuses, newActionItem, item);
+                } else {
+                    updateActionItemStatusIfRequested(newActionItem, item.actionItemStatus());
+                }
                 continue;
             }
 
@@ -487,41 +492,60 @@ public class EventUpdateService {
                     item.createdBy(),
                     normalizeBlank(item.sourceTemplateId())
             );
-            updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            if (recurringEvent) {
+                actionItem.restoreStatus(ActionItemStatus.PENDING, null);
+                collectRequestedOccurrenceStatus(requestedStatuses, actionItem, item);
+            } else {
+                updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            }
             changedCount++;
         }
 
         if (!newActionItems.isEmpty()) {
             actionItemsRepository.saveAll(newActionItems);
-            saveRequestedOccurrenceStates(event, requestedCreations);
             changedCount += newActionItems.size();
         }
+        saveRequestedOccurrenceStates(event, requestedStatuses);
 
         return new ActionItemSyncResult(changedCount, false);
     }
 
     private void saveRequestedOccurrenceStates(
             Events event,
-            List<RequestedActionItemCreation> requestedCreations
+            List<RequestedActionItemStatus> requestedStatuses
     ) {
         if (!Boolean.TRUE.equals(event.getIsRecurring())) {
             return;
         }
 
-        List<ActionItemOccurrenceStates> states = requestedCreations.stream()
-                .filter(creation -> creation.request().actionItemStatus() != null)
-                .map(creation -> {
-                    ActionItemOccurrenceStates state = ActionItemOccurrenceStates.create(
-                            creation.actionItem(),
-                            creation.request().occurrenceDate()
-                    );
-                    state.updateStatus(creation.request().actionItemStatus());
+        List<ActionItemOccurrenceStates> states = requestedStatuses.stream()
+                .map(requestedStatus -> {
+                    ActionItemOccurrenceStates state = actionItemOccurrenceStatesRepository
+                            .findByActionItem_ActionItemIdAndOccurrenceDate(
+                                    requestedStatus.actionItem().getActionItemId(),
+                                    requestedStatus.request().occurrenceDate()
+                            )
+                            .orElseGet(() -> ActionItemOccurrenceStates.create(
+                                    requestedStatus.actionItem(),
+                                    requestedStatus.request().occurrenceDate()
+                            ));
+                    state.updateStatus(requestedStatus.request().actionItemStatus());
                     return state;
                 })
                 .toList();
 
         if (!states.isEmpty()) {
             actionItemOccurrenceStatesRepository.saveAll(states);
+        }
+    }
+
+    private void collectRequestedOccurrenceStatus(
+            List<RequestedActionItemStatus> requestedStatuses,
+            ActionItems actionItem,
+            EventUpdateRequest.Item request
+    ) {
+        if (request.actionItemStatus() != null) {
+            requestedStatuses.add(new RequestedActionItemStatus(actionItem, request));
         }
     }
 
@@ -609,8 +633,6 @@ public class EventUpdateService {
                 item.createdBy(),
                 normalizeBlank(item.sourceTemplateId())
         );
-        updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
-
         return actionItem;
     }
 
@@ -885,7 +907,12 @@ public class EventUpdateService {
             targetCursor = nextTarget;
         }
 
-        return sourceCursor.equals(stateOccurrenceDate) ? targetCursor : null;
+        if (!sourceCursor.equals(stateOccurrenceDate)
+                || !isRecurringOccurrenceOn(targetEvent, targetCursor)) {
+            return null;
+        }
+
+        return targetCursor;
     }
 
     private boolean isTemplateOrOccurrenceItem(ActionItems actionItem, LocalDate occurrenceDate) {
@@ -1451,7 +1478,7 @@ public class EventUpdateService {
     ) {
     }
 
-    private record RequestedActionItemCreation(
+    private record RequestedActionItemStatus(
             ActionItems actionItem,
             EventUpdateRequest.Item request
     ) {

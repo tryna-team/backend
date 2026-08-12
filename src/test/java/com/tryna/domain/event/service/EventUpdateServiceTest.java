@@ -33,6 +33,7 @@ import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -339,6 +340,84 @@ class EventUpdateServiceTest {
         assertThat(savedState.getOccurrenceDate()).isEqualTo(occurrenceDate);
         assertThat(savedState.getActionItemStatus()).isEqualTo(ActionItemStatus.COMPLETED);
         assertThat(savedState.getCompletedAt()).isNotNull();
+    }
+
+    @Test
+    void existingRecurringItemStoresRequestedStatusPerOccurrenceAndKeepsBasePending() {
+        Events recurringEvent = weeklyRecurringEvent(1);
+        LocalDate occurrenceDate = LocalDate.of(2026, 8, 17);
+        ActionItems existingItem = ActionItems.create(
+                recurringEvent,
+                "Prepare materials",
+                ItemType.UNTIMED_PREP,
+                occurrenceDate,
+                null,
+                null,
+                null,
+                CreatedBy.USER,
+                null
+        );
+        ReflectionTestUtils.setField(existingItem, "actionItemId", 21L);
+        existingItem.updateStatus(ActionItemStatus.COMPLETED);
+        EventUpdateRequest.Item requestItem = new EventUpdateRequest.Item(
+                21L,
+                "Prepare updated materials",
+                ItemType.UNTIMED_PREP,
+                occurrenceDate,
+                null,
+                null,
+                null,
+                ActionItemStatus.COMPLETED,
+                CreatedBy.USER,
+                null
+        );
+
+        when(actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(21L))
+                .thenReturn(Optional.of(existingItem));
+        when(actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdAndOccurrenceDate(21L, occurrenceDate))
+                .thenReturn(Optional.empty());
+
+        invokePrivate(
+                "syncActionItems",
+                new Class<?>[]{Events.class, EventUpdateRequest.ActionItems.class, boolean.class},
+                recurringEvent,
+                new EventUpdateRequest.ActionItems(List.of(requestItem), List.of()),
+                false
+        );
+
+        assertThat(existingItem.getActionItemStatus()).isEqualTo(ActionItemStatus.PENDING);
+        assertThat(existingItem.getCompletedAt()).isNull();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItemOccurrenceStates>> statesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemOccurrenceStatesRepository).saveAll(statesCaptor.capture());
+        assertThat(statesCaptor.getValue().getFirst().getOccurrenceDate()).isEqualTo(occurrenceDate);
+        assertThat(statesCaptor.getValue().getFirst().getActionItemStatus())
+                .isEqualTo(ActionItemStatus.COMPLETED);
+    }
+
+    @Test
+    void splitStateMappingRejectsOccurrenceAfterTargetRecurrenceEndDate() {
+        Events sourceEvent = weeklyRecurringEvent(1);
+        Events targetEvent = weeklyRecurringEvent(1);
+        ReflectionTestUtils.setField(
+                targetEvent,
+                "recurrenceEndDate",
+                LocalDate.of(2026, 8, 24).atStartOfDay()
+        );
+
+        LocalDate mappedDate = (LocalDate) invokePrivate(
+                "mapSplitOccurrenceDate",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                LocalDate.of(2026, 8, 10),
+                LocalDate.of(2026, 8, 17),
+                LocalDate.of(2026, 8, 24)
+        );
+
+        assertThat(mappedDate).isNull();
     }
 
     @Test
