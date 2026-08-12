@@ -21,11 +21,14 @@ RUN apk add --no-cache tzdata \
     && addgroup -S spring && adduser -S spring -G spring
 
 ENV TZ=Asia/Seoul
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -XX:+UseZGC -Duser.timezone=Asia/Seoul"
+ENV JAVA_HEAP_PERCENT=75
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:+UnlockExperimentalVMOptions -XX:+UseZGC -Duser.timezone=Asia/Seoul"
 
 COPY --from=build /home/gradle/project/build/libs/*.jar app.jar
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 USER spring:spring
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
