@@ -126,11 +126,11 @@ public class EventDeletionService {
         );
 
         LocalDateTime deletedAt = LocalDateTime.now();
-        reminderLifecycleService.cancelScheduledForSoftDeletedActionItemsByParentEventAndDisplayDate(
+        reminderLifecycleService.cancelScheduledForSoftDeletedActionItemsByParentEventAndOccurrenceDate(
                 event.getEventId(),
                 occurrenceDate
         );
-        int affectedActionItemCount = actionItemsRepository.softDeleteByParentEventIdAndDisplayDate(
+        int affectedActionItemCount = actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
                 event.getEventId(),
                 occurrenceDate,
                 deletedAt
@@ -154,11 +154,11 @@ public class EventDeletionService {
         LocalDateTime recurrenceEndDate = occurrenceDate.minusDays(1).atTime(LocalTime.MAX);
         event.truncateRecurrenceEndDate(recurrenceEndDate);
 
-        reminderLifecycleService.cancelScheduledForSoftDeletedActionItemsByParentEventFromDisplayDate(
+        reminderLifecycleService.cancelScheduledForSoftDeletedActionItemsByParentEventFromOccurrenceDate(
                 event.getEventId(),
                 occurrenceDate
         );
-        int affectedActionItemCount = actionItemsRepository.softDeleteByParentEventIdFromDisplayDate(
+        int affectedActionItemCount = actionItemsRepository.softDeleteByParentEventIdFromOccurrenceDate(
                 event.getEventId(),
                 occurrenceDate,
                 deletedAt
