@@ -41,6 +41,12 @@ public class AlarmStateService {
         return applyAlarmStateToggle(user);
     }
 
+    @Transactional(readOnly = true)
+    public AlarmStateResponse getAlarmStatus(Long userId) {
+        Users user = findActiveUser(userId);
+        return AlarmStateResponse.from(user.isAlarmState());
+    }
+
     private Users findActiveUser(Long userId) {
         return userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_401));

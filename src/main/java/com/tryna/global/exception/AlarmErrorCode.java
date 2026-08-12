@@ -22,6 +22,12 @@ public enum AlarmErrorCode implements ErrorCode {
             "알람 상태 전환을 할 수 없습니다."
     ),
 
+    F100_ALARM_STATUS_400(
+            HttpStatus.BAD_REQUEST,
+            "F100_ALARM_STATUS_400",
+            "알람 상태 조회가 불가능 합니다."
+    ),
+
     F100_ALARM_404(
             HttpStatus.NOT_FOUND,
             "F100_ALARM_404",

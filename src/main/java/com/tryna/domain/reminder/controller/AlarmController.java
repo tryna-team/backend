@@ -108,6 +108,22 @@ public class AlarmController implements AlarmControllerDocs {
         );
     }
 
+    @GetMapping("/status")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmStateResponse>> getAlarmStatus(
+            @AuthenticationPrincipal Long userId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmStateResponse response = alarmStateService.getAlarmStatus(userId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_STATUS_200", "알람 현재 상태 조회에 성공했습니다.", response)
+        );
+    }
+
     @GetMapping("/my")
     @Override
     public ResponseEntity<ApiResponse<AlarmListResponse>> getMyAlarms(

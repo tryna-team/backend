@@ -73,6 +73,16 @@ public interface AlarmControllerDocs {
     );
 
     @Operation(
+            summary = "F100 알람 활성화 상태 조회",
+            description = "로그인한 사용자의 현재 알람 활성화 상태(alarm_state)를 조회합니다.",
+            operationId = "getAlarmStatus"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmStateResponse>> getAlarmStatus(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
+    );
+
+    @Operation(
             summary = "F100 알람 목록 조회",
             description = """
                     로그인한 사용자의 알람 목록을 updated_at 최신순으로 커서 페이징 조회합니다.
