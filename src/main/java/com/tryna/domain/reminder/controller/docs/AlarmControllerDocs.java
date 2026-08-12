@@ -59,6 +59,20 @@ public interface AlarmControllerDocs {
     );
 
     @Operation(
+            summary = "F100 알람 접근 권한 활성화/비활성화 (MVP)",
+            description = """
+                    MVP 단계 연동용 알람 접근 권한(alarm_state) 토글 API입니다.
+                    요청마다 기존 값의 반대값을 저장합니다. (false → true → false …)
+                    ALARM 약관 미동의 상태에서도 활성화/비활성화가 가능합니다.
+                    """,
+            operationId = "toggleAlarmStateMvp"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmStateMvp(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
+    );
+
+    @Operation(
             summary = "F100 알람 목록 조회",
             description = """
                     로그인한 사용자의 알람 목록을 updated_at 최신순으로 커서 페이징 조회합니다.

@@ -89,6 +89,25 @@ public class AlarmController implements AlarmControllerDocs {
         );
     }
 
+    @PatchMapping("/toggle/mvp")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmStateMvp(
+            @AuthenticationPrincipal Long userId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmStateResponse response = alarmStateService.toggleAlarmStateMvp(userId);
+        String message = response.alarmState()
+                ? "알람 활성화에 성공했습니다."
+                : "알람 비활성화에 성공했습니다.";
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_TOOGLE_MVP_200", message, response)
+        );
+    }
+
     @GetMapping("/my")
     @Override
     public ResponseEntity<ApiResponse<AlarmListResponse>> getMyAlarms(

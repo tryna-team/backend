@@ -26,15 +26,28 @@ public class AlarmStateService {
 
     @Transactional
     public AlarmStateResponse toggleAlarmState(Long userId) {
-        Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_401));
+        Users user = findActiveUser(userId);
 
         if (!user.isAlarmState()) {
             validateAlarmTermAgreed(userId);
         }
 
-        user.updateAlarmState(!user.isAlarmState());
+        return applyAlarmStateToggle(user);
+    }
 
+    @Transactional
+    public AlarmStateResponse toggleAlarmStateMvp(Long userId) {
+        Users user = findActiveUser(userId);
+        return applyAlarmStateToggle(user);
+    }
+
+    private Users findActiveUser(Long userId) {
+        return userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_401));
+    }
+
+    private AlarmStateResponse applyAlarmStateToggle(Users user) {
+        user.updateAlarmState(!user.isAlarmState());
         return AlarmStateResponse.from(user.isAlarmState());
     }
 
