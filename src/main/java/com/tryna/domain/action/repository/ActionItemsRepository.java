@@ -265,6 +265,24 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
+     * 반복 템플릿은 유지하고 특정 회차에 직접 연결된 항목만 soft delete 합니다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE ActionItems a
+           SET a.deletedAt = :deletedAt
+         WHERE a.parentEvent.eventId = :eventId
+           AND a.occurrenceDate = :occurrenceDate
+           AND a.offsetDays IS NULL
+           AND a.deletedAt IS NULL
+        """)
+    int softDeleteOccurrenceSpecificItems(
+            @Param("eventId") Long eventId,
+            @Param("occurrenceDate") LocalDate occurrenceDate,
+            @Param("deletedAt") LocalDateTime deletedAt
+    );
+
+    /**
      * 반복 일정의 기준 회차 이후 준비/실행 항목을 모두 soft delete 합니다.
      *
      * THIS_AND_FUTURE 일정 수정 후 기존 시리즈의 이후 회차 항목이
@@ -276,6 +294,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
            SET a.deletedAt = :deletedAt
          WHERE a.parentEvent.eventId = :eventId
            AND a.occurrenceDate >= :occurrenceDate
+           AND a.offsetDays IS NULL
            AND a.deletedAt IS NULL
         """)
     int softDeleteByParentEventIdFromOccurrenceDate(

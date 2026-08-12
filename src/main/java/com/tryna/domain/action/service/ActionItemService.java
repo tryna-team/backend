@@ -395,9 +395,8 @@ public class ActionItemService {
         }
 
         List<ActionItems> actionItems = actionItemsRepository
-                .findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
-                        eventId,
-                        occurrenceDate
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        eventId
                 );
 
         return EventActionItemResponse.from(eventId, actionItems);
