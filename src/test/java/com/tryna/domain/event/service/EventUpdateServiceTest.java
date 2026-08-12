@@ -4,7 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
+import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
@@ -28,20 +33,172 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class EventUpdateServiceTest {
 
     private EventUpdateService eventUpdateService;
+    private ActionItemsRepository actionItemsRepository;
 
     @BeforeEach
     void setUp() {
+        actionItemsRepository = mock(ActionItemsRepository.class);
         eventUpdateService = new EventUpdateService(
                 mock(EventsRepository.class),
                 mock(UserEventsRepository.class),
                 mock(LabelsRepository.class),
-                mock(ActionItemsRepository.class),
+                actionItemsRepository,
                 mock(RecurringEventExceptionsRepository.class)
         );
+    }
+
+    @Test
+    void splitOccurrencePreservesOriginalEventDurationWhenEndDateIsOmitted() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 21),
+                null
+        );
+
+        assertThat(resolvedEndDate).isEqualTo(LocalDate.of(2026, 8, 22));
+    }
+
+    @Test
+    void splitOccurrenceUsesExplicitEndDateBeforeDurationFallback() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 21),
+                LocalDate.of(2026, 8, 24)
+        );
+
+        assertThat(resolvedEndDate).isEqualTo(LocalDate.of(2026, 8, 24));
+    }
+
+    @Test
+    void splitOccurrenceKeepsNullEndDateForOriginalSingleDayEvent() {
+        Events sourceEvent = mock(Events.class);
+        when(sourceEvent.getStartDate()).thenReturn(LocalDate.of(2026, 8, 10));
+        when(sourceEvent.getEndDate()).thenReturn(null);
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 17),
+                null
+        );
+
+        assertThat(resolvedEndDate).isNull();
+    }
+
+    @Test
+    void splitOccurrenceSelectsTemplateAndRequestedOccurrenceItemsOnly() {
+        LocalDate requestedOccurrence = LocalDate.of(2026, 8, 21);
+        ActionItems templateItem = actionItem(
+                LocalDate.of(2026, 8, 14),
+                LocalDate.of(2026, 8, 13),
+                -1
+        );
+        ActionItems requestedOccurrenceItem = actionItem(
+                requestedOccurrence,
+                null,
+                null
+        );
+        ActionItems otherOccurrenceItem = actionItem(
+                LocalDate.of(2026, 8, 28),
+                null,
+                null
+        );
+
+        assertThat(invokeIsTemplateOrOccurrenceItem(templateItem, requestedOccurrence)).isTrue();
+        assertThat(invokeIsTemplateOrOccurrenceItem(requestedOccurrenceItem, requestedOccurrence)).isTrue();
+        assertThat(invokeIsTemplateOrOccurrenceItem(otherOccurrenceItem, requestedOccurrence)).isFalse();
+    }
+
+    @Test
+    void splitOccurrenceCopiesTemplateAndRequestedOccurrenceItemsOnly() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = nonRecurringMultiDayEvent();
+        LocalDate requestedOccurrence = LocalDate.of(2026, 8, 21);
+        List<ActionItems> sourceItems = List.of(
+                actionItem(LocalDate.of(2026, 8, 14), LocalDate.of(2026, 8, 13), -1),
+                actionItem(requestedOccurrence, null, null),
+                actionItem(LocalDate.of(2026, 8, 28), null, null)
+        );
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(sourceItems);
+
+        Object copiedResult = invokePrivate(
+                "copyLinkedActionItems",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                requestedOccurrence,
+                requestedOccurrence
+        );
+
+        assertThat(readRecordValue(copiedResult, "copiedActionItemCount")).isEqualTo(2);
+        verify(actionItemsRepository).softDeleteOccurrenceSpecificItems(
+                eq(sourceEvent.getEventId()),
+                eq(requestedOccurrence),
+                any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    void thisAndFutureCopyPreservesSkippedSourceOccurrenceGap() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = weeklyRecurringEvent(1);
+        LocalDate sourceOccurrenceDate = LocalDate.of(2026, 8, 21);
+        LocalDate targetSeriesStartDate = LocalDate.of(2026, 8, 24);
+        List<ActionItems> occurrenceItems = List.of(
+                actionItem(sourceOccurrenceDate, null, null),
+                actionItem(LocalDate.of(2026, 9, 4), null, null)
+        );
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(List.of());
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                ))
+                .thenReturn(occurrenceItems);
+
+        invokePrivate(
+                "copyLinkedActionItemsFromOccurrence",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                sourceOccurrenceDate,
+                targetSeriesStartDate
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItems>> copiedItemsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemsRepository).saveAll(copiedItemsCaptor.capture());
+
+        assertThat(copiedItemsCaptor.getValue())
+                .extracting(ActionItems::getOccurrenceDate)
+                .containsExactly(
+                        LocalDate.of(2026, 8, 24),
+                        LocalDate.of(2026, 9, 7)
+                );
     }
 
     @Test
@@ -214,6 +371,81 @@ class EventUpdateServiceTest {
                 "회의실",
                 "MEETING",
                 EventStatus.CONFIRMED
+        );
+    }
+
+    private Events weeklyRecurringMultiDayEvent() {
+        return Events.createInternalEvent(
+                "데모데이 부산",
+                "데모데이 부산",
+                null,
+                LocalDate.of(2026, 8, 14),
+                LocalDateTime.of(2026, 8, 14, 9, 0),
+                LocalDate.of(2026, 8, 15),
+                LocalDateTime.of(2026, 8, 15, 18, 0),
+                false,
+                true,
+                RecurrenceType.WEEKLY,
+                1,
+                RecurrenceDayOfWeek.FRI,
+                null,
+                LocalDate.of(2026, 9, 30).atStartOfDay(),
+                "부산",
+                "EVENT",
+                EventStatus.CONFIRMED
+        );
+    }
+
+    private Events nonRecurringMultiDayEvent() {
+        return Events.createInternalEvent(
+                "수정된 데모데이 부산",
+                "수정된 데모데이 부산",
+                null,
+                LocalDate.of(2026, 8, 21),
+                LocalDateTime.of(2026, 8, 21, 9, 0),
+                LocalDate.of(2026, 8, 22),
+                LocalDateTime.of(2026, 8, 22, 18, 0),
+                false,
+                false,
+                RecurrenceType.NONE,
+                1,
+                RecurrenceDayOfWeek.NONE,
+                null,
+                null,
+                "부산",
+                "EVENT",
+                EventStatus.CONFIRMED
+        );
+    }
+
+    private ActionItems actionItem(
+            LocalDate occurrenceDate,
+            LocalDate displayDate,
+            Integer offsetDays
+    ) {
+        ItemType itemType = offsetDays == null ? ItemType.UNTIMED_PREP : ItemType.TIMED_ACTION;
+        return ActionItems.create(
+                weeklyRecurringMultiDayEvent(),
+                "준비 항목",
+                itemType,
+                occurrenceDate,
+                displayDate,
+                displayDate == null ? null : displayDate.atTime(9, 0),
+                offsetDays,
+                CreatedBy.SYSTEM,
+                "template-1"
+        );
+    }
+
+    private boolean invokeIsTemplateOrOccurrenceItem(
+            ActionItems actionItem,
+            LocalDate occurrenceDate
+    ) {
+        return (boolean) invokePrivate(
+                "isTemplateOrOccurrenceItem",
+                new Class<?>[]{ActionItems.class, LocalDate.class},
+                actionItem,
+                occurrenceDate
         );
     }
 
