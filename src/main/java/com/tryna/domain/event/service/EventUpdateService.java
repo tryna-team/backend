@@ -342,7 +342,11 @@ public class EventUpdateService {
         boolean isAllDay = resolveAllDay(request.isAllDay(), startTime);
 
         LocalDate resolvedStartDate = startDate == null ? occurrenceDate : startDate;
-        LocalDate resolvedEndDate = endDate;
+        LocalDate resolvedEndDate = resolveSplitEndDate(sourceEvent, resolvedStartDate, endDate);
+        if (endDate == null && resolvedEndDate != null && endTime == null
+                && sourceEvent.getEndDatetime() != null) {
+            endTime = sourceEvent.getEndDatetime().toLocalTime();
+        }
         validateTimePolicy(resolvedStartDate, startTime, resolvedEndDate, endTime, isAllDay);
         RecurrenceRule recurrenceRule = recurring
                 ? resolveUpdateRecurrenceRule(sourceEvent, request, resolvedStartDate, recurrenceEndDate)
@@ -412,7 +416,7 @@ public class EventUpdateService {
                         sourceOccurrenceDate,
                         deletedAt
                 )
-                : actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+                : actionItemsRepository.softDeleteOccurrenceSpecificItems(
                         sourceEvent.getEventId(),
                         sourceOccurrenceDate,
                         deletedAt
@@ -588,10 +592,12 @@ public class EventUpdateService {
             LocalDate targetOccurrenceDate
     ) {
         List<ActionItems> sourceActionItems = actionItemsRepository
-                .findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
-                        sourceEvent.getEventId(),
-                        sourceOccurrenceDate
-                );
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                )
+                .stream()
+                .filter(item -> isTemplateOrOccurrenceItem(item, sourceOccurrenceDate))
+                .toList();
 
         if (sourceActionItems.isEmpty()) {
             return new CopiedActionItemResult(0, false);
@@ -623,7 +629,7 @@ public class EventUpdateService {
 
         // 새 일정에 복사한 뒤 기존 반복 회차의 원본 action-item은
         // F103/F104에서 중복 노출되지 않도록 soft delete
-        actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+        actionItemsRepository.softDeleteOccurrenceSpecificItems(
                 sourceEvent.getEventId(),
                 sourceOccurrenceDate,
                 LocalDateTime.now()
@@ -641,40 +647,46 @@ public class EventUpdateService {
             LocalDate sourceOccurrenceDate,
             LocalDate targetSeriesStartDate
     ) {
-        List<ActionItems> sourceActionItems = actionItemsRepository
+        List<ActionItems> allSourceActionItems = actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                );
+        List<ActionItems> templateActionItems = allSourceActionItems.stream()
+                .filter(item -> item.getOffsetDays() != null)
+                .toList();
+        List<ActionItems> occurrenceActionItems = actionItemsRepository
                 .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
                         sourceEvent.getEventId(),
                         sourceOccurrenceDate
-                );
+                )
+                .stream()
+                .filter(item -> item.getOffsetDays() == null)
+                .toList();
 
-        if (sourceActionItems.isEmpty()) {
+        if (templateActionItems.isEmpty() && occurrenceActionItems.isEmpty()) {
             return new CopiedActionItemResult(0, false);
         }
 
         List<ActionItems> copiedActionItems = new ArrayList<>();
         boolean requiresActionItemReview = false;
 
-        LocalDate currentSourceOccurrence = null;
+        for (ActionItems templateActionItem : templateActionItems) {
+            ActionItems copiedActionItem = copyActionItem(
+                    templateActionItem,
+                    targetEvent,
+                    targetSeriesStartDate,
+                    targetSeriesStartDate
+            );
+            copiedActionItems.add(copiedActionItem);
+        }
+
+        LocalDate currentSourceOccurrence = sourceOccurrenceDate;
         LocalDate currentTargetOccurrence = targetSeriesStartDate;
 
-        for (ActionItems sourceActionItem : sourceActionItems) {
-
-            // source occurrence가 다음 회차로 넘어갔다면
-            // target 반복 일정에서도 다음 회차를 계산합니다.
-            if (!Objects.equals(
-                    currentSourceOccurrence,
-                    sourceActionItem.getOccurrenceDate()
-            )) {
-                if (currentSourceOccurrence != null) {
-                    currentTargetOccurrence =
-                            nextOccurrence(
-                                    targetEvent,
-                                    currentTargetOccurrence
-                            );
-                }
-
-                currentSourceOccurrence =
-                        sourceActionItem.getOccurrenceDate();
+        for (ActionItems sourceActionItem : occurrenceActionItems) {
+            while (currentSourceOccurrence.isBefore(sourceActionItem.getOccurrenceDate())) {
+                currentSourceOccurrence = nextOccurrence(sourceEvent, currentSourceOccurrence);
+                currentTargetOccurrence = nextOccurrence(targetEvent, currentTargetOccurrence);
             }
 
             ActionItems copiedActionItem =
@@ -709,6 +721,33 @@ public class EventUpdateService {
                 copiedActionItems.size(),
                 requiresActionItemReview
         );
+    }
+
+    private boolean isTemplateOrOccurrenceItem(ActionItems actionItem, LocalDate occurrenceDate) {
+        return actionItem.getOffsetDays() != null
+                || Objects.equals(actionItem.getOccurrenceDate(), occurrenceDate);
+    }
+
+    private LocalDate resolveSplitEndDate(
+            Events sourceEvent,
+            LocalDate resolvedStartDate,
+            LocalDate requestedEndDate
+    ) {
+        if (requestedEndDate != null) {
+            return requestedEndDate;
+        }
+
+        if (resolvedStartDate == null
+                || sourceEvent.getStartDate() == null
+                || sourceEvent.getEndDate() == null) {
+            return null;
+        }
+
+        long durationDays = ChronoUnit.DAYS.between(
+                sourceEvent.getStartDate(),
+                sourceEvent.getEndDate()
+        );
+        return resolvedStartDate.plusDays(durationDays);
     }
 
     private ActionItems copyActionItem(

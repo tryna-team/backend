@@ -50,7 +50,12 @@ public interface ActionItemControllerDocs {
 
     @Operation(
             summary = "F103 일정 상세 내 준비/실행 항목 조회",
-            description = "특정 일정의 선택한 회차에 연결된 준비/실행 항목 목록을 조회합니다.",
+            description = """
+                    특정 일정에 연결된 준비/실행 항목 목록을 조회합니다.
+                    반복 일정은 occurrenceDate를 회차 식별자로 사용해 해당 회차의 항목과 상태를 반환합니다.
+                    비반복 일정은 회차 개념이 없으므로 occurrenceDate로 항목을 필터링하지 않고,
+                    기간 내 어느 날짜에서 조회해도 eventId에 연결된 동일한 항목 목록을 반환합니다.
+                    """,
             operationId = "getEventActionItems"
     )
     ResponseEntity<ApiResponse<EventActionItemResponse>> getEventActionItems(
@@ -61,7 +66,7 @@ public interface ActionItemControllerDocs {
             @PathVariable("eventId") Long eventId,
 
             @Parameter(
-                    description = "조회할 반복 일정 회차 날짜(yyyy-MM-dd)",
+                    description = "조회 화면의 날짜(yyyy-MM-dd). 반복 일정에서는 조회할 회차 날짜로 사용합니다.",
                     required = true,
                     example = "2026-08-16"
             )
