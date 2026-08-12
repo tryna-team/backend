@@ -680,27 +680,13 @@ public class EventUpdateService {
             copiedActionItems.add(copiedActionItem);
         }
 
-        LocalDate currentSourceOccurrence = null;
+        LocalDate currentSourceOccurrence = sourceOccurrenceDate;
         LocalDate currentTargetOccurrence = targetSeriesStartDate;
 
         for (ActionItems sourceActionItem : occurrenceActionItems) {
-
-            // source occurrence가 다음 회차로 넘어갔다면
-            // target 반복 일정에서도 다음 회차를 계산합니다.
-            if (!Objects.equals(
-                    currentSourceOccurrence,
-                    sourceActionItem.getOccurrenceDate()
-            )) {
-                if (currentSourceOccurrence != null) {
-                    currentTargetOccurrence =
-                            nextOccurrence(
-                                    targetEvent,
-                                    currentTargetOccurrence
-                            );
-                }
-
-                currentSourceOccurrence =
-                        sourceActionItem.getOccurrenceDate();
+            while (currentSourceOccurrence.isBefore(sourceActionItem.getOccurrenceDate())) {
+                currentSourceOccurrence = nextOccurrence(sourceEvent, currentSourceOccurrence);
+                currentTargetOccurrence = nextOccurrence(targetEvent, currentTargetOccurrence);
             }
 
             ActionItems copiedActionItem =

@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class EventUpdateServiceTest {
 
@@ -154,6 +155,50 @@ class EventUpdateServiceTest {
                 eq(requestedOccurrence),
                 any(LocalDateTime.class)
         );
+    }
+
+    @Test
+    void thisAndFutureCopyPreservesSkippedSourceOccurrenceGap() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = weeklyRecurringEvent(1);
+        LocalDate sourceOccurrenceDate = LocalDate.of(2026, 8, 21);
+        LocalDate targetSeriesStartDate = LocalDate.of(2026, 8, 24);
+        List<ActionItems> occurrenceItems = List.of(
+                actionItem(sourceOccurrenceDate, null, null),
+                actionItem(LocalDate.of(2026, 9, 4), null, null)
+        );
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(List.of());
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                ))
+                .thenReturn(occurrenceItems);
+
+        invokePrivate(
+                "copyLinkedActionItemsFromOccurrence",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                sourceOccurrenceDate,
+                targetSeriesStartDate
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItems>> copiedItemsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemsRepository).saveAll(copiedItemsCaptor.capture());
+
+        assertThat(copiedItemsCaptor.getValue())
+                .extracting(ActionItems::getOccurrenceDate)
+                .containsExactly(
+                        LocalDate.of(2026, 8, 24),
+                        LocalDate.of(2026, 9, 7)
+                );
     }
 
     @Test
