@@ -45,10 +45,16 @@ public class AlarmController implements AlarmControllerDocs {
     @PostMapping("/term")
     @Override
     public ResponseEntity<ApiResponse<Void>> agreeAlarmTerm() {
-        alarmTermService.agreeAlarmTerm(resolveOptionalUserId());
+        boolean newlyAgreed = alarmTermService.agreeAlarmTerm(resolveOptionalUserId());
+
+        if (newlyAgreed) {
+            return ResponseEntity.ok(
+                    ApiResponse.success("F100_ALARM_TERM_200", "알람 약관 동의에 성공했습니다.", null)
+            );
+        }
 
         return ResponseEntity.ok(
-                ApiResponse.success("F100_ALARM_TERM_200", "알람 약관 동의에 성공했습니다.", null)
+                ApiResponse.success("F100_ALARM_TERM_200", "이미 알람 약관에 동의되어 있습니다.", null)
         );
     }
 

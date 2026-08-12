@@ -395,9 +395,8 @@ public class ActionItemService {
         }
 
         List<ActionItems> actionItems = actionItemsRepository
-                .findAllByParentEvent_EventIdAndOccurrenceDateAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
-                        eventId,
-                        occurrenceDate
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        eventId
                 );
 
         return EventActionItemResponse.from(eventId, actionItems);
@@ -419,7 +418,11 @@ public class ActionItemService {
                 .toList());
 
         List<ActionItems> recurringCandidates = actionItemsRepository
-                .findRecurringTimedActionItemsByUserId(userId, date, date.atStartOfDay(), ItemType.TIMED_ACTION, visibleActionItemEventStatuses());
+                .findRecurringTimedActionItemsByUserId(
+                        userId,
+                        ItemType.TIMED_ACTION,
+                        visibleActionItemEventStatuses()
+                );
 
         List<RecurringActionItemOccurrence> recurringOccurrences = recurringCandidates.stream()
                 .map(actionItem -> toRecurringActionItemOccurrence(actionItem, date))

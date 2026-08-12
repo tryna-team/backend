@@ -4,11 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
+import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemsRepository;
+import com.tryna.domain.action.repository.ActionItemOccurrenceStatesRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.enums.EventStatus;
@@ -26,22 +33,391 @@ import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class EventUpdateServiceTest {
 
     private EventUpdateService eventUpdateService;
+    private ActionItemsRepository actionItemsRepository;
+    private ActionItemOccurrenceStatesRepository actionItemOccurrenceStatesRepository;
 
     @BeforeEach
     void setUp() {
+        actionItemsRepository = mock(ActionItemsRepository.class);
+        actionItemOccurrenceStatesRepository = mock(ActionItemOccurrenceStatesRepository.class);
         eventUpdateService = new EventUpdateService(
                 mock(EventsRepository.class),
                 mock(UserEventsRepository.class),
                 mock(LabelsRepository.class),
-                mock(ActionItemsRepository.class),
+                actionItemsRepository,
+                actionItemOccurrenceStatesRepository,
                 mock(RecurringEventExceptionsRepository.class)
         );
+    }
+
+    @Test
+    void splitOccurrencePreservesOriginalEventDurationWhenEndDateIsOmitted() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 21),
+                null
+        );
+
+        assertThat(resolvedEndDate).isEqualTo(LocalDate.of(2026, 8, 22));
+    }
+
+    @Test
+    void splitOccurrenceUsesExplicitEndDateBeforeDurationFallback() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 21),
+                LocalDate.of(2026, 8, 24)
+        );
+
+        assertThat(resolvedEndDate).isEqualTo(LocalDate.of(2026, 8, 24));
+    }
+
+    @Test
+    void splitOccurrenceKeepsNullEndDateForOriginalSingleDayEvent() {
+        Events sourceEvent = mock(Events.class);
+        when(sourceEvent.getStartDate()).thenReturn(LocalDate.of(2026, 8, 10));
+        when(sourceEvent.getEndDate()).thenReturn(null);
+
+        LocalDate resolvedEndDate = (LocalDate) invokePrivate(
+                "resolveSplitEndDate",
+                new Class<?>[]{Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                LocalDate.of(2026, 8, 17),
+                null
+        );
+
+        assertThat(resolvedEndDate).isNull();
+    }
+
+    @Test
+    void splitOccurrenceSelectsTemplateAndRequestedOccurrenceItemsOnly() {
+        LocalDate requestedOccurrence = LocalDate.of(2026, 8, 21);
+        ActionItems templateItem = actionItem(
+                LocalDate.of(2026, 8, 14),
+                LocalDate.of(2026, 8, 13),
+                -1
+        );
+        ActionItems requestedOccurrenceItem = actionItem(
+                requestedOccurrence,
+                null,
+                null
+        );
+        ActionItems otherOccurrenceItem = actionItem(
+                LocalDate.of(2026, 8, 28),
+                null,
+                null
+        );
+
+        assertThat(invokeIsTemplateOrOccurrenceItem(templateItem, requestedOccurrence)).isTrue();
+        assertThat(invokeIsTemplateOrOccurrenceItem(requestedOccurrenceItem, requestedOccurrence)).isTrue();
+        assertThat(invokeIsTemplateOrOccurrenceItem(otherOccurrenceItem, requestedOccurrence)).isFalse();
+    }
+
+    @Test
+    void splitOccurrenceCopiesTemplateAndRequestedOccurrenceItemsOnly() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = nonRecurringMultiDayEvent();
+        LocalDate requestedOccurrence = LocalDate.of(2026, 8, 21);
+        List<ActionItems> sourceItems = List.of(
+                actionItem(LocalDate.of(2026, 8, 14), LocalDate.of(2026, 8, 13), -1),
+                actionItem(requestedOccurrence, null, null),
+                actionItem(LocalDate.of(2026, 8, 28), null, null)
+        );
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(sourceItems);
+
+        Object copiedResult = invokePrivate(
+                "copyLinkedActionItems",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                requestedOccurrence,
+                requestedOccurrence
+        );
+
+        assertThat(readRecordValue(copiedResult, "copiedActionItemCount")).isEqualTo(2);
+        verify(actionItemsRepository).softDeleteOccurrenceSpecificItems(
+                eq(sourceEvent.getEventId()),
+                eq(requestedOccurrence),
+                any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    void thisAndFutureCopyPreservesSkippedSourceOccurrenceGap() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = weeklyRecurringEvent(1);
+        LocalDate sourceOccurrenceDate = LocalDate.of(2026, 8, 21);
+        LocalDate targetSeriesStartDate = LocalDate.of(2026, 8, 24);
+        List<ActionItems> occurrenceItems = List.of(
+                actionItem(sourceOccurrenceDate, null, null),
+                actionItem(LocalDate.of(2026, 9, 4), null, null)
+        );
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(List.of());
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                ))
+                .thenReturn(occurrenceItems);
+
+        invokePrivate(
+                "copyLinkedActionItemsFromOccurrence",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                sourceOccurrenceDate,
+                targetSeriesStartDate
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItems>> copiedItemsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemsRepository).saveAll(copiedItemsCaptor.capture());
+
+        assertThat(copiedItemsCaptor.getValue())
+                .extracting(ActionItems::getOccurrenceDate)
+                .containsExactly(
+                        LocalDate.of(2026, 8, 24),
+                        LocalDate.of(2026, 9, 7)
+                );
+    }
+
+    @Test
+    void singleOccurrenceCopyRestoresStoredCompletedStatus() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = nonRecurringMultiDayEvent();
+        LocalDate occurrenceDate = LocalDate.of(2026, 8, 21);
+        ActionItems sourceItem = actionItem(occurrenceDate, null, null);
+        ReflectionTestUtils.setField(sourceItem, "actionItemId", 10L);
+        ActionItemOccurrenceStates sourceState =
+                ActionItemOccurrenceStates.create(sourceItem, occurrenceDate);
+        sourceState.updateStatus(ActionItemStatus.COMPLETED);
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(List.of(sourceItem));
+        when(actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdInAndOccurrenceDate(List.of(10L), occurrenceDate))
+                .thenReturn(List.of(sourceState));
+
+        invokePrivate(
+                "copyLinkedActionItems",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                occurrenceDate,
+                occurrenceDate
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItems>> copiedItemsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemsRepository).saveAll(copiedItemsCaptor.capture());
+
+        ActionItems copiedItem = copiedItemsCaptor.getValue().getFirst();
+        assertThat(copiedItem.getActionItemStatus()).isEqualTo(ActionItemStatus.COMPLETED);
+        assertThat(copiedItem.getCompletedAt()).isEqualTo(sourceState.getCompletedAt());
+    }
+
+    @Test
+    void thisAndFutureCopyMovesStoredStatusesToMappedOccurrences() {
+        Events sourceEvent = weeklyRecurringMultiDayEvent();
+        Events targetEvent = weeklyRecurringEvent(1);
+        LocalDate sourceOccurrenceDate = LocalDate.of(2026, 8, 21);
+        LocalDate targetOccurrenceDate = LocalDate.of(2026, 8, 24);
+        ActionItems sourceItem = actionItem(sourceOccurrenceDate, LocalDate.of(2026, 8, 20), -1);
+        ReflectionTestUtils.setField(sourceItem, "actionItemId", 11L);
+        ActionItemOccurrenceStates firstState =
+                ActionItemOccurrenceStates.create(sourceItem, sourceOccurrenceDate);
+        firstState.updateStatus(ActionItemStatus.COMPLETED);
+        ActionItemOccurrenceStates thirdState =
+                ActionItemOccurrenceStates.create(sourceItem, LocalDate.of(2026, 9, 4));
+        thirdState.updateStatus(ActionItemStatus.COMPLETED);
+
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(
+                        sourceEvent.getEventId()
+                ))
+                .thenReturn(List.of(sourceItem));
+        when(actionItemsRepository
+                .findAllByParentEvent_EventIdAndOccurrenceDateGreaterThanEqualAndDeletedAtIsNullOrderByOccurrenceDateAscActionItemIdAsc(
+                        sourceEvent.getEventId(),
+                        sourceOccurrenceDate
+                ))
+                .thenReturn(List.of());
+        when(actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdInAndOccurrenceDateGreaterThanEqual(
+                        List.of(11L),
+                        sourceOccurrenceDate
+                ))
+                .thenReturn(List.of(firstState, thirdState));
+
+        invokePrivate(
+                "copyLinkedActionItemsFromOccurrence",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                sourceOccurrenceDate,
+                targetOccurrenceDate
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItemOccurrenceStates>> statesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemOccurrenceStatesRepository).saveAll(statesCaptor.capture());
+
+        assertThat(statesCaptor.getValue())
+                .extracting(ActionItemOccurrenceStates::getOccurrenceDate)
+                .containsExactly(
+                        LocalDate.of(2026, 8, 24),
+                        LocalDate.of(2026, 9, 7)
+                );
+        assertThat(statesCaptor.getValue())
+                .extracting(ActionItemOccurrenceStates::getActionItemStatus)
+                .containsOnly(ActionItemStatus.COMPLETED);
+    }
+
+    @Test
+    void recurringSplitStoresRequestedCompletedStatusAsOccurrenceState() {
+        Events targetEvent = weeklyRecurringEvent(1);
+        LocalDate occurrenceDate = LocalDate.of(2026, 8, 17);
+        EventUpdateRequest.Item completedItem = new EventUpdateRequest.Item(
+                20L,
+                "완료된 준비 항목",
+                ItemType.UNTIMED_PREP,
+                occurrenceDate,
+                null,
+                null,
+                null,
+                ActionItemStatus.COMPLETED,
+                CreatedBy.USER,
+                null
+        );
+        EventUpdateRequest.ActionItems actionItems = new EventUpdateRequest.ActionItems(
+                List.of(completedItem),
+                List.of()
+        );
+
+        invokePrivate(
+                "syncActionItems",
+                new Class<?>[]{Events.class, EventUpdateRequest.ActionItems.class, boolean.class},
+                targetEvent,
+                actionItems,
+                true
+        );
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItemOccurrenceStates>> statesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemOccurrenceStatesRepository).saveAll(statesCaptor.capture());
+
+        ActionItemOccurrenceStates savedState = statesCaptor.getValue().getFirst();
+        assertThat(savedState.getOccurrenceDate()).isEqualTo(occurrenceDate);
+        assertThat(savedState.getActionItemStatus()).isEqualTo(ActionItemStatus.COMPLETED);
+        assertThat(savedState.getCompletedAt()).isNotNull();
+    }
+
+    @Test
+    void existingRecurringItemStoresRequestedStatusPerOccurrenceAndKeepsBasePending() {
+        Events recurringEvent = weeklyRecurringEvent(1);
+        LocalDate occurrenceDate = LocalDate.of(2026, 8, 17);
+        ActionItems existingItem = ActionItems.create(
+                recurringEvent,
+                "Prepare materials",
+                ItemType.UNTIMED_PREP,
+                occurrenceDate,
+                null,
+                null,
+                null,
+                CreatedBy.USER,
+                null
+        );
+        ReflectionTestUtils.setField(existingItem, "actionItemId", 21L);
+        existingItem.updateStatus(ActionItemStatus.COMPLETED);
+        EventUpdateRequest.Item requestItem = new EventUpdateRequest.Item(
+                21L,
+                "Prepare updated materials",
+                ItemType.UNTIMED_PREP,
+                occurrenceDate,
+                null,
+                null,
+                null,
+                ActionItemStatus.COMPLETED,
+                CreatedBy.USER,
+                null
+        );
+
+        when(actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(21L))
+                .thenReturn(Optional.of(existingItem));
+        when(actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdAndOccurrenceDate(21L, occurrenceDate))
+                .thenReturn(Optional.empty());
+
+        invokePrivate(
+                "syncActionItems",
+                new Class<?>[]{Events.class, EventUpdateRequest.ActionItems.class, boolean.class},
+                recurringEvent,
+                new EventUpdateRequest.ActionItems(List.of(requestItem), List.of()),
+                false
+        );
+
+        assertThat(existingItem.getActionItemStatus()).isEqualTo(ActionItemStatus.PENDING);
+        assertThat(existingItem.getCompletedAt()).isNull();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActionItemOccurrenceStates>> statesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(actionItemOccurrenceStatesRepository).saveAll(statesCaptor.capture());
+        assertThat(statesCaptor.getValue().getFirst().getOccurrenceDate()).isEqualTo(occurrenceDate);
+        assertThat(statesCaptor.getValue().getFirst().getActionItemStatus())
+                .isEqualTo(ActionItemStatus.COMPLETED);
+    }
+
+    @Test
+    void splitStateMappingRejectsOccurrenceAfterTargetRecurrenceEndDate() {
+        Events sourceEvent = weeklyRecurringEvent(1);
+        Events targetEvent = weeklyRecurringEvent(1);
+        ReflectionTestUtils.setField(
+                targetEvent,
+                "recurrenceEndDate",
+                LocalDate.of(2026, 8, 24).atStartOfDay()
+        );
+
+        LocalDate mappedDate = (LocalDate) invokePrivate(
+                "mapSplitOccurrenceDate",
+                new Class<?>[]{Events.class, Events.class, LocalDate.class, LocalDate.class, LocalDate.class},
+                sourceEvent,
+                targetEvent,
+                LocalDate.of(2026, 8, 10),
+                LocalDate.of(2026, 8, 17),
+                LocalDate.of(2026, 8, 24)
+        );
+
+        assertThat(mappedDate).isNull();
     }
 
     @Test
@@ -214,6 +590,81 @@ class EventUpdateServiceTest {
                 "회의실",
                 "MEETING",
                 EventStatus.CONFIRMED
+        );
+    }
+
+    private Events weeklyRecurringMultiDayEvent() {
+        return Events.createInternalEvent(
+                "데모데이 부산",
+                "데모데이 부산",
+                null,
+                LocalDate.of(2026, 8, 14),
+                LocalDateTime.of(2026, 8, 14, 9, 0),
+                LocalDate.of(2026, 8, 15),
+                LocalDateTime.of(2026, 8, 15, 18, 0),
+                false,
+                true,
+                RecurrenceType.WEEKLY,
+                1,
+                RecurrenceDayOfWeek.FRI,
+                null,
+                LocalDate.of(2026, 9, 30).atStartOfDay(),
+                "부산",
+                "EVENT",
+                EventStatus.CONFIRMED
+        );
+    }
+
+    private Events nonRecurringMultiDayEvent() {
+        return Events.createInternalEvent(
+                "수정된 데모데이 부산",
+                "수정된 데모데이 부산",
+                null,
+                LocalDate.of(2026, 8, 21),
+                LocalDateTime.of(2026, 8, 21, 9, 0),
+                LocalDate.of(2026, 8, 22),
+                LocalDateTime.of(2026, 8, 22, 18, 0),
+                false,
+                false,
+                RecurrenceType.NONE,
+                1,
+                RecurrenceDayOfWeek.NONE,
+                null,
+                null,
+                "부산",
+                "EVENT",
+                EventStatus.CONFIRMED
+        );
+    }
+
+    private ActionItems actionItem(
+            LocalDate occurrenceDate,
+            LocalDate displayDate,
+            Integer offsetDays
+    ) {
+        ItemType itemType = offsetDays == null ? ItemType.UNTIMED_PREP : ItemType.TIMED_ACTION;
+        return ActionItems.create(
+                weeklyRecurringMultiDayEvent(),
+                "준비 항목",
+                itemType,
+                occurrenceDate,
+                displayDate,
+                displayDate == null ? null : displayDate.atTime(9, 0),
+                offsetDays,
+                CreatedBy.SYSTEM,
+                "template-1"
+        );
+    }
+
+    private boolean invokeIsTemplateOrOccurrenceItem(
+            ActionItems actionItem,
+            LocalDate occurrenceDate
+    ) {
+        return (boolean) invokePrivate(
+                "isTemplateOrOccurrenceItem",
+                new Class<?>[]{ActionItems.class, LocalDate.class},
+                actionItem,
+                occurrenceDate
         );
     }
 

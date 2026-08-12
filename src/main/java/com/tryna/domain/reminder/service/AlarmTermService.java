@@ -29,7 +29,7 @@ public class AlarmTermService {
      * ALARM 약관 동의 이력을 저장하고 사용자의 alarm_state를 true로 변경합니다.
      */
     @Transactional
-    public void agreeAlarmTerm(Long userId) {
+    public boolean agreeAlarmTerm(Long userId) {
         Users user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_401));
 
@@ -38,10 +38,11 @@ public class AlarmTermService {
                 .orElseThrow(() -> new BusinessException(AlarmErrorCode.F100_ALARM_TERM_400));
 
         if (userAgreedTermsRepository.existsByUser_UserIdAndTerm_TermId(userId, alarmTerm.getTermId())) {
-            throw new BusinessException(AlarmErrorCode.F100_ALARM_TERM_400);
+            return false;
         }
 
         userAgreedTermsRepository.save(UserAgreedTerms.create(user, alarmTerm));
         user.updateAlarmState(true);
+        return true;
     }
 }

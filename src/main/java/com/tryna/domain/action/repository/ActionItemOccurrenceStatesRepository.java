@@ -50,4 +50,9 @@ public interface ActionItemOccurrenceStatesRepository extends JpaRepository<Acti
             Collection<Long> actionItemIds,
             Collection<LocalDate> occurrenceDates
     );
+
+    List<ActionItemOccurrenceStates> findByActionItem_ActionItemIdInAndOccurrenceDateGreaterThanEqual(
+            Collection<Long> actionItemIds,
+            LocalDate occurrenceDate
+    );
 }
