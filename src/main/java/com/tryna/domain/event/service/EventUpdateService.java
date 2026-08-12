@@ -1,8 +1,10 @@
 package com.tryna.domain.event.service;
 
 import com.tryna.domain.action.entity.ActionItems;
+import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.enums.ActionItemStatus;
 import com.tryna.domain.action.enums.ItemType;
+import com.tryna.domain.action.repository.ActionItemOccurrenceStatesRepository;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.dto.EventUpdateRequest;
 import com.tryna.domain.event.dto.EventUpdateResponse;
@@ -31,8 +33,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +58,7 @@ public class EventUpdateService {
     private final UserEventsRepository userEventsRepository;
     private final LabelsRepository labelsRepository;
     private final ActionItemsRepository actionItemsRepository;
+    private final ActionItemOccurrenceStatesRepository actionItemOccurrenceStatesRepository;
     private final RecurringEventExceptionsRepository recurringEventExceptionsRepository;
 
     @Transactional
@@ -456,10 +462,18 @@ public class EventUpdateService {
 
         Set<Long> deletedIds = new HashSet<>(deletedActionItemIds);
         List<ActionItems> newActionItems = new ArrayList<>();
+        boolean recurringEvent = Boolean.TRUE.equals(event.getIsRecurring());
+        List<RequestedActionItemStatus> requestedStatuses = new ArrayList<>();
 
         for (EventUpdateRequest.Item item : requestedItems) {
             if (item.actionItemId() == null || createOnly) {
-                newActionItems.add(createActionItem(event, item));
+                ActionItems newActionItem = createActionItem(event, item);
+                newActionItems.add(newActionItem);
+                if (recurringEvent) {
+                    collectRequestedOccurrenceStatus(requestedStatuses, newActionItem, item);
+                } else {
+                    updateActionItemStatusIfRequested(newActionItem, item.actionItemStatus());
+                }
                 continue;
             }
 
@@ -478,7 +492,12 @@ public class EventUpdateService {
                     item.createdBy(),
                     normalizeBlank(item.sourceTemplateId())
             );
-            updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            if (recurringEvent) {
+                actionItem.restoreStatus(ActionItemStatus.PENDING, null);
+                collectRequestedOccurrenceStatus(requestedStatuses, actionItem, item);
+            } else {
+                updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
+            }
             changedCount++;
         }
 
@@ -486,8 +505,48 @@ public class EventUpdateService {
             actionItemsRepository.saveAll(newActionItems);
             changedCount += newActionItems.size();
         }
+        saveRequestedOccurrenceStates(event, requestedStatuses);
 
         return new ActionItemSyncResult(changedCount, false);
+    }
+
+    private void saveRequestedOccurrenceStates(
+            Events event,
+            List<RequestedActionItemStatus> requestedStatuses
+    ) {
+        if (!Boolean.TRUE.equals(event.getIsRecurring())) {
+            return;
+        }
+
+        List<ActionItemOccurrenceStates> states = requestedStatuses.stream()
+                .map(requestedStatus -> {
+                    ActionItemOccurrenceStates state = actionItemOccurrenceStatesRepository
+                            .findByActionItem_ActionItemIdAndOccurrenceDate(
+                                    requestedStatus.actionItem().getActionItemId(),
+                                    requestedStatus.request().occurrenceDate()
+                            )
+                            .orElseGet(() -> ActionItemOccurrenceStates.create(
+                                    requestedStatus.actionItem(),
+                                    requestedStatus.request().occurrenceDate()
+                            ));
+                    state.updateStatus(requestedStatus.request().actionItemStatus());
+                    return state;
+                })
+                .toList();
+
+        if (!states.isEmpty()) {
+            actionItemOccurrenceStatesRepository.saveAll(states);
+        }
+    }
+
+    private void collectRequestedOccurrenceStatus(
+            List<RequestedActionItemStatus> requestedStatuses,
+            ActionItems actionItem,
+            EventUpdateRequest.Item request
+    ) {
+        if (request.actionItemStatus() != null) {
+            requestedStatuses.add(new RequestedActionItemStatus(actionItem, request));
+        }
     }
 
     private void validateActionItemSyncRequest(
@@ -574,8 +633,6 @@ public class EventUpdateService {
                 item.createdBy(),
                 normalizeBlank(item.sourceTemplateId())
         );
-        updateActionItemStatusIfRequested(actionItem, item.actionItemStatus());
-
         return actionItem;
     }
 
@@ -604,6 +661,7 @@ public class EventUpdateService {
         }
 
         List<ActionItems> copiedActionItems = new ArrayList<>();
+        List<CopiedActionItemPair> copiedPairs = new ArrayList<>();
         boolean requiresActionItemReview = false;
 
         for (ActionItems sourceActionItem : sourceActionItems) {
@@ -615,6 +673,7 @@ public class EventUpdateService {
             );
 
             copiedActionItems.add(copiedActionItem);
+            copiedPairs.add(new CopiedActionItemPair(sourceActionItem, copiedActionItem));
 
             if (requiresCopiedActionItemReview(
                     sourceActionItem,
@@ -626,6 +685,7 @@ public class EventUpdateService {
         }
 
         actionItemsRepository.saveAll(copiedActionItems);
+        restoreSingleOccurrenceStatuses(copiedPairs, sourceOccurrenceDate);
 
         // 새 일정에 복사한 뒤 기존 반복 회차의 원본 action-item은
         // F103/F104에서 중복 노출되지 않도록 soft delete
@@ -668,6 +728,7 @@ public class EventUpdateService {
         }
 
         List<ActionItems> copiedActionItems = new ArrayList<>();
+        List<CopiedActionItemPair> copiedPairs = new ArrayList<>();
         boolean requiresActionItemReview = false;
 
         for (ActionItems templateActionItem : templateActionItems) {
@@ -678,6 +739,7 @@ public class EventUpdateService {
                     targetSeriesStartDate
             );
             copiedActionItems.add(copiedActionItem);
+            copiedPairs.add(new CopiedActionItemPair(templateActionItem, copiedActionItem));
         }
 
         LocalDate currentSourceOccurrence = sourceOccurrenceDate;
@@ -698,6 +760,7 @@ public class EventUpdateService {
                     );
 
             copiedActionItems.add(copiedActionItem);
+            copiedPairs.add(new CopiedActionItemPair(sourceActionItem, copiedActionItem));
 
             if (requiresCopiedActionItemReview(
                     sourceActionItem,
@@ -709,6 +772,13 @@ public class EventUpdateService {
         }
 
         actionItemsRepository.saveAll(copiedActionItems);
+        copyFutureOccurrenceStates(
+                copiedPairs,
+                sourceEvent,
+                targetEvent,
+                sourceOccurrenceDate,
+                targetSeriesStartDate
+        );
 
         // 새 반복시리즈로 복사된 기준 회차 이후의 원본 action-item 제거
         actionItemsRepository.softDeleteByParentEventIdFromOccurrenceDate(
@@ -721,6 +791,128 @@ public class EventUpdateService {
                 copiedActionItems.size(),
                 requiresActionItemReview
         );
+    }
+
+    private void restoreSingleOccurrenceStatuses(
+            List<CopiedActionItemPair> copiedPairs,
+            LocalDate sourceOccurrenceDate
+    ) {
+        List<Long> sourceActionItemIds = sourceActionItemIds(copiedPairs);
+        if (sourceActionItemIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, ActionItemOccurrenceStates> statesByActionItemId =
+                actionItemOccurrenceStatesRepository
+                        .findByActionItem_ActionItemIdInAndOccurrenceDate(
+                                sourceActionItemIds,
+                                sourceOccurrenceDate
+                        )
+                        .stream()
+                        .collect(Collectors.toMap(
+                                state -> state.getActionItem().getActionItemId(),
+                                Function.identity()
+                        ));
+
+        for (CopiedActionItemPair pair : copiedPairs) {
+            ActionItemOccurrenceStates sourceState =
+                    statesByActionItemId.get(pair.source().getActionItemId());
+            if (sourceState != null) {
+                pair.target().restoreStatus(
+                        sourceState.getActionItemStatus(),
+                        sourceState.getCompletedAt()
+                );
+            }
+        }
+    }
+
+    private void copyFutureOccurrenceStates(
+            List<CopiedActionItemPair> copiedPairs,
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetSeriesStartDate
+    ) {
+        List<Long> sourceActionItemIds = sourceActionItemIds(copiedPairs);
+        if (sourceActionItemIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, ActionItems> targetBySourceActionItemId = copiedPairs.stream()
+                .collect(Collectors.toMap(
+                        pair -> pair.source().getActionItemId(),
+                        CopiedActionItemPair::target
+                ));
+
+        List<ActionItemOccurrenceStates> copiedStates =
+                actionItemOccurrenceStatesRepository
+                        .findByActionItem_ActionItemIdInAndOccurrenceDateGreaterThanEqual(
+                                sourceActionItemIds,
+                                sourceOccurrenceDate
+                        )
+                        .stream()
+                        .map(sourceState -> {
+                            ActionItems targetActionItem = targetBySourceActionItemId.get(
+                                    sourceState.getActionItem().getActionItemId()
+                            );
+                            LocalDate targetOccurrenceDate = mapSplitOccurrenceDate(
+                                    sourceEvent,
+                                    targetEvent,
+                                    sourceOccurrenceDate,
+                                    targetSeriesStartDate,
+                                    sourceState.getOccurrenceDate()
+                            );
+                            if (targetActionItem == null || targetOccurrenceDate == null) {
+                                return null;
+                            }
+                            return ActionItemOccurrenceStates.copyOf(
+                                    targetActionItem,
+                                    targetOccurrenceDate,
+                                    sourceState
+                            );
+                        })
+                        .filter(Objects::nonNull)
+                        .toList();
+
+        if (!copiedStates.isEmpty()) {
+            actionItemOccurrenceStatesRepository.saveAll(copiedStates);
+        }
+    }
+
+    private List<Long> sourceActionItemIds(List<CopiedActionItemPair> copiedPairs) {
+        return copiedPairs.stream()
+                .map(pair -> pair.source().getActionItemId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private LocalDate mapSplitOccurrenceDate(
+            Events sourceEvent,
+            Events targetEvent,
+            LocalDate sourceOccurrenceDate,
+            LocalDate targetOccurrenceDate,
+            LocalDate stateOccurrenceDate
+    ) {
+        LocalDate sourceCursor = sourceOccurrenceDate;
+        LocalDate targetCursor = targetOccurrenceDate;
+
+        while (sourceCursor.isBefore(stateOccurrenceDate)) {
+            LocalDate nextSource = nextOccurrence(sourceEvent, sourceCursor);
+            LocalDate nextTarget = nextOccurrence(targetEvent, targetCursor);
+            if (!nextSource.isAfter(sourceCursor) || !nextTarget.isAfter(targetCursor)) {
+                return null;
+            }
+            sourceCursor = nextSource;
+            targetCursor = nextTarget;
+        }
+
+        if (!sourceCursor.equals(stateOccurrenceDate)
+                || !isRecurringOccurrenceOn(targetEvent, targetCursor)) {
+            return null;
+        }
+
+        return targetCursor;
     }
 
     private boolean isTemplateOrOccurrenceItem(ActionItems actionItem, LocalDate occurrenceDate) {
@@ -1283,6 +1475,18 @@ public class EventUpdateService {
     private record ActionItemSyncResult(
             Integer changedActionItemCount,
             Boolean requiresActionItemReview
+    ) {
+    }
+
+    private record RequestedActionItemStatus(
+            ActionItems actionItem,
+            EventUpdateRequest.Item request
+    ) {
+    }
+
+    private record CopiedActionItemPair(
+            ActionItems source,
+            ActionItems target
     ) {
     }
 
