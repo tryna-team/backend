@@ -70,6 +70,29 @@ public class ReminderLifecycleService {
         );
     }
 
+
+    @Transactional
+    public int cancelScheduledForSoftDeletedActionItemsByParentEventAndOccurrenceDate(Long eventId, LocalDate occurrenceDate) {
+        return remindersRepository.updateStatusForActionItemsByParentEventAndOccurrenceDate(
+                eventId,
+                occurrenceDate,
+                ReminderStatus.SCHEDULED,
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
+        );
+    }
+
+    @Transactional
+    public int cancelScheduledForSoftDeletedActionItemsByParentEventFromOccurrenceDate(Long eventId, LocalDate occurrenceDate) {
+        return remindersRepository.updateStatusForActionItemsByParentEventFromOccurrenceDate(
+                eventId,
+                occurrenceDate,
+                ReminderStatus.SCHEDULED,
+                ReminderStatus.CANCELED,
+                LocalDateTime.now()
+        );
+    }
+
     public boolean isAlreadyScheduledForEvent(Long eventId, LocalDateTime scheduledAt, String deliveryChannel) {
         return remindersRepository.existsByTargetEvent_EventIdAndScheduledAtAndDeliveryChannelAndReminderStatus(
                 eventId,
