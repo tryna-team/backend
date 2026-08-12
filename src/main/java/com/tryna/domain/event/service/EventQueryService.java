@@ -51,6 +51,9 @@ public class EventQueryService {
             EventStatus.NEEDS_CONFIRMATION
     );
 
+    // 가상 라벨 ID 상수 추가
+    private static final Long HOLIDAY_LABEL_ID = -1L;
+
     private final EventsRepository eventsRepository;
     private final UserEventsRepository userEventsRepository;
     private final ActionItemsRepository actionItemsRepository;
@@ -66,7 +69,9 @@ public class EventQueryService {
 
         CalendarMonthlyResponse monthlyCalendar = buildMonthlyCalendar(userId, year, month);
         CalendarDateEventsResponse dateEvents = buildDateEvents(userId, selectedDate);
-        boolean hasEvents = userEventsRepository.countVisibleEventsByUserId(userId, VISIBLE_EVENT_STATUSES) > 0;
+
+        // 개인 일정 여부를 명확히 구분
+        boolean hasPersonalEvents = userEventsRepository.countVisibleEventsByUserId(userId, VISIBLE_EVENT_STATUSES) > 0;
 
         List<CalendarMonthlyResponse.DayEventCount> monthlyEventDays = monthlyCalendar.days()
                 .stream()
@@ -78,12 +83,29 @@ public class EventQueryService {
                 month,
                 monthlyCalendar.today(),
                 selectedDate,
-                hasEvents,
+                hasPersonalEvents, // 기존 DTO 필드를 활용하여 '개인 일정 여부(personal-event state)'로 사용
                 false,
-                resolveMainEmptyState(hasEvents, dateEvents),
+                // 이번 달력에 표시할 일정(공휴일 등)이 있는지도 Empty State 판단에 넘김
+                resolveMainEmptyState(hasPersonalEvents, !monthlyEventDays.isEmpty(), dateEvents),
                 monthlyEventDays,
                 dateEvents.events()
         );
+    }
+
+    /**
+     * 개인 일정뿐만 아니라 공휴일을 포함해 캘린더 빈 화면 상태를 결정합니다.
+     */
+    private String resolveMainEmptyState(boolean hasPersonalEvents, boolean hasMonthlyEvents, CalendarDateEventsResponse dateEvents) {
+        // 선택한 날짜에 표시할 일정(공휴일 포함)이 단 하나라도 있다면 Empty State 해제
+        if (!dateEvents.events().isEmpty()) {
+            return null;
+        }
+        // 사용자가 작성한 개인 일정도 없고, 이번 달력에 그려줄 공휴일조차 완전히 없다면 글로벌 Empty State 반환
+        if (!hasPersonalEvents && !hasMonthlyEvents) {
+            return NO_EVENTS;
+        }
+        // 그 외 (달력에 공휴일은 있어서 렌더링해야 하지만, 선택한 날짜엔 아무것도 없는 경우)
+        return dateEvents.emptyStateType(); // -> NO_SELECTED_DATE_EVENTS
     }
 
     /**
@@ -158,13 +180,6 @@ public class EventQueryService {
         return buildDateEvents(userId, date);
     }
 
-    private String resolveMainEmptyState(boolean hasEvents, CalendarDateEventsResponse dateEvents) {
-        if (!hasEvents) {
-            return NO_EVENTS;
-        }
-        return dateEvents.emptyStateType();
-    }
-
     private CalendarDateEventsResponse buildDateEvents(Long userId, LocalDate date) {
         List<UserEvents> directUserEvents = userEventsRepository.findUserEventsByDate(
                 userId,
@@ -192,6 +207,12 @@ public class EventQueryService {
                 .toList();
 
         occurrences.addAll(recurringOccurrences);
+
+        // 해당 날짜의 공휴일 별도 조회 후 병합
+        List<Events> holidays = eventsRepository.findHolidaysInRange(date, date);
+        holidays.forEach(holiday ->
+                occurrences.add(new EventOccurrence(holiday, holiday.getStartDate(), HOLIDAY_LABEL_ID))
+        );
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
 
@@ -408,6 +429,12 @@ public class EventQueryService {
                 occurrences.add(new EventOccurrence(event, occurrenceDate, labelId));
             }
         }
+
+        // 공휴일 별도 조회 후 병합
+        List<Events> holidays = eventsRepository.findHolidaysInRange(startDate, endDate);
+        holidays.forEach(holiday ->
+                occurrences.add(new EventOccurrence(holiday, holiday.getStartDate(), HOLIDAY_LABEL_ID))
+        );
 
         Set<DeletedOccurrenceKey> deletedOccurrences = findDeletedOccurrenceKeys(occurrences);
         for (EventOccurrence occurrence : occurrences) {
