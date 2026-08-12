@@ -71,6 +71,19 @@ public class ActionItemOccurrenceStates extends BaseEntity {
         return state;
     }
 
+    public static ActionItemOccurrenceStates copyOf(
+            ActionItems actionItem,
+            LocalDate occurrenceDate,
+            ActionItemOccurrenceStates source
+    ) {
+        ActionItemOccurrenceStates state = new ActionItemOccurrenceStates();
+        state.actionItem = actionItem;
+        state.occurrenceDate = occurrenceDate;
+        state.actionItemStatus = source.actionItemStatus;
+        state.completedAt = source.completedAt;
+        return state;
+    }
+
     public void updateStatus(ActionItemStatus status) {
         this.actionItemStatus = status;
 
