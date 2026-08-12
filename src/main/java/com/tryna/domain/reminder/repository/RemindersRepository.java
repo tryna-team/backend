@@ -166,6 +166,7 @@ public interface RemindersRepository extends JpaRepository<Reminders, Long> {
                    r.updatedAt = :updatedAt
              WHERE r.targetActionItem.parentEvent.eventId = :eventId
                AND r.targetActionItem.occurrenceDate = :occurrenceDate
+               AND r.targetActionItem.offsetDays IS NULL
                AND r.reminderStatus = :currentStatus
             """)
     int updateStatusForActionItemsByParentEventAndOccurrenceDate(

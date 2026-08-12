@@ -130,7 +130,7 @@ public class EventDeletionService {
                 event.getEventId(),
                 occurrenceDate
         );
-        int affectedActionItemCount = actionItemsRepository.softDeleteByParentEventIdAndOccurrenceDate(
+        int affectedActionItemCount = actionItemsRepository.softDeleteOccurrenceSpecificItems(
                 event.getEventId(),
                 occurrenceDate,
                 deletedAt
