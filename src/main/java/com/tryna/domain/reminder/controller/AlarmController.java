@@ -70,7 +70,7 @@ public class AlarmController implements AlarmControllerDocs {
         );
     }
 
-    @PatchMapping("/state")
+    @PatchMapping("/toggle")
     @Override
     public ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
             @AuthenticationPrincipal Long userId
@@ -85,7 +85,42 @@ public class AlarmController implements AlarmControllerDocs {
                 : "알람 비활성화에 성공했습니다.";
 
         return ResponseEntity.ok(
-                ApiResponse.success("F100_ALARM_STATE_200", message, response)
+                ApiResponse.success("F100_ALARM_TOOGLE_200", message, response)
+        );
+    }
+
+    @PatchMapping("/toggle/mvp")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmStateMvp(
+            @AuthenticationPrincipal Long userId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmStateResponse response = alarmStateService.toggleAlarmStateMvp(userId);
+        String message = response.alarmState()
+                ? "알람 활성화에 성공했습니다."
+                : "알람 비활성화에 성공했습니다.";
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_TOOGLE_MVP_200", message, response)
+        );
+    }
+
+    @GetMapping("/status")
+    @Override
+    public ResponseEntity<ApiResponse<AlarmStateResponse>> getAlarmStatus(
+            @AuthenticationPrincipal Long userId
+    ) {
+        if (userId == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_401);
+        }
+
+        AlarmStateResponse response = alarmStateService.getAlarmStatus(userId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("F100_ALARM_STATUS_200", "알람 현재 상태 조회에 성공했습니다.", response)
         );
     }
 

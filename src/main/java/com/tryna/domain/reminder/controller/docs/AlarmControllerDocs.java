@@ -37,7 +37,6 @@ public interface AlarmControllerDocs {
             summary = "F100 FCM 푸시 토큰 발급",
             description = """
                     푸시 알람 전송에 필요한 FCM 푸시 토큰을 검증하여 Redis에 저장합니다.
-                    이미 등록된 푸시 토큰이 있는 사용자는 409로 거부됩니다.
                     """,
             operationId = "registerPushToken"
     )
@@ -48,13 +47,38 @@ public interface AlarmControllerDocs {
     @Operation(
             summary = "F100 알람 접근 권한 활성화/비활성화",
             description = """
-                    사용자의 알람 발송 상태(alarm_state)를 토글합니다.
+                    사용자의 알람 접근 권한(alarm_state)을 토글합니다.
+                    요청마다 기존 값의 반대값을 저장합니다. (false → true → false …)
                     비활성(false)에서 활성(true)으로 전환하려면 ALARM 약관 동의 이력이 필요합니다.
                     """,
             operationId = "toggleAlarmState"
     )
     @SecurityRequirement(name = "bearerAuth")
     ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
+    );
+
+    @Operation(
+            summary = "F100 알람 접근 권한 활성화/비활성화 (MVP)",
+            description = """
+                    MVP 단계 연동용 알람 접근 권한(alarm_state) 토글 API입니다.
+                    요청마다 기존 값의 반대값을 저장합니다. (false → true → false …)
+                    ALARM 약관 미동의 상태에서도 활성화/비활성화가 가능합니다.
+                    """,
+            operationId = "toggleAlarmStateMvp"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmStateMvp(
+            @Parameter(hidden = true) @AuthenticationPrincipal Long userId
+    );
+
+    @Operation(
+            summary = "F100 알람 활성화 상태 조회",
+            description = "로그인한 사용자의 현재 알람 활성화 상태(alarm_state)를 조회합니다.",
+            operationId = "getAlarmStatus"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<AlarmStateResponse>> getAlarmStatus(
             @Parameter(hidden = true) @AuthenticationPrincipal Long userId
     );
 
@@ -75,7 +99,7 @@ public interface AlarmControllerDocs {
 
     @Operation(
             summary = "F100 알람 단건 조회",
-            description = "로그인한 사용자 소유의 알람(reminder) 단건을 조회합니다.",
+            description = "로그인한 사용자 소유의 알람 단건을 조회합니다.",
             operationId = "getAlarm"
     )
     @SecurityRequirement(name = "bearerAuth")
