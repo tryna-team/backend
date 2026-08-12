@@ -41,10 +41,10 @@ public class AlarmStateService {
     private void validateAlarmTermAgreed(Long userId) {
         Terms alarmTerm = termsRepository.findLatestTermsByTypes(List.of(TermType.ALARM)).stream()
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(AlarmErrorCode.F100_ALARM_STATE_400));
+                .orElseThrow(() -> new BusinessException(AlarmErrorCode.F100_ALARM_TOOGLE_400));
 
         if (!userAgreedTermsRepository.existsByUser_UserIdAndTerm_TermId(userId, alarmTerm.getTermId())) {
-            throw new BusinessException(AlarmErrorCode.F100_ALARM_STATE_400);
+            throw new BusinessException(AlarmErrorCode.F100_ALARM_TOOGLE_400);
         }
     }
 }

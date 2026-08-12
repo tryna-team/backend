@@ -70,7 +70,7 @@ public class AlarmController implements AlarmControllerDocs {
         );
     }
 
-    @PatchMapping("/state")
+    @PatchMapping("/toggle")
     @Override
     public ResponseEntity<ApiResponse<AlarmStateResponse>> toggleAlarmState(
             @AuthenticationPrincipal Long userId
@@ -85,7 +85,7 @@ public class AlarmController implements AlarmControllerDocs {
                 : "알람 비활성화에 성공했습니다.";
 
         return ResponseEntity.ok(
-                ApiResponse.success("F100_ALARM_STATE_200", message, response)
+                ApiResponse.success("F100_ALARM_TOOGLE_200", message, response)
         );
     }
 
