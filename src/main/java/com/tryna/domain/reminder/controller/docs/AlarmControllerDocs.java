@@ -1,12 +1,12 @@
-package com.tryna.domain.alarm.controller.docs;
+package com.tryna.domain.reminder.controller.docs;
 
-import com.tryna.domain.alarm.dto.ActionItemReminderResponse;
-import com.tryna.domain.alarm.dto.AlarmCorrectionResponse;
-import com.tryna.domain.alarm.dto.AlarmDetailResponse;
-import com.tryna.domain.alarm.dto.AlarmListResponse;
-import com.tryna.domain.alarm.dto.AlarmPushTokenRequest;
-import com.tryna.domain.alarm.dto.AlarmStateResponse;
-import com.tryna.domain.alarm.dto.EventReminderResponse;
+import com.tryna.domain.reminder.dto.ActionItemReminderResponse;
+import com.tryna.domain.reminder.dto.AlarmCorrectionResponse;
+import com.tryna.domain.reminder.dto.AlarmDetailResponse;
+import com.tryna.domain.reminder.dto.AlarmListResponse;
+import com.tryna.domain.reminder.dto.AlarmPushTokenRequest;
+import com.tryna.domain.reminder.dto.AlarmStateResponse;
+import com.tryna.domain.reminder.dto.EventReminderResponse;
 import com.tryna.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -27,6 +27,7 @@ public interface AlarmControllerDocs {
             description = """
                     ALARM 약관에 동의하고 사용자의 알람 발송 상태(alarm_state)를 활성화합니다.
                     terms 테이블의 ALARM 약관에 대한 user_agreed_terms 이력을 생성합니다.
+                    이미 동의한 사용자가 재요청하면 200과 함께 이미 동의되어 있다는 메시지를 반환합니다.
                     """,
             operationId = "agreeAlarmTerm"
     )

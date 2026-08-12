@@ -2,7 +2,7 @@ package com.tryna.domain.reminder.service;
 
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.repository.ActionItemOccurrenceStatesRepository;
-import com.tryna.domain.alarm.service.FcmPushService;
+import com.tryna.domain.reminder.service.FcmPushService;
 import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.util.EventRecurrenceCalculator;

@@ -1,4 +1,4 @@
-package com.tryna.domain.alarm.dto;
+package com.tryna.domain.reminder.dto;
 
 public record AlarmStateResponse(
         boolean alarmState

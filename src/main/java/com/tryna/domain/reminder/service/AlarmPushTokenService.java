@@ -1,4 +1,4 @@
-package com.tryna.domain.alarm.service;
+package com.tryna.domain.reminder.service;
 
 import com.tryna.domain.auth.repository.FcmTokenRedisRepository;
 import com.tryna.global.exception.AlarmErrorCode;

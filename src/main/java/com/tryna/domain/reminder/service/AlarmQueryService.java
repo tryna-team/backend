@@ -1,10 +1,10 @@
-package com.tryna.domain.alarm.service;
+package com.tryna.domain.reminder.service;
 
-import com.tryna.domain.alarm.dto.AlarmDetailResponse;
-import com.tryna.domain.alarm.dto.AlarmListResponse;
-import com.tryna.domain.alarm.util.AlarmCursorCodec;
+import com.tryna.domain.reminder.dto.AlarmDetailResponse;
+import com.tryna.domain.reminder.dto.AlarmListResponse;
 import com.tryna.domain.reminder.entity.Reminders;
 import com.tryna.domain.reminder.repository.RemindersRepository;
+import com.tryna.domain.reminder.util.AlarmCursorCodec;
 import com.tryna.domain.user.entity.Users;
 import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.AlarmErrorCode;

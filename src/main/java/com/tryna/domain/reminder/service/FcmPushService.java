@@ -1,4 +1,4 @@
-package com.tryna.domain.alarm.service;
+package com.tryna.domain.reminder.service;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.BatchResponse;
