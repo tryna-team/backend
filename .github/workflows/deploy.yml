@@ -81,22 +81,6 @@ jobs:
             --query taskDefinition \
             > task-definition.json
 
-      # cgroup이 무제한(9223372036854771712)으로 보고되는 ECS 환경 대비: Task Definition 메모리를 JVM에 명시 전달
-      - name: Read container memory from task definition
-        id: container-memory
-        run: |
-          MEM=$(jq -r --arg name "${{ env.CONTAINER_NAME }}" '
-            .containerDefinitions[] | select(.name==$name) | .memory // empty
-          ' task-definition.json)
-          if [ -z "$MEM" ] || [ "$MEM" = "null" ]; then
-            MEM=$(jq -r '.memory // empty' task-definition.json)
-          fi
-          if [ -z "$MEM" ] || [ "$MEM" = "null" ]; then
-            echo "::warning::Task Definition에서 memory를 찾지 못해 기본값 1024MB를 사용합니다."
-            MEM=1024
-          fi
-          echo "mb=$MEM" >> "$GITHUB_OUTPUT"
-
       # 새 이미지 + 환경변수로 Task Definition 갱신
       - name: Render new task definition
         id: task-def
@@ -107,8 +91,6 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
             SPRING_PROFILES_ACTIVE=prod
-            JAVA_HEAP_PERCENT=75
-            CONTAINER_MEMORY_MB=${{ steps.container-memory.outputs.mb }}
             DB_URL=${{ secrets.DB_URL }}
             DB_USERNAME=${{ secrets.DB_USERNAME }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
