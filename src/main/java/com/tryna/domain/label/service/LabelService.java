@@ -52,6 +52,7 @@ public class LabelService {
      * @param userId 현재 인증된 사용자 ID
      * @return 현재 사용자의 라벨 목록
      */
+    @Transactional
     public LabelListResponse getLabels(
             Long userId
     ) {
@@ -573,6 +574,7 @@ public class LabelService {
 
         // 9. 라벨 Soft Delete
         label.softDelete(LocalDateTime.now());
+        labelsRepository.saveAndFlush(label);
 
         // 10. 남은 라벨의 정렬 순서 정규화
         closeSortOrderGap(
