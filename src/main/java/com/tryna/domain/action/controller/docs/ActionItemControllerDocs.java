@@ -32,7 +32,11 @@ public interface ActionItemControllerDocs {
 
     @Operation(
             summary = "E106 준비/실행 항목 완료 처리",
-            description = "준비/실행 항목을 완료 상태로 변경하거나 완료 처리를 취소하여 대기 상태로 되돌립니다.",
+            description = """
+                    준비/실행 항목을 완료 상태로 변경하거나 완료 처리를 취소하여 대기 상태로 되돌립니다.
+                    반복 기간형 일정은 회차 기간 안의 날짜를 occurrenceDate로 전달할 수 있으며,
+                    서버가 해당 날짜가 속한 회차 시작일로 정규화해 같은 회차 상태로 처리합니다.
+                    """,
             operationId = "updateActionItemStatus"
     )
     @SecurityRequirement(name = "bearerAuth")
@@ -52,7 +56,8 @@ public interface ActionItemControllerDocs {
             summary = "F103 일정 상세 내 준비/실행 항목 조회",
             description = """
                     특정 일정에 연결된 준비/실행 항목 목록을 조회합니다.
-                    반복 일정은 occurrenceDate를 회차 식별자로 사용해 해당 회차의 항목과 상태를 반환합니다.
+                    반복 일정은 occurrenceDate가 속한 회차의 항목과 상태를 반환합니다.
+                    기간형 회차의 둘째 날 이후를 전달해도 서버가 실제 회차 시작일로 정규화합니다.
                     비반복 일정은 회차 개념이 없으므로 occurrenceDate로 항목을 필터링하지 않고,
                     기간 내 어느 날짜에서 조회해도 eventId에 연결된 동일한 항목 목록을 반환합니다.
                     """,
@@ -66,7 +71,7 @@ public interface ActionItemControllerDocs {
             @PathVariable("eventId") Long eventId,
 
             @Parameter(
-                    description = "조회 화면의 날짜(yyyy-MM-dd). 반복 일정에서는 조회할 회차 날짜로 사용합니다.",
+                    description = "조회 화면의 날짜(yyyy-MM-dd). 반복 기간형 일정은 회차 기간 안의 날짜를 사용할 수 있습니다.",
                     required = true,
                     example = "2026-08-16"
             )
