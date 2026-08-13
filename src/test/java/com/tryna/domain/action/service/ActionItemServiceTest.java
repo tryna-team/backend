@@ -200,6 +200,32 @@ class ActionItemServiceTest {
         );
     }
 
+    @Test
+    void recurringMultiDayStatusUpdateRejectsDateOutsideOccurrence() {
+        Long userId = 1L;
+        Long eventId = 20L;
+        Long actionItemId = 100L;
+        Events event = recurringTwoDayWeeklyEvent();
+        ActionItems actionItem = mock(ActionItems.class);
+
+        when(actionItem.getParentEvent()).thenReturn(event);
+        when(event.getEventId()).thenReturn(eventId);
+        when(actionItemsRepository.findByActionItemIdAndDeletedAtIsNull(actionItemId))
+                .thenReturn(Optional.of(actionItem));
+        when(userEventsRepository.existsByUser_UserIdAndEvent_EventId(userId, eventId)).thenReturn(true);
+
+        assertThatThrownBy(() -> actionItemService.updateActionItemStatus(
+                userId,
+                actionItemId,
+                new ActionItemStatusUpdateRequest(
+                        LocalDate.of(2026, 11, 18),
+                        ActionItemStatus.COMPLETED
+                )
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ActionErrorCode.E106_ACTION_ITEM_400)
+        );
+    }
+
     private Events recurringTwoDayWeeklyEvent() {
         Events event = mock(Events.class);
         when(event.getIsRecurring()).thenReturn(true);
