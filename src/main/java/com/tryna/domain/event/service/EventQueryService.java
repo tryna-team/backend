@@ -398,7 +398,7 @@ public class EventQueryService {
                         VISIBLE_EVENT_STATUSES,
                         ConnectionStatus.ACTIVE
                 )
-                .orElseThrow(() -> new BusinessException(CommonErrorCode.COMMON_403));
+                .orElseThrow(() -> new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404));
 
         Long labelId = userEventsRepository.findLabelIdByUserIdAndEventId(userId, eventId)
                 .orElse(null);
