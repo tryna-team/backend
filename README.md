@@ -19,6 +19,12 @@ TRYNA는 이러한 차이를 단순 키워드 매칭으로 처리하지 않습�
 사용자는 추천된 할 일을 그대로 사용할 수도 있고, 필요 없는 항목을
 삭제하거나 새로운 항목을 직접 추가할 수도 있습니다.
 
+## 👥 Team
+|                                    BE                                     |                                   BE                                    |                                  BE                                   |                                    BE                                    |                                  BE                                  |
+|:-------------------------------------------------------------------------:|:-----------------------------------------------------------------------:|:---------------------------------------------------------------------:|:------------------------------------------------------------------------:|:--------------------------------------------------------------------:|
+| <img src="https://github.com/taehyeon1998.png" width="150" height="150"/> | <img src="https://github.com/taerimiiii.png" width="150" height="150"/> | <img src="https://github.com/yeremeee.png" width="150" height="150"/> | <img src="https://github.com/hoondongseo.png" width="150" height="150"/> | <img src="https://github.com/Ubokchi.png" width="150" height="150"/> |
+|    김태현<br/><a href="https://github.com/taehyeon1998">@taehyeon1998</a>    |     김태림<br/><a href="https://github.com/taerimiiii">@taerimiiii</a>     |      윤예림<br/><a href="https://github.com/yeremeee">@yeremeee</a>      |     서동훈<br/><a href="https://github.com/hoondongseo">@hoondongseo</a>     |      유다현<br/><a href="https://github.com/Ubokchi">@Ubokchi</a>       |
+
 ## 📚 Tech Stacks
 
 | Type | Tool |
@@ -34,15 +40,15 @@ TRYNA는 이러한 차이를 단순 키워드 매칭으로 처리하지 않습�
 | Version Control | ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white) |
 | Collaboration | ![Notion](https://img.shields.io/badge/Notion-000000?style=for-the-badge&logo=notion&logoColor=white) |
 
-## 👥 Team Members
+## 👥 Roles
 
-| 담당 영역 | 담당자 | 담당 기능 |
-| --- | --- | --- |
-| 인증/사용자 | 사이먼/서동훈 | 회원·비회원 인증, 사용자 계정 관리 |
-| 일정/캘린더 | 곤/김태현 | 일정 CRUD, 캘린더 조회, 자연어 일정 입력 |
-| 분석/추천 | 레미/윤예림 | 일정 맥락 분석, 관계 기반 추천, LLM 후보 정제 |
-| 준비/실행 항목 | 유복치/유다현 | 추천 항목 관리, 태스크 완료 처리, 일정·캘린더 연동 |
-| 알림/외부연동/공통 | 라포/김태림 | 알림, 외부 캘린더 연동, 공통 응답 및 API 문서화 |
+| 담당 영역 | 담당자 | 담당 기능                              |
+| --- | --- |------------------------------------|
+| 인증/사용자 | 사이먼/서동훈 | 회원·비회원 인증, 사용자 계정 관리, 외부캘린더 연동     |
+| 일정/캘린더 | 곤/김태현 | 일정 CRUD, 캘린더 조회, 자연어 일정 입력         |
+| 분석/추천 | 레미/윤예림 | 일정 맥락 분석, 관계 기반 추천, LLM 후보 정제      |
+| 준비/실행 항목 | 유복치/유다현 | 추천 항목 관리, 태스크 완료 처리, 라벨, 일정·캘린더 연동 |
+| 알림/외부연동/공통 | 라포/김태림 | 일정 및 준비/실행항목 알림, 인프라               |
 
 ------------------------------------------------------------------------
 
@@ -224,6 +230,7 @@ TRYNA는 추천을 정답으로 제시하는 것이 아니라, 사용자가 부�
 ------------------------------------------------------------------------
 
 ## 🏗 Backend Architecture
+![img.png](img.png)
 
 ``` text
 Client
@@ -446,7 +453,7 @@ hotfix/* ──> main
          └─> develop
 ```
 
-`main` 브랜치에는 직접 작업하지 않으며, PR은 작성자 외 1명 이상의 확인
+`main` 브랜치에는 직접 작업하지 않으며, PR은 AI 코드 리뷰 확인
 후 병합합니다.
 
 ------------------------------------------------------------------------
