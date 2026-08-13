@@ -376,11 +376,12 @@ public class EventQueryService {
         validateUserId(userId);
         Long eventId = parseEventId(eventIdValue);
 
-        // 1. 이벤트 존재 및 활성 상태 검증 (일단 무조건 가져옵니다)
+        // 1. 이벤트 존재 및 활성 상태 검증
         Events event = eventsRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404));
 
-        if (!VISIBLE_EVENT_STATUSES.contains(event.getEventStatus())) {
+        // 상태 검증뿐만 아니라 Soft Delete(논리적 삭제) 여부도 확실하게 차단
+        if (event.getDeletedAt() != null || !VISIBLE_EVENT_STATUSES.contains(event.getEventStatus())) {
             throw new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404);
         }
 
