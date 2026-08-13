@@ -376,11 +376,22 @@ public class EventQueryService {
         validateUserId(userId);
         Long eventId = parseEventId(eventIdValue);
 
-        if (!eventsRepository.existsVisibleByEventIdAndEventStatusIn(eventId, VISIBLE_EVENT_STATUSES)) {
+        // 1. 이벤트 존재 및 활성 상태 검증 (일단 무조건 가져옵니다)
+        Events event = eventsRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404));
+
+        if (!VISIBLE_EVENT_STATUSES.contains(event.getEventStatus())) {
             throw new BusinessException(EventErrorCode.B104_EVENT_DETAIL_404);
         }
 
-        Events event = eventsRepository.findVisibleEventAccessibleToUser(
+        // 2. 공휴일(HOLIDAY)인 경우 소유권(권한) 검증 패스
+        if (event.getSourceType() != null && "HOLIDAY".equals(event.getSourceType().name())) {
+            // 공휴일은 가상 라벨(-1)을 묶어서 바로 반환
+            return toEventDetailResponse(event, HOLIDAY_LABEL_ID);
+        }
+
+        // 3. 일반 유저 일정인 경우 기존처럼 권한(접근 가능 여부) 깐깐하게 검증
+        eventsRepository.findVisibleEventAccessibleToUser(
                         userId,
                         eventId,
                         VISIBLE_EVENT_STATUSES,
