@@ -312,7 +312,15 @@ public class ActionItemService {
             throw new BusinessException(ActionErrorCode.E106_ACTION_ITEM_400);
         }
 
-        if ((recurringParent || request.occurrenceDate() != null)
+        if (recurringParent) {
+            occurrenceDate = resolveRecurringOccurrenceStartDate(
+                    actionItem.getParentEvent(),
+                    occurrenceDate
+            );
+            if (occurrenceDate == null) {
+                throw new BusinessException(ActionErrorCode.E106_ACTION_ITEM_400);
+            }
+        } else if (request.occurrenceDate() != null
                 && !isValidOccurrenceDate(actionItem.getParentEvent(), occurrenceDate)) {
             throw new BusinessException(ActionErrorCode.E106_ACTION_ITEM_400);
         }
@@ -375,7 +383,8 @@ public class ActionItemService {
         LocalDate occurrenceDate = parseOccurrenceDate(occurrenceDateText, ActionErrorCode.F103_ACTION_ITEM_400);
 
         if (Boolean.TRUE.equals(event.getIsRecurring())) {
-            if (!isValidOccurrenceDate(event, occurrenceDate)) {
+            LocalDate occurrenceStartDate = resolveRecurringOccurrenceStartDate(event, occurrenceDate);
+            if (occurrenceStartDate == null) {
                 throw new BusinessException(ActionErrorCode.F103_ACTION_ITEM_400);
             }
 
@@ -383,14 +392,14 @@ public class ActionItemService {
                     .findAllByParentEvent_EventIdAndDeletedAtIsNullOrderByDisplayDateAscDisplayDatetimeAscActionItemIdAsc(eventId)
                     .stream()
                     .filter(item -> item.getOffsetDays() != null
-                            || occurrenceDate.equals(item.getOccurrenceDate()))
+                            || occurrenceStartDate.equals(item.getOccurrenceDate()))
                     .toList();
 
             return EventActionItemResponse.fromOccurrence(
                     eventId,
                     actionItems,
-                    occurrenceDate,
-                    findStatesByActionItemId(actionItems, occurrenceDate)
+                    occurrenceStartDate,
+                    findStatesByActionItemId(actionItems, occurrenceStartDate)
             );
         }
 
@@ -400,6 +409,34 @@ public class ActionItemService {
                 );
 
         return EventActionItemResponse.from(eventId, actionItems);
+    }
+
+    private LocalDate resolveRecurringOccurrenceStartDate(
+            Events event,
+            LocalDate requestedDate
+    ) {
+        if (isRecurringOccurrenceOn(event, requestedDate)) {
+            return requestedDate;
+        }
+
+        long durationDays = eventDurationDays(event);
+        for (long daysBefore = 1; daysBefore <= durationDays; daysBefore++) {
+            LocalDate candidateStartDate = requestedDate.minusDays(daysBefore);
+            if (isRecurringOccurrenceOn(event, candidateStartDate)
+                    && !requestedDate.isAfter(candidateStartDate.plusDays(durationDays))) {
+                return candidateStartDate;
+            }
+        }
+
+        return null;
+    }
+
+    private long eventDurationDays(Events event) {
+        if (event.getStartDate() == null || event.getEndDate() == null) {
+            return 0;
+        }
+
+        return Math.max(0, ChronoUnit.DAYS.between(event.getStartDate(), event.getEndDate()));
     }
 
     public TimedActionItemResponse getTimedActionItems(
