@@ -155,13 +155,13 @@ public interface EventsRepository extends JpaRepository<Events, Long> {
 
     /**
      * 공휴일 중복 삽입 방지를 위해 존재 여부를 확인합니다.
+     * (Native Query를 사용하여 @SQLRestriction을 무시하고 Soft Delete 된 일정까지 완벽히 검사합니다)
      */
-    @Query("""
-            SELECT COUNT(e) > 0
-              FROM Events e
-             WHERE e.sourceType = com.tryna.domain.event.enums.SourceType.HOLIDAY
-               AND e.externalEventId = :externalEventId
-               AND e.deletedAt IS NULL
-            """)
+    @Query(value = """
+            SELECT COUNT(*) > 0
+              FROM events
+             WHERE source_type = 'HOLIDAY'
+               AND external_event_id = :externalEventId
+            """, nativeQuery = true)
     boolean existsHolidayByExternalEventId(@Param("externalEventId") String externalEventId);
 }
