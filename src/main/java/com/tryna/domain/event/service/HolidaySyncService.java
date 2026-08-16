@@ -70,6 +70,16 @@ public class HolidaySyncService {
                 CalendarBuilder builder = new CalendarBuilder();
                 Calendar calendar = builder.build(is);
 
+                // 1. 공휴일 탐색 범위를 서비스 전체 범위로 확장
+                java.util.Calendar calStart = java.util.Calendar.getInstance();
+                calStart.set(1970, java.util.Calendar.JANUARY, 1);
+                java.util.Calendar calEnd = java.util.Calendar.getInstance();
+                calEnd.set(2100, java.util.Calendar.DECEMBER, 31);
+
+                net.fortuna.ical4j.model.DateTime startPeriod = new net.fortuna.ical4j.model.DateTime(calStart.getTime());
+                net.fortuna.ical4j.model.DateTime endPeriod = new net.fortuna.ical4j.model.DateTime(calEnd.getTime());
+                net.fortuna.ical4j.model.Period searchPeriod = new net.fortuna.ical4j.model.Period(startPeriod, endPeriod);
+
                 log.info("애플 공휴일 캘린더 파싱 시작...");
 
                 for (Object component : calendar.getComponents(Component.VEVENT)) {
@@ -80,19 +90,30 @@ public class HolidaySyncService {
                         continue;
                     }
 
-                    String uid = event.getUid().getValue();
+                    String baseUid = event.getUid().getValue();
                     String title = event.getSummary().getValue();
-                    String dateStr = event.getStartDate().getValue();
 
-                    LocalDate startDate;
-                    try {
-                        // 공휴일 포맷인 yyyyMMdd 만 파싱 시도
-                        startDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyyMMdd"));
-                    } catch (Exception e) {
-                        continue; // 날짜 포맷이 이상하면 조용히 무시하고 다음 일정으로
+                    // 2. RRULE(반복 규칙)을 분석하여 검색 기간 내의 모든 날짜로 펼치기 (단일 일정도 1개로 정상 반환됨)
+                    net.fortuna.ical4j.model.PeriodList occurrences = event.calculateRecurrenceSet(searchPeriod);
+
+                    for (Object p : occurrences) {
+                        net.fortuna.ical4j.model.Period occurrence = (net.fortuna.ical4j.model.Period) p;
+
+                        // ical4j의 날짜 포맷(yyyyMMdd 또는 yyyyMMddTHHmmss)에서 날짜 8자리만 추출
+                        String dateStr = occurrence.getStart().toString().substring(0, 8);
+
+                        try {
+                            LocalDate occurrenceDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+                            // 3. 기존 UID에 연도를 붙여 DB에서 각각 독립적인 공휴일로 인식되도록 처리
+                            String uniqueUid = baseUid + "-" + occurrenceDate.getYear();
+
+                            parsedHolidays.add(new ParsedHolidayDto(title, occurrenceDate, uniqueUid));
+                        } catch (Exception e) {
+                            // 날짜 파싱이 실패하면 해당 건만 조용히 넘김
+                            log.debug("공휴일 날짜 파싱 실패 (무시됨): {}", dateStr);
+                        }
                     }
-
-                    parsedHolidays.add(new ParsedHolidayDto(title, startDate, uid));
                 }
             }
 
