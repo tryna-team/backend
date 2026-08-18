@@ -39,19 +39,19 @@ public class GoogleCalendarClient {
         headers.setBearerAuth(accessToken);
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        String uriTemplate = calendarApiUrl + "?timeMin={timeMin}&timeMax={timeMax}&singleEvents=true&showDeleted=true";
+        String uriTemplate = calendarApiUrl + "?singleEvents=true&showDeleted=true";
         List<Object> uriVariables = new java.util.ArrayList<>();
-        uriVariables.add(timeMin.toInstant().toString());
-        uriVariables.add(timeMax.toInstant().toString());
 
         if (lastSyncedAt != null) {
-            // 마지막 동기화 시간 이후에 변경된 데이터만 요청 (updatedMin)
+            // [핵심 해결 포인트] 증분 동기화 시 timeMin/timeMax 필터를 제외해야 구글이 삭제된(cancelled) 일정을 보내줍니다.
             String updatedMin = lastSyncedAt.atZone(ZoneId.of("Asia/Seoul")).toInstant().toString();
             uriTemplate += "&updatedMin={updatedMin}";
             uriVariables.add(updatedMin);
         } else {
-            // 최초 동기화
-            uriTemplate += "&orderBy=startTime";
+            // 최초 Full 동기화 시에는 해당 연도 데이터만 가져오도록 범위 지정
+            uriTemplate += "&timeMin={timeMin}&timeMax={timeMax}&orderBy=startTime";
+            uriVariables.add(timeMin.toInstant().toString());
+            uriVariables.add(timeMax.toInstant().toString());
         }
 
         // 페이지네이션 토큰이 존재하면 쿼리 파라미터 추가
