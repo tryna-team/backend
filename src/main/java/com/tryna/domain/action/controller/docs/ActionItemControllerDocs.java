@@ -92,4 +92,30 @@ public interface ActionItemControllerDocs {
             )
             @RequestParam("date") String date
     );
+
+    @Operation(
+            summary = "F104-2 월간 캘린더 내 시간형 실행 항목 조회",
+            description = """
+                    조회 연월의 각 날짜에 표시할 시간형 실행 항목을 날짜별로 반환합니다.
+                    기존 일별 F104와 동일하게 현재 사용자의 일정에 연결된 TIMED_ACTION만 포함하며,
+                    반복 항목은 offsetDays와 회차별 완료 상태를 계산하여 반환합니다.
+                    """,
+            operationId = "getMonthlyTimedActionItems"
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<ApiResponse<MonthlyTimedActionItemResponse>> getMonthlyTimedActionItems(
+            @Parameter(
+                    description = "조회할 연도(1970~2100)",
+                    required = true,
+                    example = "2026"
+            )
+            @RequestParam("year") Integer year,
+
+            @Parameter(
+                    description = "조회할 월(1~12)",
+                    required = true,
+                    example = "8"
+            )
+            @RequestParam("month") Integer month
+    );
 }
