@@ -173,6 +173,39 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
     );
 
     /**
+     * 현재 사용자의 일정에 연결된 시간형 실행 항목을 표시 날짜 범위로 조회합니다.
+     *
+     * 반복 일정의 offset 기반 항목은 서비스에서 월간 회차를 동적으로 계산하므로
+     * 이 쿼리에서는 원본 displayDate를 직접 사용하는 항목만 조회합니다.
+     *
+     * @param userId 현재 사용자 ID
+     * @param startDate 조회 시작일
+     * @param endDate 조회 종료일
+     * @param itemType 항목 유형
+     * @return 조회 범위에 직접 표시할 시간형 실행 항목 목록
+     */
+    @Query("""
+            SELECT a
+              FROM ActionItems a
+              JOIN FETCH a.parentEvent e
+              JOIN UserEvents ue ON ue.event = e
+             WHERE ue.user.userId = :userId
+               AND a.displayDate BETWEEN :startDate AND :endDate
+               AND a.itemType = :itemType
+               AND e.eventStatus IN :eventStatuses
+               AND (e.isRecurring = false OR a.offsetDays IS NULL)
+               AND a.deletedAt IS NULL
+             ORDER BY a.displayDate ASC, a.displayDatetime ASC, a.actionItemId ASC
+            """)
+    List<ActionItems> findCalendarActionItemsByDateRange(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("itemType") ItemType itemType,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
+    );
+
+    /**
      * 반복 일정에 연결된 시간형 실행 항목 후보를 조회합니다.
      *
      * 실제 조회일에 노출 가능한 회차인지는 서비스에서

@@ -5,6 +5,7 @@ import com.tryna.domain.action.dto.ActionItemSaveResponse;
 import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
 import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
 import com.tryna.domain.action.dto.EventActionItemResponse;
+import com.tryna.domain.action.dto.MonthlyTimedActionItemResponse;
 import com.tryna.domain.action.dto.TimedActionItemResponse;
 import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.entity.ActionItems;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -47,6 +49,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ActionItemService {
+
+    private static final int MIN_YEAR = 1970;
+    private static final int MAX_YEAR = 2100;
 
     private final ActionItemsRepository actionItemsRepository;
     private final ActionItemOccurrenceStatesRepository actionItemOccurrenceStatesRepository;
@@ -490,6 +495,162 @@ public class ActionItemService {
         return TimedActionItemResponse.of(date, sortedItems);
     }
 
+    /**
+     * 월간 캘린더에 표시할 시간형 실행 항목을 날짜별로 조회합니다.
+     * 기존 일별 F104와 동일한 반복 회차 및 회차별 상태 계산 규칙을 사용합니다.
+     */
+    public MonthlyTimedActionItemResponse getMonthlyTimedActionItems(
+            Long userId,
+            Integer year,
+            Integer month
+    ) {
+        // 1. 조회 연월을 검증하고 월의 시작일과 종료일을 계산
+        YearMonth yearMonth = parseYearMonth(year, month);
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        // 2. displayDate가 조회 월에 직접 포함되는 시간형 항목을 한 번에 조회
+        List<MonthlyActionItemCandidate> candidates = new ArrayList<>();
+        List<ActionItems> directActionItems = actionItemsRepository
+                .findCalendarActionItemsByDateRange(
+                        userId,
+                        startDate,
+                        endDate,
+                        ItemType.TIMED_ACTION,
+                        visibleActionItemEventStatuses()
+                );
+
+        candidates.addAll(directActionItems.stream()
+                .filter(actionItem -> actionItem.getActionItemStatus() != ActionItemStatus.DELETED)
+                .map(actionItem -> new MonthlyActionItemCandidate(
+                        TimedActionItemResponse.Item.from(actionItem),
+                        resolveParentOccurrenceDate(
+                                actionItem,
+                                actionItem.getOccurrenceDate(),
+                                actionItem.getDisplayDate()
+                        )
+                ))
+                .toList());
+
+        // 3. 반복 원본은 한 번만 조회한 뒤 월의 각 날짜에 표시할 회차를 메모리에서 계산
+        List<ActionItems> recurringCandidates = actionItemsRepository
+                .findRecurringTimedActionItemsByUserId(
+                        userId,
+                        ItemType.TIMED_ACTION,
+                        visibleActionItemEventStatuses()
+                )
+                .stream()
+                .filter(actionItem -> actionItem.getActionItemStatus() != ActionItemStatus.DELETED)
+                .toList();
+
+        List<MonthlyRecurringActionItemOccurrence> monthlyRecurringOccurrences = startDate
+                .datesUntil(endDate.plusDays(1))
+                .flatMap(displayDate -> recurringCandidates.stream()
+                        .map(actionItem -> toRecurringActionItemOccurrence(actionItem, displayDate))
+                        .filter(Objects::nonNull)
+                        .map(occurrence -> new MonthlyRecurringActionItemOccurrence(
+                                displayDate,
+                                occurrence
+                        )))
+                .toList();
+
+        // 4. 발생한 회차의 완료 상태를 일괄 조회하여 각 월간 항목에 반영
+        List<RecurringActionItemOccurrence> recurringOccurrences = monthlyRecurringOccurrences.stream()
+                .map(MonthlyRecurringActionItemOccurrence::occurrence)
+                .toList();
+        Map<StateKey, ActionItemOccurrenceStates> statesByKey = findStatesByKey(recurringOccurrences);
+
+        candidates.addAll(monthlyRecurringOccurrences.stream()
+                .filter(monthlyOccurrence -> {
+                    ActionItemOccurrenceStates state = statesByKey.get(new StateKey(
+                            monthlyOccurrence.occurrence().actionItem().getActionItemId(),
+                            monthlyOccurrence.occurrence().occurrenceDate()
+                    ));
+                    return state == null || state.getActionItemStatus() != ActionItemStatus.DELETED;
+                })
+                .map(monthlyOccurrence -> {
+                    ActionItemOccurrenceStates state = statesByKey.get(new StateKey(
+                                monthlyOccurrence.occurrence().actionItem().getActionItemId(),
+                                monthlyOccurrence.occurrence().occurrenceDate()
+                    ));
+                    TimedActionItemResponse.Item item = TimedActionItemResponse.Item.fromOccurrence(
+                            monthlyOccurrence.occurrence().actionItem(),
+                            monthlyOccurrence.occurrence().occurrenceDate(),
+                            monthlyOccurrence.displayDate(),
+                            monthlyOccurrence.occurrence().displayTime(),
+                            state
+                    );
+                    return new MonthlyActionItemCandidate(
+                            item,
+                            monthlyOccurrence.occurrence().occurrenceDate()
+                    );
+                })
+                .toList());
+
+        // 5. 부모 일정 라벨을 일괄 조회한 뒤 월간 응답 항목으로 변환
+        List<Long> parentEventIds = candidates.stream()
+                .map(candidate -> candidate.item().parentEventId())
+                .distinct()
+                .toList();
+        Map<Long, Long> labelIdsByEventId = findLabelIdsByEventId(userId, parentEventIds);
+
+        List<MonthlyTimedActionItemResponse.Item> sortedItems = candidates.stream()
+                .map(candidate -> MonthlyTimedActionItemResponse.Item.from(
+                        candidate.item(),
+                        candidate.parentOccurrenceDate(),
+                        labelIdsByEventId.get(candidate.item().parentEventId())
+                ))
+                .sorted(Comparator
+                        .comparing(MonthlyTimedActionItemResponse.Item::displayDate)
+                        .thenComparing(
+                                MonthlyTimedActionItemResponse.Item::displayTime,
+                                Comparator.nullsLast(Comparator.naturalOrder())
+                        )
+                        .thenComparing(MonthlyTimedActionItemResponse.Item::actionItemId))
+                .toList();
+
+        return new MonthlyTimedActionItemResponse(
+                yearMonth.getYear(),
+                yearMonth.getMonthValue(),
+                sortedItems
+        );
+    }
+
+    private Map<Long, Long> findLabelIdsByEventId(Long userId, List<Long> eventIds) {
+        if (eventIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return userEventsRepository.findLabelIdsByUserIdAndEventIds(userId, eventIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]
+                ));
+    }
+
+    private LocalDate resolveParentOccurrenceDate(
+            ActionItems actionItem,
+            LocalDate occurrenceDate,
+            LocalDate displayDate
+    ) {
+        if (occurrenceDate != null) {
+            return occurrenceDate;
+        }
+
+        LocalDate parentStartDate = actionItem.getParentEvent().getStartDate();
+        return parentStartDate != null ? parentStartDate : displayDate;
+    }
+
+    private YearMonth parseYearMonth(Integer year, Integer month) {
+        if (year == null || year < MIN_YEAR || year > MAX_YEAR
+                || month == null || month < 1 || month > 12) {
+            throw new BusinessException(ActionErrorCode.F104_ACTION_ITEM_400);
+        }
+
+        return YearMonth.of(year, month);
+    }
+
     private List<EventStatus> visibleActionItemEventStatuses() {
         return List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION);
     }
@@ -588,6 +749,18 @@ public class ActionItemService {
             ActionItems actionItem,
             LocalDate occurrenceDate,
             LocalDateTime displayTime
+    ) {
+    }
+
+    private record MonthlyRecurringActionItemOccurrence(
+            LocalDate displayDate,
+            RecurringActionItemOccurrence occurrence
+    ) {
+    }
+
+    private record MonthlyActionItemCandidate(
+            TimedActionItemResponse.Item item,
+            LocalDate parentOccurrenceDate
     ) {
     }
 

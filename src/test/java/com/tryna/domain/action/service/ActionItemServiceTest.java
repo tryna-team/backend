@@ -10,13 +10,16 @@ import static org.mockito.Mockito.when;
 import com.tryna.domain.action.dto.ActionItemStatusUpdateRequest;
 import com.tryna.domain.action.dto.ActionItemStatusUpdateResponse;
 import com.tryna.domain.action.dto.EventActionItemResponse;
+import com.tryna.domain.action.dto.MonthlyTimedActionItemResponse;
 import com.tryna.domain.action.entity.ActionItemOccurrenceStates;
 import com.tryna.domain.action.entity.ActionItems;
 import com.tryna.domain.action.enums.ActionItemStatus;
+import com.tryna.domain.action.enums.CreatedBy;
 import com.tryna.domain.action.enums.ItemType;
 import com.tryna.domain.action.repository.ActionItemOccurrenceStatesRepository;
 import com.tryna.domain.action.repository.ActionItemsRepository;
 import com.tryna.domain.event.entity.Events;
+import com.tryna.domain.event.enums.EventStatus;
 import com.tryna.domain.event.enums.RecurrenceDayOfWeek;
 import com.tryna.domain.event.enums.RecurrenceType;
 import com.tryna.domain.event.repository.EventsRepository;
@@ -27,6 +30,7 @@ import com.tryna.domain.user.repository.UserRepository;
 import com.tryna.global.exception.ActionErrorCode;
 import com.tryna.global.exception.BusinessException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -224,6 +228,163 @@ class ActionItemServiceTest {
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ActionErrorCode.E106_ACTION_ITEM_400)
         );
+    }
+
+    @Test
+    void monthlyTimedActionItemsIncludeDirectItemsOnDisplayDate() {
+        Long userId = 1L;
+        ActionItems actionItem = mock(ActionItems.class);
+        ActionItems deletedActionItem = mock(ActionItems.class);
+        Events event = mock(Events.class);
+        LocalDate displayDate = LocalDate.of(2026, 8, 30);
+        LocalDate parentStartDate = LocalDate.of(2026, 9, 2);
+
+        when(actionItem.getActionItemId()).thenReturn(200L);
+        when(actionItem.getParentEvent()).thenReturn(event);
+        when(actionItem.getTitle()).thenReturn("선물 구매하기");
+        when(actionItem.getItemType()).thenReturn(ItemType.TIMED_ACTION);
+        when(actionItem.getDisplayDate()).thenReturn(displayDate);
+        when(actionItem.getDisplayDatetime()).thenReturn(displayDate.atTime(18, 0));
+        when(actionItem.getActionItemStatus()).thenReturn(ActionItemStatus.PENDING);
+        when(actionItem.getCreatedBy()).thenReturn(CreatedBy.USER);
+        when(deletedActionItem.getActionItemStatus()).thenReturn(ActionItemStatus.DELETED);
+        when(event.getEventId()).thenReturn(10L);
+        when(event.getTitle()).thenReturn("지민이 생일");
+        when(event.getStartDate()).thenReturn(parentStartDate);
+        when(actionItemsRepository.findCalendarActionItemsByDateRange(
+                userId,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31),
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of(actionItem, deletedActionItem));
+        when(actionItemsRepository.findRecurringTimedActionItemsByUserId(
+                userId,
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of());
+        when(userEventsRepository.findLabelIdsByUserIdAndEventIds(userId, List.of(10L)))
+                .thenReturn(List.<Object[]>of(new Object[]{10L, 110L}));
+
+        MonthlyTimedActionItemResponse response =
+                actionItemService.getMonthlyTimedActionItems(userId, 2026, 8);
+
+        assertThat(response.year()).isEqualTo(2026);
+        assertThat(response.month()).isEqualTo(8);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().title()).isEqualTo("선물 구매하기");
+        assertThat(response.items().getFirst().displayDate()).isEqualTo(displayDate);
+        assertThat(response.items().getFirst().parentOccurrenceDate()).isEqualTo(parentStartDate);
+        assertThat(response.items().getFirst().labelId()).isEqualTo(110L);
+    }
+
+    @Test
+    void monthlyTimedActionItemsCalculateRecurringOccurrencesAndApplyOccurrenceState() {
+        Long userId = 1L;
+        Long actionItemId = 300L;
+        Events event = mock(Events.class);
+        ActionItems actionItem = mock(ActionItems.class);
+        ActionItemOccurrenceStates state = mock(ActionItemOccurrenceStates.class);
+        ActionItemOccurrenceStates deletedState = mock(ActionItemOccurrenceStates.class);
+        LocalDate completedOccurrenceDate = LocalDate.of(2026, 8, 10);
+        LocalDate deletedOccurrenceDate = LocalDate.of(2026, 8, 17);
+
+        when(event.getEventId()).thenReturn(20L);
+        when(event.getTitle()).thenReturn("매주 운동");
+        when(event.getIsRecurring()).thenReturn(true);
+        when(event.getStartDate()).thenReturn(LocalDate.of(2026, 8, 3));
+        when(event.getRecurrenceType()).thenReturn(RecurrenceType.WEEKLY);
+        when(event.getRecurrenceInterval()).thenReturn(1);
+        when(event.getRecurrenceDayOfWeek()).thenReturn(RecurrenceDayOfWeek.MON);
+        when(actionItem.getActionItemId()).thenReturn(actionItemId);
+        when(actionItem.getParentEvent()).thenReturn(event);
+        when(actionItem.getTitle()).thenReturn("운동복 준비하기");
+        when(actionItem.getItemType()).thenReturn(ItemType.TIMED_ACTION);
+        when(actionItem.getOffsetDays()).thenReturn(-1);
+        when(actionItem.getDisplayDatetime()).thenReturn(LocalDateTime.of(2026, 8, 2, 8, 0));
+        when(actionItem.getCreatedBy()).thenReturn(CreatedBy.SYSTEM);
+        when(actionItemsRepository.findCalendarActionItemsByDateRange(
+                userId,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31),
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of());
+        when(actionItemsRepository.findRecurringTimedActionItemsByUserId(
+                userId,
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of(actionItem));
+        when(actionItemOccurrenceStatesRepository
+                .findByActionItem_ActionItemIdInAndOccurrenceDateIn(
+                        List.of(actionItemId),
+                        List.of(
+                                LocalDate.of(2026, 8, 3),
+                                LocalDate.of(2026, 8, 10),
+                                LocalDate.of(2026, 8, 17),
+                                LocalDate.of(2026, 8, 24),
+                                LocalDate.of(2026, 8, 31)
+                        )
+                )).thenReturn(List.of(state, deletedState));
+        when(state.getActionItem()).thenReturn(actionItem);
+        when(state.getOccurrenceDate()).thenReturn(completedOccurrenceDate);
+        when(state.getActionItemStatus()).thenReturn(ActionItemStatus.COMPLETED);
+        when(deletedState.getActionItem()).thenReturn(actionItem);
+        when(deletedState.getOccurrenceDate()).thenReturn(deletedOccurrenceDate);
+        when(deletedState.getActionItemStatus()).thenReturn(ActionItemStatus.DELETED);
+        when(userEventsRepository.findLabelIdsByUserIdAndEventIds(userId, List.of(20L)))
+                .thenReturn(List.<Object[]>of(new Object[]{20L, 120L}));
+
+        MonthlyTimedActionItemResponse response =
+                actionItemService.getMonthlyTimedActionItems(userId, 2026, 8);
+
+        assertThat(response.items()).hasSize(4);
+        assertThat(response.items())
+                .noneMatch(item -> item.parentOccurrenceDate().equals(deletedOccurrenceDate));
+        assertThat(response.items())
+                .filteredOn(item -> item.parentOccurrenceDate().equals(completedOccurrenceDate))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.displayDate()).isEqualTo(LocalDate.of(2026, 8, 9));
+                    assertThat(item.actionItemStatus()).isEqualTo(ActionItemStatus.COMPLETED);
+                    assertThat(item.labelId()).isEqualTo(120L);
+                });
+        assertThat(response.items())
+                .filteredOn(item -> item.parentOccurrenceDate().equals(LocalDate.of(2026, 8, 24)))
+                .singleElement()
+                .satisfies(item -> assertThat(item.actionItemStatus()).isEqualTo(ActionItemStatus.PENDING));
+    }
+
+    @Test
+    void monthlyTimedActionItemsReturnEmptyItemsWhenNoMatches() {
+        Long userId = 1L;
+
+        when(actionItemsRepository.findCalendarActionItemsByDateRange(
+                userId,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31),
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of());
+        when(actionItemsRepository.findRecurringTimedActionItemsByUserId(
+                userId,
+                ItemType.TIMED_ACTION,
+                List.of(EventStatus.CONFIRMED, EventStatus.NEEDS_CONFIRMATION)
+        )).thenReturn(List.of());
+
+        MonthlyTimedActionItemResponse response =
+                actionItemService.getMonthlyTimedActionItems(userId, 2026, 8);
+
+        assertThat(response.items()).isEmpty();
+        verify(userEventsRepository, never()).findLabelIdsByUserIdAndEventIds(userId, List.of());
+    }
+
+    @Test
+    void monthlyTimedActionItemsRejectInvalidYearMonth() {
+        assertThatThrownBy(() -> actionItemService.getMonthlyTimedActionItems(1L, 2026, 13))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ActionErrorCode.F104_ACTION_ITEM_400)
+                );
     }
 
     private Events recurringTwoDayWeeklyEvent() {
