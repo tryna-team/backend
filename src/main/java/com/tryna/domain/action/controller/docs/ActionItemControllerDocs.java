@@ -96,9 +96,12 @@ public interface ActionItemControllerDocs {
     @Operation(
             summary = "F104-2 월간 캘린더 내 시간형 실행 항목 조회",
             description = """
-                    조회 연월의 각 날짜에 표시할 시간형 실행 항목을 날짜별로 반환합니다.
-                    기존 일별 F104와 동일하게 현재 사용자의 일정에 연결된 TIMED_ACTION만 포함하며,
-                    반복 항목은 offsetDays와 회차별 완료 상태를 계산하여 반환합니다.
+                    조회 연월에 displayDate가 포함되는 시간형 실행 항목을 반환합니다.
+                    부모 일정 날짜와 관계없이 계산된 displayDate를 기준으로 월 포함 여부를 판단하며,
+                    현재 사용자의 CONFIRMED 또는 NEEDS_CONFIRMATION 일정에 연결된 TIMED_ACTION만 포함합니다.
+                    삭제된 항목과 삭제된 반복 회차는 제외하고, 반복 항목은 offsetDays와 회차별 상태를 반영합니다.
+                    각 항목에는 부모 일정의 labelId와 상세 이동에 사용할 parentOccurrenceDate가 포함됩니다.
+                    회원과 비회원 모두 유효한 Bearer 토큰으로 호출할 수 있습니다.
                     """,
             operationId = "getMonthlyTimedActionItems"
     )

@@ -192,6 +192,7 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
              WHERE ue.user.userId = :userId
                AND a.displayDate BETWEEN :startDate AND :endDate
                AND a.itemType = :itemType
+               AND e.eventStatus IN :eventStatuses
                AND (e.isRecurring = false OR a.offsetDays IS NULL)
                AND a.deletedAt IS NULL
              ORDER BY a.displayDate ASC, a.displayDatetime ASC, a.actionItemId ASC
@@ -200,7 +201,8 @@ public interface ActionItemsRepository extends JpaRepository<ActionItems, Long> 
             @Param("userId") Long userId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
-            @Param("itemType") ItemType itemType
+            @Param("itemType") ItemType itemType,
+            @Param("eventStatuses") Collection<EventStatus> eventStatuses
     );
 
     /**
