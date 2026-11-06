@@ -3,6 +3,7 @@ package com.tryna.domain.event.dto;
 import com.tryna.domain.action.dto.ActionItemSaveRequest;
 import com.tryna.domain.event.enums.RecurrenceType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 
 @Schema(description = "C104 일정 생성 요청 DTO")
 public record EventCreateRequest(
@@ -50,7 +51,20 @@ public record EventCreateRequest(
         Long labelId,
 
         @Schema(description = "일정과 함께 저장할 준비/실행 항목 및 피드백")
-        ActionItemSaveRequest actionItems
+        ActionItemSaveRequest actionItems,
 
+        @Schema(description = "AI가 분석한 M1 Activity 코드 (파싱 실패 시 null 허용)", example = "HANDOFF_ITEM")
+        String activityCode,
+
+        @Schema(description = "AI가 분석한 M1 Entity 리스트")
+        List<EntityRequest> entities
 ) {
+        @Schema(description = "일정 내 연관 개체 정보")
+        public record EntityRequest(
+                @Schema(description = "개체명", example = "맥북")
+                String name,
+
+                @Schema(description = "개체 역할", example = "TARGET_OBJECT")
+                String role
+        ) {}
 }

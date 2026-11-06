@@ -54,7 +54,7 @@ public record ActionItemSaveRequest(
             @NotNull(message = "createdBy is required.")
             CreatedBy createdBy,
 
-            @Schema(description = "Recommendation source template ID. User-added items can use null.", example = "gift_prepare_001")
+            @Schema(description = "M1 Ontology Rule Code (PreparationRule ID). User-added items can use null.", example = "RULE_TRAVEL_001")
             @Size(max = 100, message = "sourceTemplateId must be at most 100 characters.")
             String sourceTemplateId
 
@@ -64,7 +64,7 @@ public record ActionItemSaveRequest(
     @Schema(description = "Recommendation feedback log")
     public record Feedback(
 
-            @Schema(description = "Recommendation source template ID. User-added items can use null.", example = "gift_prepare_001")
+            @Schema(description = "M1 Ontology Rule Code (PreparationRule ID). User-added items can use null.", example = "RULE_TRAVEL_001")
             @Size(max = 100, message = "sourceTemplateId must be at most 100 characters.")
             String sourceTemplateId,
 
