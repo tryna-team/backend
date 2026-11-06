@@ -23,6 +23,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,7 @@ public class EventCommandService {
     private final UserRepository userRepository;
     private final ActionItemService actionItemService;
     private final LabelsRepository labelsRepository;
+    private final EventGraphSyncService eventGraphSyncService;
 
     @Transactional
     public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
@@ -89,6 +92,27 @@ public class EventCommandService {
                         savedEvent,
                         request.actionItems()
                 );
+
+        // Neo4j 그래프 동기화 실행
+        if (eventGraphSyncService != null) {
+
+            List<Map<String, String>> graphEntities = request.entities() != null
+                    ? request.entities().stream()
+                    .filter(e -> e != null && e.name() != null && e.role() != null)
+                    .map(e -> Map.of(
+                            "name", e.name(),
+                            "role", e.role()
+                    ))
+                    .toList()
+                    : List.of();
+
+            eventGraphSyncService.syncEventToGraph(
+                    savedEvent.getEventId(),
+                    savedEvent.getTitle(),
+                    request.activityCode(),
+                    graphEntities
+            );
+        }
 
         return new EventCreateResponse(
                 savedEvent.getEventId(),
