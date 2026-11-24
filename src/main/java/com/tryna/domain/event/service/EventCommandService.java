@@ -4,6 +4,7 @@ import com.tryna.domain.action.dto.ActionItemSaveResponse;
 import com.tryna.domain.action.service.ActionItemService;
 import com.tryna.domain.event.dto.EventCreateRequest;
 import com.tryna.domain.event.dto.EventCreateResponse;
+import com.tryna.domain.event.dto.EventGraphSyncRequest;
 import com.tryna.domain.event.entity.Events;
 import com.tryna.domain.event.entity.mapping.UserEvents;
 import com.tryna.domain.event.enums.EventStatus;
@@ -24,11 +25,14 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EventCommandService {
@@ -40,7 +44,7 @@ public class EventCommandService {
     private final UserRepository userRepository;
     private final ActionItemService actionItemService;
     private final LabelsRepository labelsRepository;
-    private final EventGraphSyncService eventGraphSyncService;
+    private final BrainServiceClient brainServiceClient;
 
     @Transactional
     public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
@@ -93,25 +97,43 @@ public class EventCommandService {
                         request.actionItems()
                 );
 
-        // Neo4j 그래프 동기화 실행
-        if (eventGraphSyncService != null) {
-
-            List<Map<String, String>> graphEntities = request.entities() != null
+        // DB 트랜잭션 커밋 완료 후 Python 서버로 비동기 그래프 동기화 요청 전송
+        try {
+            List<EventGraphSyncRequest.EntityDto> graphEntities = request.entities() != null
                     ? request.entities().stream()
-                    .filter(e -> e != null && e.name() != null && e.role() != null)
-                    .map(e -> Map.of(
-                            "name", e.name(),
-                            "role", e.role()
-                    ))
+                    .map(e -> new EventGraphSyncRequest.EntityDto(e.name(), e.role()))
                     .toList()
                     : List.of();
 
-            eventGraphSyncService.syncEventToGraph(
+            EventGraphSyncRequest syncRequest = new EventGraphSyncRequest(
                     savedEvent.getEventId(),
+                    userId, // ownerId
+                    1,      // eventVersion (최초 생성 초기값)
                     savedEvent.getTitle(),
                     request.activityCode(),
                     graphEntities
             );
+
+            Runnable syncTask = () -> {
+                try {
+                    brainServiceClient.requestGraphSync(syncRequest);
+                } catch (Exception e) {
+                    log.error("Python 서버로의 그래프 동기화 요청 실패: eventId={}", savedEvent.getEventId(), e);
+                }
+            };
+
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        syncTask.run();
+                    }
+                });
+            } else {
+                syncTask.run();
+            }
+        } catch (Exception e) {
+            log.error("Python 서버로의 그래프 동기화 예약 실패: eventId={}", savedEvent.getEventId(), e);
         }
 
         return new EventCreateResponse(
